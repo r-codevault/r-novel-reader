@@ -95,6 +95,21 @@ if (Object.prototype.hasOwnProperty.call(obsolete, folderName)) {
 }
 fs.writeFileSync(obsoletePath, JSON.stringify(obsolete));
 
+// ---- 清理同扩展的旧版本目录(升级后残留的孤儿目录会被 VS Code 标记待删) ----
+const staleDirs = fs
+  .readdirSync(extRoot, { withFileTypes: true })
+  .filter((d) => d.isDirectory() && d.name.startsWith(`${extId}-`) && d.name !== folderName)
+  .map((d) => d.name);
+for (const stale of staleDirs) {
+  fs.rmSync(path.join(extRoot, stale), { recursive: true, force: true });
+  console.log(`✓ 已清理旧版本目录: ${stale}`);
+  const ob = JSON.parse(fs.readFileSync(obsoletePath, 'utf8') || '{}');
+  if (Object.prototype.hasOwnProperty.call(ob, stale)) {
+    delete ob[stale];
+    fs.writeFileSync(obsoletePath, JSON.stringify(ob));
+  }
+}
+
 // ---- 结果校验 ----
 const check = JSON.parse(fs.readFileSync(manifestPath, 'utf8')).find(
   (e) => e.identifier && e.identifier.id === extId

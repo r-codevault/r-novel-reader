@@ -23,6 +23,8 @@ interface InitPayload {
     paragraphs: string[];
     totalChapters: number;
     totalWords: number;
+    /** 恢复章内滚动位置(0~1) */
+    scrollRatio: number;
     settings: ReadingSettings;
     /** 打开时自动展开设置面板 */
     openSettings?: boolean;
@@ -102,10 +104,15 @@ export class ReaderPanel {
             cur._chapterIndex = Math.min(Math.max(0, chapterIndex), Math.max(0, novel.chapters.length - 1));
             cur._scrollRatio = scrollRatio;
             cur._openSettingsOnLoad = openSettings;
+            if (!sameFile) {
+                // 换书: 同步更新编辑器标签标题
+                cur._panel.title = `${novel.bookTitle} - 小说阅读`;
+            }
             if (sameFile && cur._ready) {
                 cur._postChapter();
             } else {
-                cur._ready = false;
+                // 同书重开或换书: 重新下发 init 整体重建阅读页
+                // (若 webview 尚未就绪, _postInit 会跳过, 由 ready 回调兜底重发)
                 cur._postInit();
             }
             cur._panel.reveal(column);
@@ -244,6 +251,7 @@ export class ReaderPanel {
             paragraphs: this._novel.chapters[this._chapterIndex]?.content.split('\n') ?? [],
             totalChapters: this._novel.chapters.length,
             totalWords: this._novel.totalWords,
+            scrollRatio: Math.min(1, Math.max(0, this._scrollRatio)),
             settings: this._settings,
             openSettings: this._openSettingsOnLoad,
         };
@@ -653,7 +661,7 @@ export class ReaderPanel {
         renderChapter({
           index: p.chapterIndex, title: p.chapterTitle,
           paragraphs: p.paragraphs, totalChapters: p.totalChapters,
-          scrollRatio: 0
+          scrollRatio: p.scrollRatio || 0
         });
         var words = p.totalWords >= 10000
           ? (p.totalWords / 10000).toFixed(1) + ' 万字'

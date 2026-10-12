@@ -17,22 +17,41 @@ const { execSync } = require('child_process');
 // ---------------------------------------------------------------- vscode 桩
 let capturedHtml = '';
 const executed = [];
+let panelTitle = '';
+let panelMsgHandler = null;
+let panelMessages = [];
 
 const vscodeStub = {
   ViewColumn: { One: 1 },
   window: {
     ViewColumn: { One: 1 },
-    createWebviewPanel: () => ({
-      webview: {
-        onDidReceiveMessage: () => {},
-        set html(v) {
-          capturedHtml = v;
+    createWebviewPanel: (viewType, title) => {
+      panelTitle = title;
+      return {
+        get title() {
+          return panelTitle;
         },
-      },
-      onDidDispose: () => {},
-      reveal: () => {},
-      dispose: () => {},
-    }),
+        set title(v) {
+          panelTitle = v;
+        },
+        webview: {
+          options: {},
+          onDidReceiveMessage: (h) => {
+            panelMsgHandler = h;
+          },
+          postMessage: (m) => {
+            panelMessages.push(m);
+            return Promise.resolve(true);
+          },
+          set html(v) {
+            capturedHtml = v;
+          },
+        },
+        onDidDispose: () => {},
+        reveal: () => {},
+        dispose: () => {},
+      };
+    },
     showOpenDialog: async () => undefined,
     showWarningMessage: async () => undefined,
     showErrorMessage: () => {},
@@ -136,6 +155,37 @@ for (const id of panelIds) {
   assert(capturedHtml.includes(`id="${id}"`), `阅读面板缺少元素 #${id}`);
 }
 console.log('关键 UI 元素: 通过 (' + panelIds.length + ' 个)');
+
+// --- 就绪后下发 init(含章内滚动位置) ---
+panelMessages = [];
+panelMsgHandler({ type: 'ready' });
+const init1 = panelMessages.find((m) => m.type === 'init');
+assert(init1, 'webview 就绪后应下发 init');
+assert(init1.payload.bookTitle === '测试之书', 'init 应带上书名');
+assert(Math.abs(init1.payload.scrollRatio - 0.5) < 1e-6, 'init 应带上章内滚动位置(延续阅读状态)');
+console.log('就绪后 init(含滚动位置): 通过');
+
+// --- 回归: 换书后阅读面板必须重建, 不能继续显示旧书 ---
+const bookB = {
+  filePath: 'D:/b.txt',
+  bookTitle: '第二本书',
+  author: '作者B',
+  totalWords: 2000,
+  chapters: [
+    { index: 0, title: '第1章 开端', content: '内容一', wordCount: 3 },
+    { index: 1, title: '第2章 发展', content: '内容二', wordCount: 3 },
+    { index: 2, title: '第3章 结局', content: '内容三', wordCount: 3 },
+  ],
+};
+panelMessages = [];
+ReaderPanel.createOrShow(bookB, 1, 0.2, store);
+const init2 = panelMessages.find((m) => m.type === 'init');
+assert(init2, '换书后应重新下发 init');
+assert(init2.payload.bookTitle === '第二本书', '换书后 init 应是新书');
+assert(init2.payload.chapters.length === 3, '换书后应带新书章节列表');
+assert(init2.payload.chapterIndex === 1, '换书后应定位到该书进度章节');
+assert(panelTitle === '第二本书 - 小说阅读', '编辑器标签标题应更新为新书');
+console.log('换书重建阅读面板(回归): 通过');
 
 // ================================================================ 2. 侧边栏视图
 const { ChapterViewProvider } = require('../dist/chapterViewProvider');
