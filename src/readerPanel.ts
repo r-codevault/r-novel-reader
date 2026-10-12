@@ -326,11 +326,13 @@ export class ReaderPanel {
     border: 1px solid var(--chrome-border);
     box-shadow: 0 3px 12px rgba(0, 0, 0, .32);
     cursor: grab; user-select: none;
+    touch-action: none;
     padding: 0; font-size: 13px; font-weight: 600;
     transition: transform .15s ease, background .15s ease;
   }
   .fab:hover { transform: scale(1.07); background: var(--btn-hover); }
   .fab:active { cursor: grabbing; }
+  .fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   #fabs.dragging .fab { transform: none; }
   .fab svg { width: 20px; height: 20px; pointer-events: none; }
   .fab .fab-txt { pointer-events: none; letter-spacing: -.02em; }
@@ -611,9 +613,20 @@ export class ReaderPanel {
     statusbar: document.querySelector('.statusbar'),
   };
 
-  /* ---------------- 悬浮球: 拖动 + 闲置淡化 ---------------- */
+  /* ---------------- 悬浮球: 拖动 + 点击 + 闲置淡化 ---------------- */
   var IDLE_MS = 3000;
   var idleTimer = null;
+  var lastPointerActivate = 0;
+
+  /** 悬浮球动作: 目录 / 阅读设置 */
+  function activateFab(id) {
+    if (id === 'fabCatalog') {
+      if (catalogOpen()) { closeCatalog(); } else { openCatalog(); }
+    } else if (id === 'fabSettings') {
+      closeCatalog();
+      if (settingsOpen()) { closeSettings(); } else { openSettings(); }
+    }
+  }
 
   function wakeFabs() {
     els.fabs.classList.add('awake');
@@ -634,48 +647,56 @@ export class ReaderPanel {
   }
 
   (function initFabDrag() {
+    var pressId = null;
     var dragging = false;
-    var moved = false;
     var startX = 0;
     var startY = 0;
     var originLeft = 0;
     var originTop = 0;
 
     els.fabs.addEventListener('pointerdown', function (e) {
-      dragging = true;
-      moved = false;
+      var btn = e.target.closest ? e.target.closest('.fab') : null;
+      pressId = btn ? btn.id : null;
+      dragging = false;
+      startX = e.clientX;
+      startY = e.clientY;
       var rect = els.fabs.getBoundingClientRect();
       originLeft = rect.left;
       originTop = rect.top;
-      startX = e.clientX;
-      startY = e.clientY;
-      els.fabs.classList.add('dragging');
       els.fabs.classList.add('awake');
       wakeFabs();
-      if (els.fabs.setPointerCapture) { els.fabs.setPointerCapture(e.pointerId); }
     });
 
     els.fabs.addEventListener('pointermove', function (e) {
-      if (!dragging) { return; }
+      if (!pressId) { return; }
       var dx = e.clientX - startX;
       var dy = e.clientY - startY;
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) { moved = true; }
-      if (!moved) { return; }
+      if (!dragging) {
+        if (Math.abs(dx) <= 3 && Math.abs(dy) <= 3) { return; }
+        // 真正开始拖动后才捕获指针(pointerdown 时就捕获会吞掉随后的 click)
+        dragging = true;
+        els.fabs.classList.add('dragging');
+        if (els.fabs.setPointerCapture) { els.fabs.setPointerCapture(e.pointerId); }
+      }
       e.preventDefault();
       applyFabPosition({ left: originLeft + dx, top: originTop + dy });
     });
 
     function endDrag() {
-      if (!dragging) { return; }
-      dragging = false;
-      els.fabs.classList.remove('dragging');
-      if (moved) {
+      if (dragging) {
         var rect = els.fabs.getBoundingClientRect();
-        // 松手后吸附到最近的左右边, 视觉更整齐
+        // 松手后吸附到最近的左右边
         var left = rect.left < window.innerWidth / 2 ? 16 : window.innerWidth - rect.width - 16;
         applyFabPosition({ left: left, top: rect.top });
         persistSettings({ fabLeft: left, fabTop: Math.round(rect.top) });
+      } else if (pressId) {
+        // 未移动 -> 视为点击(不依赖 click 事件, 避免指针捕获/事件重定向导致无响应)
+        lastPointerActivate = Date.now();
+        activateFab(pressId);
       }
+      pressId = null;
+      dragging = false;
+      els.fabs.classList.remove('dragging');
     }
     els.fabs.addEventListener('pointerup', endDrag);
     els.fabs.addEventListener('pointercancel', endDrag);
@@ -792,12 +813,12 @@ export class ReaderPanel {
     els.catalogPanel.classList.remove('open');
   }
 
-  els.fabCatalog.addEventListener('click', function () {
-    if (catalogOpen()) { closeCatalog(); } else { openCatalog(); }
-  });
-  els.fabSettings.addEventListener('click', function () {
-    closeCatalog();
-    if (settingsOpen()) { closeSettings(); } else { openSettings(); }
+  // 兜底: 键盘回车/空格触发的 click(指针路径已由 pointerup 处理, 避免重复)
+  els.fabs.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('.fab') : null;
+    if (!btn) { return; }
+    if (Date.now() - lastPointerActivate < 600) { return; }
+    activateFab(btn.id);
   });
   els.catClose.addEventListener('click', closeCatalog);
   els.catReverse.addEventListener('click', function () {

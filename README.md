@@ -8,7 +8,7 @@
 | --- | --- |
 | 插件 ID | `local.novel-reader` |
 | 显示名称 | 小说阅读器 |
-| 当前版本 | 1.4.0 |
+| 当前版本 | 1.4.1 |
 | 要求 | VS Code 1.85.0+（实测 1.128.0），Node.js 18+（仅打包时需要） |
 | 开源协议 | MIT |
 
@@ -126,10 +126,10 @@ npm run compile
 
 # 3. 打包成 vsix
 npm run package
-# 生成 novel-reader-1.4.0.vsix
+# 生成 novel-reader-1.4.1.vsix
 
 # 4. 安装到 VS Code
-code --install-extension novel-reader-1.4.0.vsix
+code --install-extension novel-reader-1.4.1.vsix
 ```
 
 安装后**重启 VS Code**（或 `Ctrl+Shift+P` → `Developer: Reload Window`）。

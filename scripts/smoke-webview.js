@@ -170,15 +170,26 @@ for (const gone of [
 }
 console.log('顶部工具栏已移除: 通过');
 
-// --- 两个悬浮球: 目录 / Aa设置 (可拖动 + 闲置淡化) ---
+// --- 悬浮球: 目录 / Aa设置 (可拖动 + 闲置淡化) ---
 assert(/\.fab\s*\{[^}]*border-radius:\s*50%/.test(capturedHtml), '悬浮球应为圆形');
 assert(capturedHtml.includes('fabCatalog') && capturedHtml.includes('fabSettings'), '应有目录与设置两个球');
-assert(capturedHtml.includes("title=\"目录\""), '目录球应有提示');
+assert(capturedHtml.includes('title="目录"'), '目录球应有提示');
 assert(capturedHtml.includes('pointerdown'), '悬浮球应支持拖动');
+assert(capturedHtml.includes('touch-action: none'), '触摸拖动不应触发滚动');
 assert(capturedHtml.includes('fabLeft'), '拖动后的位置应可持久化');
 assert(capturedHtml.includes('#fabs.awake'), '闲置后应淡化以免遮挡正文');
-assert(capturedHtml.includes('setPointerCapture'), '拖动应捕获指针');
-console.log('悬浮球(目录/Aa设置, 可拖动+淡化): 通过');
+// 关键回归: 点击必须在 pointerup 上生效, 不能依赖 click 事件
+// (pointerdown 就 setPointerCapture 会把后续 click 重定向到容器, 导致点了没反应)
+assert(capturedHtml.includes('function activateFab'), '应有统一的悬浮球动作处理');
+assert(
+  /function endDrag\(\)[\s\S]{0,900}activateFab\(pressId\)/.test(capturedHtml),
+  '未发生拖动时应在 pointerup 触发动作(不依赖 click)'
+);
+assert(
+  /if \(!dragging\)[\s\S]{0,400}setPointerCapture/.test(capturedHtml),
+  '只有真正拖动后才捕获指针(避免吞掉点击)'
+);
+console.log('悬浮球(目录/Aa设置, 可拖动+点击): 通过');
 
 // --- 目录面板(参考起点中文网) ---
 assert(capturedHtml.includes('id="catalogPanel"'), '应有目录面板');
@@ -204,6 +215,13 @@ assert(
 );
 assert(capturedHtml.includes('.statusbar .progress-track'), '状态栏内应有进度条样式');
 console.log('进度条移到底部: 通过');
+
+// 脚本引用的所有元素 id 必须真实存在(否则脚本初始化即抛错, 事件全部失效)
+const usedIds = [...capturedHtml.matchAll(/\$\('([A-Za-z0-9_-]+)'\)/g)].map((m) => m[1]);
+const declaredIds = new Set([...capturedHtml.matchAll(/id="([A-Za-z0-9_-]+)"/g)].map((m) => m[1]));
+const missingIds = [...new Set(usedIds)].filter((id) => !declaredIds.has(id));
+assert(missingIds.length === 0, `脚本引用了不存在的元素: ${missingIds.join(', ')}`);
+console.log('元素 id 完整性(脚本 ↔ HTML): 通过 (' + declaredIds.size + ' 个)');
 
 // --- 章节计数只在底部状态栏(顶部工具栏已移除) ---
 assert(capturedHtml.includes('id="chapterInfo"'), '底部应显示章节位置');
