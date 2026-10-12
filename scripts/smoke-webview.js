@@ -118,6 +118,7 @@ const defaults = {
   paragraphSpacing: 0.8,
   theme: 'sepia',
   contentWidth: 720,
+  toolbarCollapsed: false,
 };
 const store = {
   get: () => ({ ...defaults }),
@@ -150,11 +151,42 @@ const panelIds = [
   'chapterSelect', 'settingsPanel', 'settingsClose', 'themeSwatches', 'fontSize', 'fontFamily',
   'lineHeight', 'paraSpacing', 'contentWidth', 'progressFill', 'prevBtn',
   'nextBtn', 'settingsBtn', 'resetSettings', 'bookInfo', 'content',
+  'toolbarToggle', 'fontSizeText', 'chapterInfo',
 ];
 for (const id of panelIds) {
   assert(capturedHtml.includes(`id="${id}"`), `阅读面板缺少元素 #${id}`);
 }
 console.log('关键 UI 元素: 通过 (' + panelIds.length + ' 个)');
+
+// --- 工具栏可收起 ---
+assert(capturedHtml.includes('body.toolbar-collapsed .toolbar'), '收起状态应有对应样式');
+assert(
+  /body\.toolbar-collapsed \.toolbar > \*:not\(#toolbarToggle\):not\(#settingsBtn\)\s*\{\s*display:\s*none/.test(
+    capturedHtml
+  ),
+  '收起时只应保留展开与设置按钮'
+);
+assert(capturedHtml.includes('class="tbtn" title="收起工具栏"'), '工具栏应有收起按钮');
+assert(capturedHtml.includes('toolbarCollapsed:'), '收起状态应可持久化');
+console.log('工具栏可收起: 通过');
+
+// --- 进度条移到底部状态栏内 ---
+assert(
+  /<footer class="statusbar">[\s\S]*progress-track[\s\S]*<\/footer>/.test(capturedHtml),
+  '进度条应位于底部状态栏内'
+);
+assert(
+  !/\.progress-track\s*\{[^}]*position:\s*(sticky|fixed)/.test(capturedHtml),
+  '进度条不应再吸顶(应随状态栏固定在底部)'
+);
+assert(capturedHtml.includes('.statusbar .progress-track'), '状态栏内应有进度条样式');
+console.log('进度条移到底部: 通过');
+
+// --- 顶部章节计数改为字号显示 ---
+assert(!capturedHtml.includes('id="progressText"'), '顶部章节计数应移除(底部已有)');
+assert(capturedHtml.includes('字号 16px'), '顶部应显示当前字号');
+assert(capturedHtml.includes("'字号 ' + s.fontSize + 'px'"), '字号显示应随设置更新');
+console.log('顶部改为字号显示: 通过');
 
 // --- 设置面板必须是固定悬浮窗(不随内容滚动) ---
 assert(

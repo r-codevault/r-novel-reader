@@ -311,7 +311,7 @@ export class ReaderPanel {
     color: var(--chrome-fg);
   }
 
-  /* ---------- 工具栏 ---------- */
+  /* ---------- 工具栏(可收起) ---------- */
   .toolbar {
     position: sticky; top: 0; z-index: 20;
     display: flex; align-items: center; gap: 6px;
@@ -320,6 +320,7 @@ export class ReaderPanel {
     border-bottom: 1px solid var(--chrome-border);
     font-size: 13px;
   }
+  body.toolbar-collapsed .toolbar { display: none; }
   .toolbar .spacer { flex: 1; }
   .tbtn {
     border: 1px solid var(--input-border);
@@ -331,15 +332,29 @@ export class ReaderPanel {
   .tbtn:disabled { opacity: .45; cursor: default; }
   .tbtn.primary { background: var(--btn-bg); color: var(--btn-fg); border-color: transparent; }
   .tbtn.primary:hover:not(:disabled) { background: var(--btn-hover); color: var(--btn-fg); }
+  .tbtn.ghost {
+    border-color: transparent; background: transparent;
+    opacity: .85; font-variant-numeric: tabular-nums; padding: 3px 6px;
+  }
+  .tbtn.ghost:hover:not(:disabled) { background: var(--input-bg); border-color: var(--input-border); }
   #chapterSelect {
     max-width: 46vw; min-width: 180px;
     background: var(--input-bg); color: var(--input-fg);
     border: 1px solid var(--input-border); border-radius: 4px;
     padding: 3px 6px; font-size: 13px;
   }
-  #progressText { font-variant-numeric: tabular-nums; opacity: .85; white-space: nowrap; }
+  /* 收起: 只保留"展开"和"设置"两个按钮, 悬浮在右上角 */
+  body.toolbar-collapsed .toolbar {
+    position: fixed; top: 6px; right: 10px; left: auto;
+    z-index: 30; padding: 0; gap: 4px;
+    background: transparent; border: none;
+  }
+  body.toolbar-collapsed .toolbar > *:not(#toolbarToggle):not(#settingsBtn) { display: none; }
+  body.toolbar-collapsed .toolbar #toolbarToggle,
+  body.toolbar-collapsed .toolbar #settingsBtn { opacity: .45; }
+  body.toolbar-collapsed .toolbar #toolbarToggle:hover,
+  body.toolbar-collapsed .toolbar #settingsBtn:hover { opacity: 1; }
 
-  .progress-track { height: 3px; background: var(--chrome-border); position: sticky; top: var(--toolbar-h, 37px); z-index: 19; }
   .progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .2s ease; }
 
   /* ---------- 设置面板(固定悬浮窗, 不随内容滚动) ---------- */
@@ -416,15 +431,18 @@ export class ReaderPanel {
   }
   .empty-tip { text-align: center; padding: 60px 0; opacity: .7; }
 
-  /* ---------- 底部状态栏 ---------- */
+  /* ---------- 底部状态栏(含整书进度条) ---------- */
   .statusbar {
     position: fixed; left: 0; right: 0; bottom: 0;
-    display: flex; gap: 16px; align-items: center;
-    padding: 4px 14px; font-size: 12px;
+    display: flex; flex-direction: column;
+    font-size: 12px;
     background: var(--chrome-bg); color: var(--chrome-fg);
     border-top: 1px solid var(--chrome-border);
     font-variant-numeric: tabular-nums;
   }
+  .statusbar .progress-track { height: 3px; width: 100%; background: var(--chrome-border); }
+  .statusbar .status-row { display: flex; gap: 16px; align-items: center; padding: 4px 14px; }
+  .statusbar .status-row .spacer { flex: 1; }
 </style>
 </head>
 <body>
@@ -433,12 +451,12 @@ export class ReaderPanel {
   <select id="chapterSelect" title="章节目录"></select>
   <button id="nextBtn" class="tbtn" title="下一章 (Alt+→)">下一章 ›</button>
   <span class="spacer"></span>
-  <span id="progressText"></span>
+  <button id="fontSizeText" class="tbtn ghost" title="当前字号，点击调整">字号 16px</button>
   <button id="fontMinus" class="tbtn" title="减小字号">A-</button>
   <button id="fontPlus" class="tbtn" title="增大字号">A+</button>
   <button id="settingsBtn" class="tbtn primary" title="阅读设置">Aa 设置</button>
+  <button id="toolbarToggle" class="tbtn" title="收起工具栏">⌃</button>
 </header>
-<div class="progress-track"><div id="progressFill" class="progress-fill"></div></div>
 
 <section id="settingsPanel" role="dialog" aria-label="阅读设置">
   <div class="settings-head">
@@ -482,9 +500,12 @@ export class ReaderPanel {
 </main>
 
 <footer class="statusbar">
-  <span id="bookInfo"></span>
-  <span class="spacer" style="flex:1"></span>
-  <span id="chapterInfo"></span>
+  <div class="progress-track"><div id="progressFill" class="progress-fill"></div></div>
+  <div class="status-row">
+    <span id="bookInfo"></span>
+    <span class="spacer"></span>
+    <span id="chapterInfo"></span>
+  </div>
 </footer>
 
 <script nonce="${nonce}">
@@ -500,7 +521,8 @@ export class ReaderPanel {
   function $(id) { return document.getElementById(id); }
   var els = {
     prev: $('prevBtn'), next: $('nextBtn'), select: $('chapterSelect'),
-    progressText: $('progressText'), progressFill: $('progressFill'),
+    progressFill: $('progressFill'), fontSizeText: $('fontSizeText'),
+    toolbarToggle: $('toolbarToggle'),
     settingsBtn: $('settingsBtn'), settingsPanel: $('settingsPanel'), settingsClose: $('settingsClose'),
     fontMinus: $('fontMinus'), fontPlus: $('fontPlus'),
     fontSize: $('fontSize'), fontSizeVal: $('fontSizeVal'),
@@ -516,11 +538,21 @@ export class ReaderPanel {
 
   /* ---------------- 设置面板: 固定悬浮定位与开关 ---------------- */
   function syncPanelPosition() {
-    var toolbarH = els.toolbar ? els.toolbar.offsetHeight : 36;
-    var trackH = els.progressTrack ? els.progressTrack.offsetHeight : 3;
-    var root = document.documentElement;
-    root.style.setProperty('--toolbar-h', toolbarH + 'px');
-    root.style.setProperty('--panel-top', (toolbarH + trackH + 8) + 'px');
+    var collapsed = document.body.classList.contains('toolbar-collapsed');
+    var toolbarH = collapsed || !els.toolbar ? 0 : els.toolbar.offsetHeight;
+    // 收起时右上角有一组悬浮按钮, 设置面板下移到它们之下
+    document.documentElement.style.setProperty('--panel-top', (collapsed ? 44 : toolbarH + 8) + 'px');
+  }
+
+  /* ---------------- 工具栏收起/展开 ---------------- */
+  function setToolbarCollapsed(collapsed, persist) {
+    document.body.classList.toggle('toolbar-collapsed', !!collapsed);
+    els.toolbarToggle.textContent = collapsed ? '⌄' : '⌃';
+    els.toolbarToggle.title = collapsed ? '展开工具栏' : '收起工具栏';
+    syncPanelPosition();
+    if (persist) {
+      persistSettings({ toolbarCollapsed: !!collapsed });
+    }
   }
   function openSettings() {
     syncPanelPosition();
@@ -556,11 +588,13 @@ export class ReaderPanel {
     root.style.setProperty('--para-spacing', s.paragraphSpacing + 'em');
     root.style.setProperty('--content-width', s.contentWidth + 'px');
     syncControls(s);
+    setToolbarCollapsed(!!s.toolbarCollapsed, false);
   }
 
   function syncControls(s) {
     els.fontSize.value = s.fontSize;
     els.fontSizeVal.textContent = s.fontSize + 'px';
+    els.fontSizeText.textContent = '字号 ' + s.fontSize + 'px';
     els.fontFamily.value = s.fontFamily;
     els.lineHeight.value = s.lineHeight;
     els.lineHeightVal.textContent = s.lineHeight.toFixed(1);
@@ -616,7 +650,6 @@ export class ReaderPanel {
   function updateProgress() {
     var total = state.novel ? state.novel.totalChapters : 0;
     var idx = state.chapterIndex + 1;
-    els.progressText.textContent = idx + ' / ' + total;
     els.progressFill.style.width = (total > 0 ? (idx / total) * 100 : 0) + '%';
     els.chapterInfo.textContent = state.novel
       ? ('第 ' + idx + ' 章 / 共 ' + total + ' 章')
@@ -682,6 +715,18 @@ export class ReaderPanel {
   els.select.addEventListener('change', function () { gotoChapter(Number(this.value)); });
   els.settingsBtn.addEventListener('click', function (e) {
     e.stopPropagation();
+    if (settingsOpen()) {
+      closeSettings();
+    } else {
+      openSettings();
+    }
+  });
+  // 收起/展开工具栏
+  els.toolbarToggle.addEventListener('click', function () {
+    setToolbarCollapsed(!document.body.classList.contains('toolbar-collapsed'), true);
+  });
+  // 点击字号标签直接打开设置(原来是章节计数, 现在显示当前字号)
+  els.fontSizeText.addEventListener('click', function () {
     if (settingsOpen()) {
       closeSettings();
     } else {
