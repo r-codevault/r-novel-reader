@@ -343,17 +343,23 @@ export class ReaderPanel {
     border: 1px solid var(--input-border); border-radius: 4px;
     padding: 3px 6px; font-size: 13px;
   }
-  /* 收起: 只保留"展开"和"设置"两个按钮, 悬浮在右上角 */
-  body.toolbar-collapsed .toolbar {
-    position: fixed; top: 6px; right: 10px; left: auto;
-    z-index: 30; padding: 0; gap: 4px;
-    background: transparent; border: none;
+
+  /* 收起后右下角的"悬浮球": 点击展开工具栏 */
+  #floatBall {
+    display: none;
+    position: fixed; right: 18px; bottom: calc(var(--statusbar-h, 30px) + 14px);
+    width: 44px; height: 44px; border-radius: 50%;
+    align-items: center; justify-content: center;
+    background: var(--btn-bg); color: var(--btn-fg);
+    border: 1px solid var(--chrome-border);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, .35);
+    cursor: pointer; z-index: 40;
+    opacity: .65; transition: opacity .15s ease, transform .15s ease;
   }
-  body.toolbar-collapsed .toolbar > *:not(#toolbarToggle):not(#settingsBtn) { display: none; }
-  body.toolbar-collapsed .toolbar #toolbarToggle,
-  body.toolbar-collapsed .toolbar #settingsBtn { opacity: .45; }
-  body.toolbar-collapsed .toolbar #toolbarToggle:hover,
-  body.toolbar-collapsed .toolbar #settingsBtn:hover { opacity: 1; }
+  body.toolbar-collapsed #floatBall { display: flex; }
+  #floatBall:hover { opacity: 1; transform: scale(1.06); }
+  #floatBall:active { transform: scale(0.97); }
+  #floatBall svg { width: 20px; height: 20px; }
 
   .progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .2s ease; }
 
@@ -367,7 +373,7 @@ export class ReaderPanel {
     width: min(760px, calc(100vw - 32px));
     max-height: calc(100vh - var(--panel-top, 44px) - 32px);
     overflow-y: auto;
-    z-index: 40;
+    z-index: 45;
     padding: 12px 18px 16px;
     background: var(--vscode-editorWidget-background, var(--chrome-bg));
     border: 1px solid var(--chrome-border);
@@ -508,6 +514,13 @@ export class ReaderPanel {
   </div>
 </footer>
 
+<!-- 工具栏收起后显示的悬浮球 -->
+<button id="floatBall" type="button" title="展开工具栏" aria-label="展开工具栏">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+    <path d="M4 7h16M4 12h16M4 17h16"/>
+  </svg>
+</button>
+
 <script nonce="${nonce}">
 (function () {
   'use strict';
@@ -522,7 +535,8 @@ export class ReaderPanel {
   var els = {
     prev: $('prevBtn'), next: $('nextBtn'), select: $('chapterSelect'),
     progressFill: $('progressFill'), fontSizeText: $('fontSizeText'),
-    toolbarToggle: $('toolbarToggle'),
+    toolbarToggle: $('toolbarToggle'), floatBall: $('floatBall'),
+    statusbar: document.querySelector('.statusbar'),
     settingsBtn: $('settingsBtn'), settingsPanel: $('settingsPanel'), settingsClose: $('settingsClose'),
     fontMinus: $('fontMinus'), fontPlus: $('fontPlus'),
     fontSize: $('fontSize'), fontSizeVal: $('fontSizeVal'),
@@ -540,8 +554,10 @@ export class ReaderPanel {
   function syncPanelPosition() {
     var collapsed = document.body.classList.contains('toolbar-collapsed');
     var toolbarH = collapsed || !els.toolbar ? 0 : els.toolbar.offsetHeight;
-    // 收起时右上角有一组悬浮按钮, 设置面板下移到它们之下
-    document.documentElement.style.setProperty('--panel-top', (collapsed ? 44 : toolbarH + 8) + 'px');
+    var root = document.documentElement;
+    root.style.setProperty('--panel-top', (toolbarH + 8) + 'px');
+    // 悬浮球需要避开底部状态栏
+    root.style.setProperty('--statusbar-h', (els.statusbar ? els.statusbar.offsetHeight : 30) + 'px');
   }
 
   /* ---------------- 工具栏收起/展开 ---------------- */
@@ -724,6 +740,10 @@ export class ReaderPanel {
   // 收起/展开工具栏
   els.toolbarToggle.addEventListener('click', function () {
     setToolbarCollapsed(!document.body.classList.contains('toolbar-collapsed'), true);
+  });
+  // 悬浮球: 展开工具栏
+  els.floatBall.addEventListener('click', function () {
+    setToolbarCollapsed(false, true);
   });
   // 点击字号标签直接打开设置(原来是章节计数, 现在显示当前字号)
   els.fontSizeText.addEventListener('click', function () {

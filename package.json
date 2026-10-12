@@ -2,7 +2,7 @@
   "name": "novel-reader",
   "displayName": "小说阅读器",
   "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面。支持我的书架、书库目录、字体大小/字体族/行距/主题配色等个性化设置，并自动延续上次阅读状态。",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "publisher": "local",
   "license": "MIT",
   "repository": {

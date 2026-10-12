@@ -151,24 +151,28 @@ const panelIds = [
   'chapterSelect', 'settingsPanel', 'settingsClose', 'themeSwatches', 'fontSize', 'fontFamily',
   'lineHeight', 'paraSpacing', 'contentWidth', 'progressFill', 'prevBtn',
   'nextBtn', 'settingsBtn', 'resetSettings', 'bookInfo', 'content',
-  'toolbarToggle', 'fontSizeText', 'chapterInfo',
+  'toolbarToggle', 'fontSizeText', 'chapterInfo', 'floatBall',
 ];
 for (const id of panelIds) {
   assert(capturedHtml.includes(`id="${id}"`), `阅读面板缺少元素 #${id}`);
 }
 console.log('关键 UI 元素: 通过 (' + panelIds.length + ' 个)');
 
-// --- 工具栏可收起 ---
-assert(capturedHtml.includes('body.toolbar-collapsed .toolbar'), '收起状态应有对应样式');
+// --- 工具栏可收起 + 悬浮球 ---
 assert(
-  /body\.toolbar-collapsed \.toolbar > \*:not\(#toolbarToggle\):not\(#settingsBtn\)\s*\{\s*display:\s*none/.test(
-    capturedHtml
-  ),
-  '收起时只应保留展开与设置按钮'
+  /body\.toolbar-collapsed \.toolbar\s*\{\s*display:\s*none;?\s*\}/.test(capturedHtml),
+  '收起状态应隐藏工具栏'
 );
 assert(capturedHtml.includes('class="tbtn" title="收起工具栏"'), '工具栏应有收起按钮');
+assert(capturedHtml.includes('id="floatBall"'), '收起后应有悬浮球');
+assert(
+  /body\.toolbar-collapsed #floatBall\s*\{\s*display:\s*flex/.test(capturedHtml),
+  '悬浮球应仅在收起时显示'
+);
+assert(capturedHtml.includes('--statusbar-h'), '悬浮球应避开底部状态栏');
+assert(capturedHtml.includes('setToolbarCollapsed(false, true)'), '点击悬浮球应展开工具栏');
 assert(capturedHtml.includes('toolbarCollapsed:'), '收起状态应可持久化');
-console.log('工具栏可收起: 通过');
+console.log('工具栏可收起(+悬浮球): 通过');
 
 // --- 进度条移到底部状态栏内 ---
 assert(
