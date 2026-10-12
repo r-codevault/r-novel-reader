@@ -155,7 +155,7 @@ const panelIds = [
   'bookInfo', 'chapterInfo',
   'fabs', 'fabCatalog', 'fabSettings',
   'catalogPanel', 'catSub', 'catBody', 'catClose', 'catReverse', 'catPrev', 'catNext', 'catPos',
-  'chapterWords',
+  'chapterWords', 'navPrev', 'navCatalog', 'navNext',
 ];
 for (const id of panelIds) {
   assert(capturedHtml.includes(`id="${id}"`), `阅读面板缺少元素 #${id}`);
@@ -302,6 +302,23 @@ assert(capturedHtml.includes('chapterWords:'), '章节载荷应携带本章字�
 assert(capturedHtml.includes("'本章 ' + String(words)"), '状态栏应显示本章字数');
 assert(capturedHtml.includes('id="chapterWords"'), '状态栏应有字数元素');
 console.log('状态栏本章字数: 通过');
+
+// --- 底部导航按钮: 上一章 / 目录 / 下一章 ---
+assert(
+  capturedHtml.includes('id="navPrev"') &&
+    capturedHtml.includes('id="navCatalog"') &&
+    capturedHtml.includes('id="navNext"'),
+  '底部应有三个导航按钮'
+);
+assert(capturedHtml.includes('navPrev.addEventListener'), '上一章按钮应已接线');
+assert(capturedHtml.includes('navNext.addEventListener'), '下一章按钮应已接线');
+assert(
+  /navCatalog\.addEventListener[\s\S]{0,120}openCatalog\(\)/.test(capturedHtml),
+  '目录按钮应能开关目录面板'
+);
+assert(capturedHtml.includes('navPrev.disabled = els.catPrev.disabled'), '首末章应禁用相应按钮');
+assert(/\.statusbar \.nav-btn\s*\{/.test(capturedHtml), '导航按钮应使用主题样式');
+console.log('底部导航按钮(上一章/目录/下一章): 通过');
 
 // --- 设置面板必须是固定悬浮窗(不随内容滚动) ---
 assert(

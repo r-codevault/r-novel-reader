@@ -535,6 +535,17 @@ export class ReaderPanel {
   .statusbar .progress-track { height: 3px; width: 100%; background: var(--chrome-border); }
   .statusbar .status-row { display: flex; gap: 16px; align-items: center; padding: 4px 14px; }
   .statusbar .status-row .spacer { flex: 1; }
+  .statusbar .nav-group { display: flex; align-items: center; gap: 8px; }
+  .statusbar .nav-btn {
+    font-family: inherit;
+    font-size: clamp(12px, calc(var(--font-size) * 0.82), 17px);
+    padding: 3px 12px; border-radius: 4px; cursor: pointer;
+    background: var(--input-bg); color: var(--input-fg);
+    border: 1px solid var(--input-border);
+    white-space: nowrap;
+  }
+  .statusbar .nav-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .statusbar .nav-btn:disabled { opacity: .4; cursor: default; }
 </style>
 </head>
 <body>
@@ -614,6 +625,12 @@ export class ReaderPanel {
   <div class="status-row">
     <span id="bookInfo"></span>
     <span class="spacer"></span>
+    <span class="nav-group">
+      <button class="nav-btn" id="navPrev" type="button" title="上一章 (Alt+←)">‹ 上一章</button>
+      <button class="nav-btn" id="navCatalog" type="button" title="打开 / 收起目录">目录</button>
+      <button class="nav-btn" id="navNext" type="button" title="下一章 (Alt+→)">下一章 ›</button>
+    </span>
+    <span class="spacer"></span>
     <span id="chapterWords"></span>
     <span id="chapterInfo"></span>
   </div>
@@ -644,6 +661,7 @@ export class ReaderPanel {
     themeSwatches: $('themeSwatches'), reset: $('resetSettings'),
     content: $('content'), bookInfo: $('bookInfo'), chapterInfo: $('chapterInfo'),
     chapterWords: $('chapterWords'),
+    navPrev: $('navPrev'), navCatalog: $('navCatalog'), navNext: $('navNext'),
     progressFill: $('progressFill'),
     statusbar: document.querySelector('.statusbar'),
   };
@@ -902,6 +920,12 @@ export class ReaderPanel {
     if (Date.now() - lastPointerActivate < 600) { return; }
     activateFab(btn.id);
   });
+  // 底部导航按钮
+  els.navPrev.addEventListener('click', function () { gotoChapter(state.chapterIndex - 1); });
+  els.navNext.addEventListener('click', function () { gotoChapter(state.chapterIndex + 1); });
+  els.navCatalog.addEventListener('click', function () {
+    if (catalogOpen()) { closeCatalog(); } else { openCatalog(); }
+  });
   els.catClose.addEventListener('click', closeCatalog);
   els.catReverse.addEventListener('click', function () {
     state.catReverse = !state.catReverse;
@@ -1042,6 +1066,8 @@ export class ReaderPanel {
     els.content.innerHTML = html || '<p class="empty-tip">(本章无内容)</p>';
     els.catPrev.disabled = payload.index <= 0;
     els.catNext.disabled = payload.index >= payload.totalChapters - 1;
+    els.navPrev.disabled = els.catPrev.disabled;
+    els.navNext.disabled = els.catNext.disabled;
     updateProgress();
     updateCatalogCurrent(false);
     requestAnimationFrame(function () {
