@@ -344,7 +344,7 @@ export class ReaderPanel {
     display: none;
     position: fixed;
     top: 12px; left: 50%; transform: translateX(-50%);
-    width: min(900px, calc(100vw - 32px));
+    width: min(980px, calc(100vw - 32px));
     max-height: calc(100vh - 76px);
     flex-direction: column;
     z-index: 45;
@@ -362,8 +362,9 @@ export class ReaderPanel {
     padding: 12px 16px 10px;
     border-bottom: 1px solid var(--chrome-border);
   }
-  .cat-title { font-size: clamp(15px, calc(var(--font-size) * 0.85), 18px); font-weight: 600; }
-  .cat-sub { font-size: 12px; opacity: .6; }
+  /* 目录字号与阅读区同步: 章节条目 = 正文字号; 分卷名/面板标题 ≈ 章节标题字号 */
+  .cat-title { font-size: clamp(16px, calc(var(--font-size) * 1.2), 24px); font-weight: 600; }
+  .cat-sub { font-size: clamp(11px, calc(var(--font-size) * 0.78), 16px); opacity: .6; }
   .cat-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
   .cat-btn {
     border: 1px solid var(--input-border);
@@ -387,11 +388,11 @@ export class ReaderPanel {
     background: var(--input-bg);
   }
   .cat-group-head:hover { color: var(--accent); }
-  .cat-group-name { font-size: clamp(13px, calc(var(--font-size) * 0.8), 19px); font-weight: 600; }
-  .cat-group-count { font-size: clamp(11px, calc(var(--font-size) * 0.68), 15px); opacity: .55; }
+  .cat-group-name { font-size: clamp(14px, calc(var(--font-size) * 1.05), 21px); font-weight: 600; }
+  .cat-group-count { font-size: clamp(11px, calc(var(--font-size) * 0.78), 16px); opacity: .55; }
   .cat-group-toggle {
     margin-left: auto; opacity: .6;
-    font-size: clamp(12px, calc(var(--font-size) * 0.75), 16px);
+    font-size: clamp(12px, calc(var(--font-size) * 0.85), 17px);
     padding: 2px 8px; border-radius: 4px;
   }
   .cat-group-head:hover .cat-group-toggle { opacity: 1; background: var(--chrome-bg); }
@@ -404,12 +405,13 @@ export class ReaderPanel {
   @media (max-width: 720px) { .cat-items { grid-template-columns: 1fr; } }
   .cat-item {
     display: flex; align-items: baseline; gap: 6px;
-    padding: 5px 8px; border-radius: 4px; cursor: pointer;
+    padding: 6px 8px; border-radius: 4px; cursor: pointer;
     white-space: nowrap; overflow: hidden;
   }
   .cat-item:hover { background: var(--input-bg); }
-  .cat-item .cat-no { font-size: clamp(11px, calc(var(--font-size) * 0.7), 16px); opacity: .55; flex: none; }
-  .cat-item .cat-name { font-size: clamp(13px, calc(var(--font-size) * 0.84), 20px); overflow: hidden; text-overflow: ellipsis; }
+  /* 条目字号与正文一致 */
+  .cat-item .cat-no { font-size: clamp(13px, var(--font-size), 22px); opacity: .55; flex: none; }
+  .cat-item .cat-name { font-size: clamp(13px, var(--font-size), 22px); overflow: hidden; text-overflow: ellipsis; }
   .cat-item.cur { background: var(--input-bg); }
   .cat-item.cur .cat-no { color: var(--accent); opacity: 1; font-weight: 600; }
   .cat-item.cur .cat-name { color: var(--accent); font-weight: 600; }
@@ -419,9 +421,9 @@ export class ReaderPanel {
     padding: 9px 16px;
     border-top: 1px solid var(--chrome-border);
   }
-  .cat-foot .cat-pos { margin-left: auto; font-size: clamp(11px, calc(var(--font-size) * 0.68), 15px); opacity: .6; font-variant-numeric: tabular-nums; }
-  .cat-foot .cat-btn { font-size: clamp(12px, calc(var(--font-size) * 0.72), 15px); }
-  .cat-head .cat-btn { font-size: clamp(12px, calc(var(--font-size) * 0.72), 15px); }
+  .cat-foot .cat-pos { margin-left: auto; font-size: clamp(11px, calc(var(--font-size) * 0.78), 16px); opacity: .6; font-variant-numeric: tabular-nums; }
+  .cat-foot .cat-btn { font-size: clamp(12px, calc(var(--font-size) * 0.82), 17px); }
+  .cat-head .cat-btn { font-size: clamp(12px, calc(var(--font-size) * 0.82), 17px); }
 
   /* ---------- 设置面板(固定悬浮窗, 不随内容滚动) ---------- */
   #settingsPanel {

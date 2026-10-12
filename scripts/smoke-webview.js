@@ -208,8 +208,15 @@ assert(
   !capturedHtml.includes('gotoChapter(Number(head.dataset.i))'),
   '分卷标题不应触发跳转/关闭面板'
 );
-// 目录字号应跟随阅读字号缩放
-assert(/\.cat-item \.cat-name\s*\{[^}]*var\(--font-size\)/.test(capturedHtml), '目录字号应随阅读字号自适应');
+// 目录字号应与阅读区同步: 条目 = 正文字号, 分卷/面板标题 ≈ 章节标题字号
+assert(
+  /\.cat-item \.cat-name\s*\{[^}]*clamp\(13px, var\(--font-size\)/.test(capturedHtml),
+  '目录条目字号应与正文字号一致'
+);
+assert(
+  /\.cat-group-name\s*\{[^}]*var\(--font-size\) \* 1\.05\)/.test(capturedHtml),
+  '分卷标题字号应≈章节标题(略大于正文)'
+);
 console.log('目录面板(分卷/双列/高亮/跳转/倒序): 通过');
 
 // --- 进度条移到底部状态栏内 ---
