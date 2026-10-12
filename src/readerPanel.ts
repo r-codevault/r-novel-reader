@@ -25,6 +25,8 @@ interface InitPayload {
     totalWords: number;
     /** 恢复章内滚动位置(0~1) */
     scrollRatio: number;
+    /** 当前章字数 */
+    chapterWords: number;
     settings: ReadingSettings;
     /** 打开时自动展开设置面板 */
     openSettings?: boolean;
@@ -35,6 +37,8 @@ interface ChapterPayload {
     title: string;
     paragraphs: string[];
     totalChapters: number;
+    /** 本章字数 */
+    chapterWords: number;
     scrollRatio: number;
 }
 
@@ -233,6 +237,7 @@ export class ReaderPanel {
             title: ch ? ch.title : '',
             paragraphs: ch ? ch.content.split('\n') : [],
             totalChapters: this._novel.chapters.length,
+            chapterWords: ch ? ch.wordCount : 0,
             scrollRatio: this._scrollRatio,
         };
     }
@@ -252,6 +257,7 @@ export class ReaderPanel {
             totalChapters: this._novel.chapters.length,
             totalWords: this._novel.totalWords,
             scrollRatio: Math.min(1, Math.max(0, this._scrollRatio)),
+            chapterWords: this._novel.chapters[this._chapterIndex]?.wordCount ?? 0,
             settings: this._settings,
             openSettings: this._openSettingsOnLoad,
         };
@@ -450,34 +456,44 @@ export class ReaderPanel {
     display: flex; align-items: center; justify-content: space-between;
     margin: 0 0 10px;
   }
-  .settings-head h3 { margin: 0; font-size: 13px; font-weight: 500; }
+  .settings-head h3 { margin: 0; font-size: clamp(16px, calc(var(--font-size) * 1.2), 24px); font-weight: 600; }
   .settings-close {
     border: none; background: none; cursor: pointer;
-    color: inherit; opacity: .7; font-size: 15px; line-height: 1;
+    color: inherit; opacity: .7; font-size: clamp(15px, calc(var(--font-size) * 0.95), 20px); line-height: 1;
     padding: 2px 6px; border-radius: 4px;
   }
   .settings-close:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, rgba(127,127,127,.2)); }
   .settings-grid {
-    display: grid; grid-template-columns: 72px 1fr; gap: 10px 14px; align-items: center;
-    max-width: 720px;
+    display: grid; grid-template-columns: max-content 1fr; gap: 12px 16px; align-items: center;
+    max-width: 780px;
   }
-  .settings-grid > label { font-size: 12px; opacity: .85; text-align: right; }
-  .ctl-row { display: flex; align-items: center; gap: 8px; }
-  .ctl-row output { font-size: 12px; min-width: 52px; font-variant-numeric: tabular-nums; opacity: .85; }
+  .settings-grid > label { font-size: clamp(13px, var(--font-size), 22px); opacity: .85; text-align: right; }
+  .ctl-row { display: flex; align-items: center; gap: 10px; }
+  .ctl-row output { font-size: clamp(13px, var(--font-size), 22px); min-width: 66px; font-variant-numeric: tabular-nums; opacity: .85; }
   .ctl-row input[type="range"] { flex: 1; accent-color: var(--accent); }
   .ctl-row select {
     flex: 1; background: var(--input-bg); color: var(--input-fg);
-    border: 1px solid var(--input-border); border-radius: 4px; padding: 4px 6px; font-size: 12px;
+    border: 1px solid var(--input-border); border-radius: 4px; padding: 5px 8px;
+    font-size: clamp(13px, var(--font-size), 22px);
   }
-  .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+  .swatches { display: flex; gap: 9px; flex-wrap: wrap; }
   .swatch {
-    width: 44px; height: 30px; border-radius: 4px; cursor: pointer;
+    width: clamp(46px, calc(var(--font-size) * 2.5), 58px);
+    height: clamp(32px, calc(var(--font-size) * 1.75), 40px);
+    border-radius: 4px; cursor: pointer;
     border: 2px solid var(--chrome-border);
     display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 600;
+    font-size: clamp(13px, calc(var(--font-size) * 0.9), 20px); font-weight: 600;
   }
   .swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
-  #resetSettings { justify-self: start; grid-column: 2; }
+  #resetSettings {
+    justify-self: start; grid-column: 2;
+    font-size: clamp(13px, calc(var(--font-size) * 0.95), 20px);
+    padding: 5px 14px; border-radius: 4px;
+    background: var(--input-bg); color: var(--input-fg);
+    border: 1px solid var(--input-border); cursor: pointer;
+  }
+  #resetSettings:hover { border-color: var(--accent); color: var(--accent); }
 
   /* ---------- 阅读区(留白底色 + 正文"纸面") ---------- */
   #reader {
@@ -598,6 +614,7 @@ export class ReaderPanel {
   <div class="status-row">
     <span id="bookInfo"></span>
     <span class="spacer"></span>
+    <span id="chapterWords"></span>
     <span id="chapterInfo"></span>
   </div>
 </footer>
@@ -610,7 +627,7 @@ export class ReaderPanel {
   var THEMES = ${themes};
   var DEFAULT_SETTINGS = ${defaults};
 
-  var state = { novel: null, settings: DEFAULT_SETTINGS, chapterIndex: 0, chapters: [], catReverse: false, catCollapsed: [] };
+  var state = { novel: null, settings: DEFAULT_SETTINGS, chapterIndex: 0, chapterWords: 0, chapters: [], catReverse: false, catCollapsed: [] };
 
   function $(id) { return document.getElementById(id); }
   var els = {
@@ -626,6 +643,7 @@ export class ReaderPanel {
     contentWidth: $('contentWidth'), contentWidthVal: $('contentWidthVal'),
     themeSwatches: $('themeSwatches'), reset: $('resetSettings'),
     content: $('content'), bookInfo: $('bookInfo'), chapterInfo: $('chapterInfo'),
+    chapterWords: $('chapterWords'),
     progressFill: $('progressFill'),
     statusbar: document.querySelector('.statusbar'),
   };
@@ -1014,6 +1032,7 @@ export class ReaderPanel {
   /* ---------------- 章节渲染 ---------------- */
   function renderChapter(payload) {
     state.chapterIndex = payload.index;
+    state.chapterWords = payload.chapterWords || 0;
     var html = '<h2 class="chapter-title">' + escapeHtml(payload.title) + '</h2>';
     var paras = payload.paragraphs || [];
     for (var i = 0; i < paras.length; i++) {
@@ -1039,6 +1058,12 @@ export class ReaderPanel {
     els.chapterInfo.textContent = state.novel
       ? ('第 ' + idx + ' 章 / 共 ' + total + ' 章')
       : '';
+    // 当前章字数(千分位)
+    var words = state.chapterWords || 0;
+    els.chapterWords.textContent =
+      state.novel && words > 0
+        ? '本章 ' + String(words).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' 字'
+        : '';
   }
 
   /* ---------------- 进度保存(节流) ---------------- */

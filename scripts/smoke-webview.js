@@ -155,6 +155,7 @@ const panelIds = [
   'bookInfo', 'chapterInfo',
   'fabs', 'fabCatalog', 'fabSettings',
   'catalogPanel', 'catSub', 'catBody', 'catClose', 'catReverse', 'catPrev', 'catNext', 'catPos',
+  'chapterWords',
 ];
 for (const id of panelIds) {
   assert(capturedHtml.includes(`id="${id}"`), `阅读面板缺少元素 #${id}`);
@@ -277,6 +278,31 @@ assert(
 );
 console.log('主题(留白/纸面/面板/悬浮球): 通过');
 
+// --- 设置面板字号同步阅读字号 ---
+assert(
+  /\.settings-head h3\s*\{[^}]*var\(--font-size\) \* 1\.2/.test(capturedHtml),
+  '设置面板标题应随阅读字号'
+);
+assert(
+  /\.settings-grid > label\s*\{[^}]*var\(--font-size\)/.test(capturedHtml),
+  '设置面板标签应随阅读字号'
+);
+assert(
+  /\.ctl-row output\s*\{[^}]*var\(--font-size\)/.test(capturedHtml),
+  '设置面板数值应随阅读字号'
+);
+assert(
+  /\.swatch\s*\{[^}]*var\(--font-size\)/.test(capturedHtml),
+  '主题色块应随阅读字号'
+);
+console.log('设置面板字号同步: 通过');
+
+// --- 底部状态栏显示当前章字数 ---
+assert(capturedHtml.includes('chapterWords:'), '章节载荷应携带本章字数');
+assert(capturedHtml.includes("'本章 ' + String(words)"), '状态栏应显示本章字数');
+assert(capturedHtml.includes('id="chapterWords"'), '状态栏应有字数元素');
+console.log('状态栏本章字数: 通过');
+
 // --- 设置面板必须是固定悬浮窗(不随内容滚动) ---
 assert(
   /#settingsPanel\s*\{[^}]*position:\s*fixed/.test(capturedHtml),
@@ -300,6 +326,7 @@ const init1 = panelMessages.find((m) => m.type === 'init');
 assert(init1, 'webview 就绪后应下发 init');
 assert(init1.payload.bookTitle === '测试之书', 'init 应带上书名');
 assert(Math.abs(init1.payload.scrollRatio - 0.5) < 1e-6, 'init 应带上章内滚动位置(延续阅读状态)');
+assert(init1.payload.chapterWords === 6, 'init 应携带当前章字数');
 console.log('就绪后 init(含滚动位置): 通过');
 
 // --- 回归: 换书后阅读面板必须重建, 不能继续显示旧书 ---
