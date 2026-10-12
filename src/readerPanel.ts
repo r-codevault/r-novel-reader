@@ -626,6 +626,19 @@ export class ReaderPanel {
   var IDLE_MS = 3000;
   var idleTimer = null;
   var lastPointerActivate = 0;
+  var lastFabPressAt = 0;
+  /** 用户是否拖动过悬浮球(拖过则以拖动位置为准, 不再自动跟随阅读区域) */
+  var fabDragged = false;
+
+  /** 单击之间的间隔判断双击(用于恢复默认位置) */
+  function resetFabPosition() {
+    fabDragged = false;
+    els.fabs.style.left = 'auto';
+    els.fabs.style.transform = 'translateY(-50%)';
+    syncFabAnchor();
+    // -1 表示恢复"跟随阅读区域"
+    persistSettings({ fabLeft: -1, fabTop: -1 });
+  }
 
   /** 悬浮球动作: 目录 / 阅读设置 */
   function activateFab(id) {
@@ -653,6 +666,33 @@ export class ReaderPanel {
     els.fabs.style.top = Math.min(Math.max(0, pos.top), maxY) + 'px';
     els.fabs.style.right = 'auto';
     els.fabs.style.transform = 'none';
+  }
+
+  /**
+   * 悬浮球默认位置: 跟随阅读区域的右边缘(起点那样贴在正文列的右侧留白里)。
+   * 留白不足时退回贴近窗口右侧, 避免压住正文。
+   */
+  function syncFabAnchor() {
+    if (fabDragged) {
+      return;
+    }
+    var BALL_W = 44;
+    var GAP = 12; // 与正文列右缘保持的间距
+    var vw = window.innerWidth;
+    var cssW =
+      parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--content-width')) ||
+      720;
+    var contentW = Math.min(cssW, Math.max(0, vw - 40)); // #reader 左右各 20px padding
+    var gutter = (vw - contentW) / 2; // 正文列外侧留白
+    // 让球的左缘落在正文列右缘 + GAP 处
+    var right = gutter - BALL_W - GAP;
+    if (!isFinite(right) || right < 12) {
+      right = 12; // 留白不足时退回贴近窗口右侧
+    }
+    els.fabs.style.right = right + 'px';
+    els.fabs.style.left = 'auto';
+    els.fabs.style.top = '50%';
+    els.fabs.style.transform = 'translateY(-50%)';
   }
 
   (function initFabDrag() {
@@ -697,11 +737,19 @@ export class ReaderPanel {
         // 松手后吸附到最近的左右边
         var left = rect.left < window.innerWidth / 2 ? 16 : window.innerWidth - rect.width - 16;
         applyFabPosition({ left: left, top: rect.top });
+        fabDragged = true;
         persistSettings({ fabLeft: left, fabTop: Math.round(rect.top) });
       } else if (pressId) {
         // 未移动 -> 视为点击(不依赖 click 事件, 避免指针捕获/事件重定向导致无响应)
         lastPointerActivate = Date.now();
-        activateFab(pressId);
+        // 双击 -> 恢复"跟随阅读区域"的默认位置
+        if (lastPointerActivate - lastFabPressAt < 350) {
+          lastFabPressAt = 0;
+          resetFabPosition();
+        } else {
+          lastFabPressAt = lastPointerActivate;
+          activateFab(pressId);
+        }
       }
       pressId = null;
       dragging = false;
@@ -896,11 +944,17 @@ export class ReaderPanel {
     root.style.setProperty('--para-spacing', s.paragraphSpacing + 'em');
     root.style.setProperty('--content-width', s.contentWidth + 'px');
     syncControls(s);
-    applyFabPosition(
-      typeof s.fabLeft === 'number' && typeof s.fabTop === 'number'
-        ? { left: s.fabLeft, top: s.fabTop }
-        : null
-    );
+    // 悬浮球位置: 拖动过(fabLeft >= 0)就保持拖动位置, 否则跟随阅读区域右缘
+    fabDragged =
+      typeof s.fabLeft === 'number' &&
+      s.fabLeft >= 0 &&
+      typeof s.fabTop === 'number' &&
+      s.fabTop >= 0;
+    if (fabDragged) {
+      applyFabPosition({ left: s.fabLeft, top: s.fabTop });
+    } else {
+      syncFabAnchor();
+    }
   }
 
   function syncControls(s) {
@@ -1021,10 +1075,14 @@ export class ReaderPanel {
     }
   });
   window.addEventListener('resize', function () {
-    var left = parseFloat(els.fabs.style.left);
-    var top = parseFloat(els.fabs.style.top);
-    if (!isNaN(left) && !isNaN(top)) {
-      applyFabPosition({ left: left, top: top });
+    if (fabDragged) {
+      var left = parseFloat(els.fabs.style.left);
+      var top = parseFloat(els.fabs.style.top);
+      if (!isNaN(left) && !isNaN(top)) {
+        applyFabPosition({ left: left, top: top });
+      }
+    } else {
+      syncFabAnchor();
     }
   });
   document.addEventListener('keydown', function (e) {

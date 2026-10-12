@@ -176,6 +176,18 @@ assert(capturedHtml.includes('fabCatalog') && capturedHtml.includes('fabSettings
 assert(capturedHtml.includes('title="目录"'), '目录球应有提示');
 assert(capturedHtml.includes('pointerdown'), '悬浮球应支持拖动');
 assert(capturedHtml.includes('touch-action: none'), '触摸拖动不应触发滚动');
+// 默认位置应跟随阅读区域(正文列右侧留白), 而非贴窗口右缘
+assert(capturedHtml.includes('function syncFabAnchor'), '悬浮球位置应跟随阅读区域');
+assert(
+  /function syncFabAnchor\(\)[\s\S]{0,600}--content-width/.test(capturedHtml),
+  '跟随位置应按阅读宽度计算'
+);
+assert(
+  /syncFabAnchor\(\)[\s\S]{0,80}else/.test(capturedHtml) || capturedHtml.includes('syncFabAnchor();'),
+  '按设置/窗口变化时重算悬浮球位置'
+);
+assert(capturedHtml.includes('fabDragged'), '拖动过之后应以拖动位置为准');
+assert(capturedHtml.includes('resetFabPosition'), '双击应能恢复跟随阅读区域的位置');
 assert(capturedHtml.includes('fabLeft'), '拖动后的位置应可持久化');
 assert(capturedHtml.includes('#fabs.awake'), '闲置后应淡化以免遮挡正文');
 // 关键回归: 点击必须在 pointerup 上生效, 不能依赖 click 事件
