@@ -15,7 +15,7 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { Novel } from './novelParser';
 
-export type ViewMode = 'shelf' | 'chapters';
+export type ViewMode = 'shelf' | 'chapters' | 'settings';
 
 /** 书架条目(供视图渲染) */
 export interface ShelfItemView {
@@ -37,7 +37,11 @@ type WebviewMessage =
     | { type: 'resumeCurrent' }
     | { type: 'openFile' }
     | { type: 'showShelf' }
-    | { type: 'showChapters' };
+    | { type: 'showChapters' }
+    | { type: 'pickLibrary' }
+    | { type: 'clearLibrary' }
+    | { type: 'openLibraryFolder' }
+    | { type: 'openReaderSettings' };
 
 /** 普通章节: 摊开的书本 */
 const ICON_BOOK = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M7.45 3.35C6.35 2.65 4.65 2.35 2.65 2.35a.6.6 0 0 0-.6.6v8.1c0 .35.3.62.65.6 1.75-.07 3.3.28 4.15 1.03.3.25.7-.03.7-.42V3.85c0-.2-.05-.36-.1-.5z"/><path d="M8.55 3.35c1.1-.7 2.8-1 4.8-1 .33 0 .6.27.6.6v8.1c0 .35-.3.62-.65.6-1.75-.07-3.3.28-4.15 1.03-.3.25-.7-.03-.7-.42V3.85c0-.2.05-.36.1-.5z"/></svg>`;
@@ -57,6 +61,8 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     private _mode: ViewMode = 'chapters';
     private _shelf: ShelfItemView[] = [];
+    /** 书库目录(空 = 未设置, 读原路径) */
+    private _libraryPath = '';
     private _hasNovel = false;
     private _bookTitle = '';
     private _chapters: { index: number; title: string }[] = [];
@@ -95,6 +101,18 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
                 case 'showChapters':
                     void vscode.commands.executeCommand('novelReader.showChapters');
                     break;
+                case 'pickLibrary':
+                    void vscode.commands.executeCommand('novelReader.pickLibraryPath');
+                    break;
+                case 'clearLibrary':
+                    void vscode.commands.executeCommand('novelReader.clearLibraryPath');
+                    break;
+                case 'openLibraryFolder':
+                    void vscode.commands.executeCommand('novelReader.openLibraryFolder');
+                    break;
+                case 'openReaderSettings':
+                    void vscode.commands.executeCommand('novelReader.openSettings');
+                    break;
             }
         });
 
@@ -123,10 +141,13 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
     /** 更新书架列表 */
     setShelf(items: ShelfItemView[]): void {
         this._shelf = items;
-        if (this._mode === 'shelf' && items.length === 0 && this._hasNovel) {
-            // 书架为空但当前有书, 保持目录视图更合理(由扩展侧决定, 这里只同步)
-        }
         this._post({ type: 'shelf', items });
+    }
+
+    /** 更新书库目录设置 */
+    setLibrary(libraryPath: string): void {
+        this._libraryPath = libraryPath || '';
+        this._post({ type: 'library', path: this._libraryPath });
     }
 
     /** 加载/切换小说 */
@@ -171,6 +192,7 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
     private _syncAll(): void {
         this._post({ type: 'mode', mode: this._mode });
         this._post({ type: 'shelf', items: this._shelf });
+        this._post({ type: 'library', path: this._libraryPath });
         this._post({
             type: 'novel',
             payload: {
@@ -280,6 +302,25 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
     border-top: 1px solid var(--vscode-widget-border, rgba(128,128,128,.25));
   }
 
+  /* ---------- 设置(存储位置等) ---------- */
+  .set-sec { padding: 10px 12px; border-bottom: 1px solid var(--vscode-widget-border, rgba(128,128,128,.25)); }
+  .set-h { font-size: 11px; letter-spacing: .04em; opacity: .6; margin-bottom: 7px; }
+  .set-row { display: flex; gap: 6px; align-items: baseline; }
+  .set-label { font-size: 12px; opacity: .75; flex: none; }
+  .set-val { font-size: 12px; word-break: break-all; }
+  .set-val.empty { opacity: .55; font-style: italic; }
+  .set-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .set-btn {
+    font-family: inherit; font-size: 12px; padding: 3px 9px; border-radius: 4px;
+    cursor: pointer;
+    background: var(--vscode-button-secondaryBackground, rgba(127,127,127,.16));
+    color: var(--vscode-button-secondaryForeground, inherit);
+    border: 1px solid var(--vscode-widget-border, rgba(128,128,128,.3));
+  }
+  .set-btn:hover { background: var(--vscode-button-secondaryHoverBackground, rgba(127,127,127,.26)); }
+  .set-btn.hidden { display: none; }
+  .set-tip { margin: 9px 0 0; font-size: 11px; line-height: 1.65; opacity: .6; }
+
   /* ---------- 空状态 ---------- */
   .empty { padding: 18px 14px; display: flex; flex-direction: column; gap: 8px; }
   .empty p { margin: 0 0 2px; opacity: .75; font-size: 12px; }
@@ -320,6 +361,28 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
   </div>
 </div>
 
+<div id="paneSettings" class="pane">
+  <div class="set-sec">
+    <div class="set-h">存储位置</div>
+    <div class="set-row">
+      <span class="set-label">书库目录</span>
+      <span class="set-val empty" id="libValue">未设置 · 读取文件原路径</span>
+    </div>
+    <div class="set-actions">
+      <button class="set-btn" id="btnPickLib">选择书库目录…</button>
+      <button class="set-btn hidden" id="btnOpenLib">在文件管理器中打开</button>
+      <button class="set-btn hidden" id="btnClearLib">使用原路径（不拷贝）</button>
+    </div>
+    <p class="set-tip">默认不设置：直接读取你选择的文件原路径。设置书库目录后，<b>导入时会把小说复制到该目录</b>并从副本读取，原文件之后可以自行移动或删除；同名文件会自动改名，不会覆盖。</p>
+  </div>
+  <div class="set-sec" style="border-bottom:none">
+    <div class="set-h">阅读</div>
+    <div class="set-actions" style="margin-top:0">
+      <button class="set-btn" id="btnReaderSettings">打开阅读设置（字号 / 字体 / 主题）</button>
+    </div>
+  </div>
+</div>
+
 <script nonce="${nonce}">
 (function () {
   'use strict';
@@ -331,6 +394,12 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
 
   var elPaneShelf = document.getElementById('paneShelf');
   var elPaneChapters = document.getElementById('paneChapters');
+  var elPaneSettings = document.getElementById('paneSettings');
+  var elLibValue = document.getElementById('libValue');
+  var elBtnPickLib = document.getElementById('btnPickLib');
+  var elBtnOpenLib = document.getElementById('btnOpenLib');
+  var elBtnClearLib = document.getElementById('btnClearLib');
+  var elBtnReaderSettings = document.getElementById('btnReaderSettings');
   var elShelfList = document.getElementById('shelfList');
   var elShelfEmpty = document.getElementById('shelfEmpty');
   var elShelfFoot = document.getElementById('shelfFoot');
@@ -354,8 +423,30 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
   /* ---------------- 模式 ---------------- */
   function setMode(mode) {
     elPaneShelf.classList.toggle('active', mode === 'shelf');
-    elPaneChapters.classList.toggle('active', mode !== 'shelf');
+    elPaneChapters.classList.toggle('active', mode === 'chapters');
+    elPaneSettings.classList.toggle('active', mode === 'settings');
   }
+
+  /* ---------------- 设置: 书库目录 ---------------- */
+  function renderLibrary(path) {
+    var set = !!(path && path.length);
+    if (set) {
+      elLibValue.textContent = path;
+      elLibValue.title = path;
+      elLibValue.classList.remove('empty');
+    } else {
+      elLibValue.textContent = '未设置 · 读取文件原路径';
+      elLibValue.title = '';
+      elLibValue.classList.add('empty');
+    }
+    elBtnOpenLib.classList.toggle('hidden', !set);
+    elBtnClearLib.classList.toggle('hidden', !set);
+  }
+
+  elBtnPickLib.addEventListener('click', function () { vscode.postMessage({ type: 'pickLibrary' }); });
+  elBtnOpenLib.addEventListener('click', function () { vscode.postMessage({ type: 'openLibraryFolder' }); });
+  elBtnClearLib.addEventListener('click', function () { vscode.postMessage({ type: 'clearLibrary' }); });
+  elBtnReaderSettings.addEventListener('click', function () { vscode.postMessage({ type: 'openReaderSettings' }); });
 
   /* ---------------- 书架 ---------------- */
   function renderShelf(items) {
@@ -488,6 +579,7 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
     switch (m.type) {
       case 'mode': setMode(m.mode); break;
       case 'shelf': renderShelf(m.items); break;
+      case 'library': renderLibrary(m.path); break;
       case 'novel': applyNovel(m.payload); break;
       case 'current': setCurrent(m.index, !!m.center); break;
     }

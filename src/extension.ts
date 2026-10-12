@@ -16,6 +16,7 @@ import { parseNovel, Novel } from './novelParser';
 import { ChapterViewProvider, ShelfItemView, ViewMode } from './chapterViewProvider';
 import { ReaderPanel } from './readerPanel';
 import { ShelfStore } from './shelf';
+import { ensureInLibrary } from './library';
 import { ReadingSettings, SettingsStore } from './settings';
 
 /** 读取文件字节并识别编码(站点下载的 txt 常为 GB18030) */
@@ -86,6 +87,16 @@ export function activate(context: vscode.ExtensionContext): void {
         chapterView.setShelf(shelfItems());
     }
 
+    /** 书库目录(空 = 未设置, 直接读取原路径) */
+    function getLibraryPath(): string {
+        const raw = vscode.workspace.getConfiguration('novelReader').get<string>('libraryPath', '');
+        return (raw || '').trim();
+    }
+
+    function syncLibraryToView(): void {
+        chapterView.setLibrary(getLibraryPath());
+    }
+
     // ---------------------------------------------------------------- 加载小说
 
     /** 加载小说: 解析 -> 登记书架 -> 刷新视图 -> (可选)打开阅读面板 */
@@ -108,6 +119,30 @@ export function activate(context: vscode.ExtensionContext): void {
             }
 
             currentNovel = novel;
+
+            // 书库目录: 已设置则导入时复制一份到书库, 之后引用副本(原文件可自行移动/删除)
+            const library = getLibraryPath();
+            if (library) {
+                try {
+                    const res = await ensureInLibrary(filePath, library);
+                    if (res.path !== filePath) {
+                        novel.filePath = res.path;
+                    }
+                    if (res.copied && !opts.silent) {
+                        vscode.window.setStatusBarMessage(
+                            `已复制到书库：${path.basename(res.path)}`,
+                            4000
+                        );
+                    }
+                } catch (err) {
+                    vscode.window.showWarningMessage(
+                        `复制到书库失败，将直接读取原文件：${
+                            err instanceof Error ? err.message : String(err)
+                        }`
+                    );
+                }
+            }
+
             const entry = await shelf.upsert({
                 filePath,
                 title: novel.bookTitle,
@@ -193,6 +228,50 @@ export function activate(context: vscode.ExtensionContext): void {
             if (!filePath) {
                 return;
             }
+            // 文件被移动/改名/删除: 提供重新定位(保留进度)或移除
+            if (!fs.existsSync(filePath)) {
+                const book = shelf.get(filePath);
+                const name = book?.title || path.basename(filePath);
+                const picked = await vscode.window.showWarningMessage(
+                    `「${name}」的文件已不在原位置，可能被移动或改名了。`,
+                    { modal: true },
+                    '重新选择文件',
+                    '从书架移除'
+                );
+                if (picked === '从书架移除') {
+                    await shelf.remove(filePath);
+                    refreshShelfView();
+                    return;
+                }
+                if (picked !== '重新选择文件') {
+                    return;
+                }
+                const sel = await vscode.window.showOpenDialog({
+                    canSelectFiles: true,
+                    canSelectMany: false,
+                    title: `为「${name}」重新选择文件`,
+                    filters: { '小说文本 (*.txt)': ['txt'], '所有文件': ['*'] },
+                });
+                if (!sel || !sel[0]) {
+                    return;
+                }
+                const novel = await loadNovel(sel[0].fsPath, {
+                    openPanel: false,
+                    silent: true,
+                });
+                if (!novel) {
+                    return;
+                }
+                await shelf.relink(filePath, novel.filePath, {
+                    title: novel.bookTitle,
+                    author: novel.author,
+                    totalChapters: novel.chapters.length,
+                });
+                refreshShelfView();
+                await loadNovel(novel.filePath, { openPanel: true });
+                setViewMode('chapters');
+                return;
+            }
             const novel = await loadNovel(filePath, { openPanel: true });
             if (novel) {
                 setViewMode('chapters');
@@ -251,6 +330,63 @@ export function activate(context: vscode.ExtensionContext): void {
             chapterView.setMode('chapters');
             void vscode.commands.executeCommand('setContext', 'novelReader.viewMode', 'chapters');
             focusChapterView();
+        }),
+
+        // 侧边栏设置(存储位置等)
+        vscode.commands.registerCommand('novelReader.showSettings', () => {
+            chapterView.setMode('settings');
+            void vscode.commands.executeCommand('setContext', 'novelReader.viewMode', 'settings');
+            syncLibraryToView();
+            focusChapterView();
+        }),
+
+        // 选择书库目录(导入时复制到这里)
+        vscode.commands.registerCommand('novelReader.pickLibraryPath', async () => {
+            const current = getLibraryPath();
+            const picked = await vscode.window.showOpenDialog({
+                canSelectFiles: false,
+                canSelectFolders: true,
+                canSelectMany: false,
+                openLabel: '选为书库目录',
+                title: '选择书库目录（之后导入的小说会复制到这里）',
+                defaultUri: current && fs.existsSync(current) ? vscode.Uri.file(current) : undefined,
+            });
+            if (!picked || !picked[0]) {
+                return;
+            }
+            const dir = picked[0].fsPath;
+            await vscode.workspace
+                .getConfiguration('novelReader')
+                .update('libraryPath', dir, vscode.ConfigurationTarget.Global);
+            syncLibraryToView();
+            chapterView.setMode('settings');
+            void vscode.commands.executeCommand('setContext', 'novelReader.viewMode', 'settings');
+            vscode.window.showInformationMessage(`书库目录已设置为 ${dir}，之后导入的小说会复制到这里。`);
+        }),
+
+        // 取消书库目录(恢复读取原路径)
+        vscode.commands.registerCommand('novelReader.clearLibraryPath', async () => {
+            await vscode.workspace
+                .getConfiguration('novelReader')
+                .update('libraryPath', '', vscode.ConfigurationTarget.Global);
+            syncLibraryToView();
+            chapterView.setMode('settings');
+            void vscode.commands.executeCommand('setContext', 'novelReader.viewMode', 'settings');
+            vscode.window.setStatusBarMessage('已取消书库目录：导入的小说将直接读取原路径', 4000);
+        }),
+
+        // 在系统文件管理器中打开书库目录
+        vscode.commands.registerCommand('novelReader.openLibraryFolder', async () => {
+            const dir = getLibraryPath();
+            if (!dir) {
+                vscode.window.showInformationMessage('尚未设置书库目录。');
+                return;
+            }
+            if (!fs.existsSync(dir)) {
+                vscode.window.showWarningMessage(`书库目录不存在：${dir}`);
+                return;
+            }
+            await vscode.env.openExternal(vscode.Uri.file(dir));
         }),
 
         vscode.commands.registerCommand('novelReader.openChapter', async (index?: number) => {
@@ -336,6 +472,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration(async (e) => {
+            if (e.affectsConfiguration('novelReader.libraryPath')) {
+                syncLibraryToView();
+            }
             if (!e.affectsConfiguration('novelReader')) {
                 return;
             }
@@ -349,6 +488,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // ---------------------------------------------------------------- 启动: 迁移旧数据 + 自动延续上次阅读状态
 
     setViewMode('chapters');
+    syncLibraryToView();
     void (async () => {
         await shelf.migrateLegacySession();
         refreshShelfView();

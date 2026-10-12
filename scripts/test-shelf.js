@@ -76,6 +76,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(shelf.size === 1 && !shelf.get('D:/b.txt'), '移除后不应再存在');
   console.log('移除书籍: 通过');
 
+  // --- 文件移动后重新定位: 进度应迁移到新路径 ---
+  await sleep(2);
+  await shelf.relink('D:/a.txt', 'D:/书库/甲书.txt', {
+    title: '甲书',
+    author: '作者A',
+    totalChapters: 120,
+  });
+  const relinked = shelf.get('D:/书库/甲书.txt');
+  assert(relinked, '重新定位后应以新路径登记');
+  assert(!shelf.get('D:/a.txt'), '旧路径条目应被替换');
+  assert(relinked.chapterIndex === 13 && Math.abs(relinked.scrollRatio - 1) < 1e-6, '阅读进度应保留');
+  assert(relinked.title === '甲书' && relinked.totalChapters === 120, '书目信息应更新');
+  assert(shelf.size === 1, '重新定位不应产生重复条目');
+  console.log('文件移动后重新定位(保留进度): 通过');
+
   // --- 旧 session 迁移 ---
   const state2 = memoryState();
   await state2.update('novelReader.session', {

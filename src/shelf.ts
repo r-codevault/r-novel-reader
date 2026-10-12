@@ -108,6 +108,32 @@ export class ShelfStore {
     }
 
     /**
+     * 文件被移动/改名后重新定位: 把阅读进度从旧路径迁移到新路径。
+     * 旧条目被替换为新条目(保留 chapterIndex / scrollRatio / addedAt)。
+     */
+    async relink(
+        oldPath: string,
+        newPath: string,
+        meta: { title: string; author: string; totalChapters: number }
+    ): Promise<void> {
+        const books = this.state.get<ShelfBook[]>(SHELF_KEY, []);
+        const old = books.find((b) => b.filePath === oldPath);
+        const rest = books.filter((b) => b.filePath !== oldPath && b.filePath !== newPath);
+        const now = Date.now();
+        const next: ShelfBook = {
+            filePath: newPath,
+            title: meta.title,
+            author: meta.author,
+            totalChapters: meta.totalChapters,
+            chapterIndex: old ? old.chapterIndex : -1,
+            scrollRatio: old ? old.scrollRatio : 0,
+            addedAt: old ? old.addedAt : now,
+            updatedAt: now,
+        };
+        await this.state.update(SHELF_KEY, [...rest, next]);
+    }
+
+    /**
      * 迁移旧版的单本 session 到书架(幂等)。
      * 仅在书架为空且存在旧 session 时执行, 迁移后删除旧键。
      */

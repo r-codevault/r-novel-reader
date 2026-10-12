@@ -251,6 +251,7 @@ console.log('当前阅读条 / 图标: 通过');
 const sideIds = [
   'paneShelf', 'shelfList', 'shelfEmpty', 'shelfFoot',
   'paneChapters', 'chapterList', 'currentCard', 'currentTitle',
+  'paneSettings', 'libValue', 'btnPickLib', 'btnOpenLib', 'btnClearLib', 'btnReaderSettings',
 ];
 for (const id of sideIds) {
   assert(chapterHtml.includes(`id="${id}"`), `侧边栏缺少元素 #${id}`);
@@ -259,10 +260,26 @@ assert(chapterHtml.includes('bk-del'), '书架条目应有移除按钮');
 assert(chapterHtml.includes('书架空空如也'), '书架应有空状态');
 console.log('书架 UI 元素: 通过');
 
+// --- 设置模式(存储位置) ---
+assert(chapterHtml.includes('书库目录'), '设置页应有书库目录项');
+assert(chapterHtml.includes('未设置 · 读取文件原路径'), '默认应显示未设置(读原路径)');
+assert(chapterHtml.includes('导入时会把小说复制到该目录'), '设置页应说明拷贝行为');
+assert(chapterHtml.includes('选择书库目录'), '设置页应有选择目录按钮');
+console.log('设置页(存储位置): 通过');
+
 // --- 消息协议 ---
 received.length = 0;
 provider.setMode('shelf');
 assert(received.some((m) => m.type === 'mode' && m.mode === 'shelf'), 'setMode 应推送 mode 消息');
+provider.setMode('settings');
+assert(received.some((m) => m.type === 'mode' && m.mode === 'settings'), '应支持设置模式');
+
+received.length = 0;
+provider.setLibrary('D:/我的书库');
+const libMsg = received.find((m) => m.type === 'library');
+assert(libMsg && libMsg.path === 'D:/我的书库', 'setLibrary 应推送书库目录');
+provider.setLibrary('');
+assert(received[received.length - 1].path === '', '未设置书库时应推送空路径');
 
 received.length = 0;
 provider.setShelf([
@@ -294,6 +311,10 @@ msgHandler({ type: 'openFile' });
 msgHandler({ type: 'openChapter', index: 12 });
 msgHandler({ type: 'showShelf' });
 msgHandler({ type: 'showChapters' });
+msgHandler({ type: 'pickLibrary' });
+msgHandler({ type: 'clearLibrary' });
+msgHandler({ type: 'openLibraryFolder' });
+msgHandler({ type: 'openReaderSettings' });
 const expected = [
   'novelReader.openBook',
   'novelReader.removeFromShelf',
@@ -302,6 +323,10 @@ const expected = [
   'novelReader.openChapter',
   'novelReader.showBookshelf',
   'novelReader.showChapters',
+  'novelReader.pickLibraryPath',
+  'novelReader.clearLibraryPath',
+  'novelReader.openLibraryFolder',
+  'novelReader.openSettings',
 ];
 for (const cmd of expected) {
   assert(executed.some((e) => e.cmd === cmd), `消息未分发到命令 ${cmd}`);
