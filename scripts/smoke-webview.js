@@ -153,9 +153,9 @@ const panelIds = [
   'settingsPanel', 'settingsClose', 'themeSwatches', 'fontSize', 'fontFamily',
   'lineHeight', 'paraSpacing', 'contentWidth', 'progressFill', 'content',
   'bookInfo', 'chapterInfo',
-  'fabs', 'fabCatalog', 'fabSettings',
+  'fabs', 'fabPrev', 'fabCatalog', 'fabNext', 'fabSettings',
   'catalogPanel', 'catSub', 'catBody', 'catClose', 'catReverse', 'catPrev', 'catNext', 'catPos',
-  'chapterWords', 'navPrev', 'navCatalog', 'navNext',
+  'chapterWords',
 ];
 for (const id of panelIds) {
   assert(capturedHtml.includes(`id="${id}"`), `阅读面板缺少元素 #${id}`);
@@ -171,12 +171,27 @@ for (const gone of [
 }
 console.log('顶部工具栏已移除: 通过');
 
-// --- 悬浮球: 目录 / Aa设置 (可拖动 + 闲置淡化) ---
-assert(/\.fab\s*\{[^}]*border-radius:\s*50%/.test(capturedHtml), '悬浮球应为圆形');
-assert(capturedHtml.includes('fabCatalog') && capturedHtml.includes('fabSettings'), '应有目录与设置两个球');
-assert(capturedHtml.includes('title="目录"'), '目录球应有提示');
+// --- 悬浮球工具栏: 上一章/目录/下一章/字 (方形圆角, icon+文字) ---
+assert(/\.fab\s*\{[^}]*border-radius:\s*12px/.test(capturedHtml), '悬浮球应为方形圆角');
+assert(capturedHtml.includes('fab-label'), '悬浮球应采用 icon+文字 样式');
+assert(
+  capturedHtml.includes('>上一章</span>') && capturedHtml.includes('>目录</span>') &&
+    capturedHtml.includes('>下一章</span>') && capturedHtml.includes('>字</span>'),
+  '四球文案应为 上一章/目录/下一章/字'
+);
+const fabOrder = ['fabPrev', 'fabCatalog', 'fabNext', 'fabSettings'].map((id) => capturedHtml.indexOf(`id="${id}"`));
+assert(
+  fabOrder.every((v) => v >= 0) && fabOrder[0] < fabOrder[1] && fabOrder[1] < fabOrder[2] && fabOrder[2] < fabOrder[3],
+  '四球顺序应为 上一章 → 目录 → 下一章 → 字'
+);
+assert(capturedHtml.includes("'fabPrev'") && capturedHtml.includes("'fabNext'"), '上一章/下一章球应已接线');
+assert(capturedHtml.includes("fabPrev.classList.toggle('off'"), '首末章应置灰上一章/下一章球');
 assert(capturedHtml.includes('pointerdown'), '悬浮球应支持拖动');
 assert(capturedHtml.includes('touch-action: none'), '触摸拖动不应触发滚动');
+// 底部导航按钮已移除(并入悬浮球工具栏)
+for (const gone of ['id="navPrev"', 'id="navCatalog"', 'id="navNext"']) {
+  assert(!capturedHtml.includes(gone), `底部导航按钮应已移除: ${gone}`);
+}
 // 默认位置应跟随阅读区域(正文列右侧留白), 而非贴窗口右缘
 assert(capturedHtml.includes('function syncFabAnchor'), '悬浮球位置应跟随阅读区域');
 assert(
@@ -202,7 +217,7 @@ assert(
   /if \(!dragging\)[\s\S]{0,400}setPointerCapture/.test(capturedHtml),
   '只有真正拖动后才捕获指针(避免吞掉点击)'
 );
-console.log('悬浮球(目录/Aa设置, 可拖动+点击): 通过');
+console.log('悬浮球工具栏(上/目录/下/字, 方形圆角): 通过');
 
 // --- 目录面板(参考起点中文网) ---
 assert(capturedHtml.includes('id="catalogPanel"'), '应有目录面板');
@@ -302,23 +317,7 @@ assert(capturedHtml.includes('chapterWords:'), '章节载荷应携带本章字�
 assert(capturedHtml.includes("'本章 ' + String(words)"), '状态栏应显示本章字数');
 assert(capturedHtml.includes('id="chapterWords"'), '状态栏应有字数元素');
 console.log('状态栏本章字数: 通过');
-
-// --- 底部导航按钮: 上一章 / 目录 / 下一章 ---
-assert(
-  capturedHtml.includes('id="navPrev"') &&
-    capturedHtml.includes('id="navCatalog"') &&
-    capturedHtml.includes('id="navNext"'),
-  '底部应有三个导航按钮'
-);
-assert(capturedHtml.includes('navPrev.addEventListener'), '上一章按钮应已接线');
-assert(capturedHtml.includes('navNext.addEventListener'), '下一章按钮应已接线');
-assert(
-  /navCatalog\.addEventListener[\s\S]{0,120}openCatalog\(\)/.test(capturedHtml),
-  '目录按钮应能开关目录面板'
-);
-assert(capturedHtml.includes('navPrev.disabled = els.catPrev.disabled'), '首末章应禁用相应按钮');
-assert(/\.statusbar \.nav-btn\s*\{/.test(capturedHtml), '导航按钮应使用主题样式');
-console.log('底部导航按钮(上一章/目录/下一章): 通过');
+console.log('底部导航按钮已移除(并入悬浮球): 通过');
 
 // --- 设置面板必须是固定悬浮窗(不随内容滚动) ---
 assert(

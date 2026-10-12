@@ -328,22 +328,25 @@ export class ReaderPanel {
   }
   #fabs:hover, #fabs.dragging, #fabs.awake { opacity: 1; }
   .fab {
-    width: 44px; height: 44px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
+    width: 58px;
+    padding: 9px 4px 7px;
+    border-radius: 12px;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
     background: var(--btn-bg); color: var(--btn-fg);
     border: 1px solid var(--chrome-border);
     box-shadow: 0 3px 12px rgba(0, 0, 0, .32);
     cursor: grab; user-select: none;
     touch-action: none;
-    padding: 0; font-size: 13px; font-weight: 600;
-    transition: transform .15s ease, background .15s ease;
+    transition: transform .15s ease, filter .15s ease;
   }
-  .fab:hover { transform: scale(1.07); background: var(--btn-hover); }
+  .fab:hover { transform: scale(1.05); filter: brightness(1.1); }
   .fab:active { cursor: grabbing; }
   .fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   #fabs.dragging .fab { transform: none; }
   .fab svg { width: 20px; height: 20px; pointer-events: none; }
-  .fab .fab-txt { pointer-events: none; letter-spacing: -.02em; }
+  .fab-label { font-size: clamp(10px, calc(var(--font-size) * 0.65), 13px); pointer-events: none; letter-spacing: .02em; }
+  /* 首末章时上一章/下一章置灰不可点 */
+  .fab.off { opacity: .35; pointer-events: none; }
 
   .progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .2s ease; }
 
@@ -535,29 +538,26 @@ export class ReaderPanel {
   .statusbar .progress-track { height: 3px; width: 100%; background: var(--chrome-border); }
   .statusbar .status-row { display: flex; gap: 16px; align-items: center; padding: 4px 14px; }
   .statusbar .status-row .spacer { flex: 1; }
-  .statusbar .nav-group { display: flex; align-items: center; gap: 8px; }
-  .statusbar .nav-btn {
-    font-family: inherit;
-    font-size: clamp(12px, calc(var(--font-size) * 0.82), 17px);
-    padding: 3px 12px; border-radius: 4px; cursor: pointer;
-    background: var(--input-bg); color: var(--input-fg);
-    border: 1px solid var(--input-border);
-    white-space: nowrap;
-  }
-  .statusbar .nav-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-  .statusbar .nav-btn:disabled { opacity: .4; cursor: default; }
 </style>
 </head>
 <body>
-<!-- 悬浮球: 目录 / 阅读设置 (可拖动) -->
+<!-- 悬浮球工具栏: 上一章 / 目录 / 下一章 / 字 (icon+文字, 可拖动) -->
 <div id="fabs">
-  <button id="fabCatalog" class="fab" type="button" title="目录" aria-label="目录">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-      <path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>
-    </svg>
+  <button id="fabPrev" class="fab" type="button" title="上一章 (Alt+←)" aria-label="上一章">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+    <span class="fab-label">上一章</span>
   </button>
-  <button id="fabSettings" class="fab" type="button" title="阅读设置" aria-label="阅读设置">
-    <span class="fab-txt">Aa</span>
+  <button id="fabCatalog" class="fab" type="button" title="目录" aria-label="目录">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
+    <span class="fab-label">目录</span>
+  </button>
+  <button id="fabNext" class="fab" type="button" title="下一章 (Alt+→)" aria-label="下一章">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+    <span class="fab-label">下一章</span>
+  </button>
+  <button id="fabSettings" class="fab" type="button" title="字体与主题设置" aria-label="字体设置">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><text x="2.5" y="17.5" font-size="15" font-weight="600" stroke="none" fill="currentColor">A</text><text x="13.5" y="17.5" font-size="10" stroke="none" fill="currentColor">A</text></svg>
+    <span class="fab-label">字</span>
   </button>
 </div>
 
@@ -625,12 +625,6 @@ export class ReaderPanel {
   <div class="status-row">
     <span id="bookInfo"></span>
     <span class="spacer"></span>
-    <span class="nav-group">
-      <button class="nav-btn" id="navPrev" type="button" title="上一章 (Alt+←)">‹ 上一章</button>
-      <button class="nav-btn" id="navCatalog" type="button" title="打开 / 收起目录">目录</button>
-      <button class="nav-btn" id="navNext" type="button" title="下一章 (Alt+→)">下一章 ›</button>
-    </span>
-    <span class="spacer"></span>
     <span id="chapterWords"></span>
     <span id="chapterInfo"></span>
   </div>
@@ -661,7 +655,7 @@ export class ReaderPanel {
     themeSwatches: $('themeSwatches'), reset: $('resetSettings'),
     content: $('content'), bookInfo: $('bookInfo'), chapterInfo: $('chapterInfo'),
     chapterWords: $('chapterWords'),
-    navPrev: $('navPrev'), navCatalog: $('navCatalog'), navNext: $('navNext'),
+    fabPrev: $('fabPrev'), fabNext: $('fabNext'),
     progressFill: $('progressFill'),
     statusbar: document.querySelector('.statusbar'),
   };
@@ -684,9 +678,13 @@ export class ReaderPanel {
     persistSettings({ fabLeft: -1, fabTop: -1 });
   }
 
-  /** 悬浮球动作: 目录 / 阅读设置 */
+  /** 悬浮球动作: 上一章 / 目录 / 下一章 / 字体设置 */
   function activateFab(id) {
-    if (id === 'fabCatalog') {
+    if (id === 'fabPrev') {
+      gotoChapter(state.chapterIndex - 1);
+    } else if (id === 'fabNext') {
+      gotoChapter(state.chapterIndex + 1);
+    } else if (id === 'fabCatalog') {
       if (catalogOpen()) { closeCatalog(); } else { openCatalog(); }
     } else if (id === 'fabSettings') {
       closeCatalog();
@@ -720,7 +718,7 @@ export class ReaderPanel {
     if (fabDragged) {
       return;
     }
-    var BALL_W = 44;
+    var BALL_W = 58;
     var GAP = 12; // 与正文列右缘保持的间距
     var vw = window.innerWidth;
     var cssW =
@@ -920,12 +918,7 @@ export class ReaderPanel {
     if (Date.now() - lastPointerActivate < 600) { return; }
     activateFab(btn.id);
   });
-  // 底部导航按钮
-  els.navPrev.addEventListener('click', function () { gotoChapter(state.chapterIndex - 1); });
-  els.navNext.addEventListener('click', function () { gotoChapter(state.chapterIndex + 1); });
-  els.navCatalog.addEventListener('click', function () {
-    if (catalogOpen()) { closeCatalog(); } else { openCatalog(); }
-  });
+  // 底部导航按钮已移除(改为悬浮球工具栏)
   els.catClose.addEventListener('click', closeCatalog);
   els.catReverse.addEventListener('click', function () {
     state.catReverse = !state.catReverse;
@@ -1066,8 +1059,9 @@ export class ReaderPanel {
     els.content.innerHTML = html || '<p class="empty-tip">(本章无内容)</p>';
     els.catPrev.disabled = payload.index <= 0;
     els.catNext.disabled = payload.index >= payload.totalChapters - 1;
-    els.navPrev.disabled = els.catPrev.disabled;
-    els.navNext.disabled = els.catNext.disabled;
+    // 悬浮球: 首末章置灰上一章/下一章
+    els.fabPrev.classList.toggle('off', payload.index <= 0);
+    els.fabNext.classList.toggle('off', payload.index >= payload.totalChapters - 1);
     updateProgress();
     updateCatalogCurrent(false);
     requestAnimationFrame(function () {
