@@ -1,0 +1,226 @@
+{
+  "name": "novel-reader",
+  "displayName": "小说阅读器",
+  "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面。支持字体大小、字体族、行距、主题配色等个性化设置，并自动保存阅读偏好与进度。",
+  "version": "1.0.2",
+  "publisher": "local",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "小说",
+    "阅读",
+    "novel",
+    "reader",
+    "txt",
+    "电子书"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onView:novelReaderChapters",
+    "onCommand:novelReader.openFile",
+    "onCommand:novelReader.continueReading",
+    "onCommand:novelReader.openChapter",
+    "onCommand:novelReader.refresh",
+    "onCommand:novelReader.openSettings",
+    "onCommand:novelReader.prevChapter",
+    "onCommand:novelReader.nextChapter"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "xiaoshuo-reader",
+          "title": "小说阅读",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "xiaoshuo-reader": [
+        {
+          "id": "novelReaderChapters",
+          "name": "章节目录",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "novelReader.openFile",
+        "title": "打开小说文件",
+        "icon": "$(add)"
+      },
+      {
+        "command": "novelReader.refresh",
+        "title": "刷新目录",
+        "icon": "$(refresh)",
+        "enablement": "novelReader.hasNovel"
+      },
+      {
+        "command": "novelReader.openSettings",
+        "title": "阅读设置",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "novelReader.continueReading",
+        "title": "继续阅读"
+      },
+      {
+        "command": "novelReader.openChapter",
+        "title": "阅读本章"
+      },
+      {
+        "command": "novelReader.prevChapter",
+        "title": "上一章",
+        "enablement": "novelReader.hasNovel"
+      },
+      {
+        "command": "novelReader.nextChapter",
+        "title": "下一章",
+        "enablement": "novelReader.hasNovel"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "novelReader.openFile",
+          "when": "view == novelReaderChapters",
+          "group": "navigation"
+        },
+        {
+          "command": "novelReader.refresh",
+          "when": "view == novelReaderChapters"
+        },
+        {
+          "command": "novelReader.openSettings",
+          "when": "view == novelReaderChapters",
+          "group": "navigation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "novelReader.openFile",
+          "title": "小说阅读器: 打开小说文件"
+        },
+        {
+          "command": "novelReader.continueReading",
+          "title": "小说阅读器: 继续阅读"
+        },
+        {
+          "command": "novelReader.openSettings",
+          "title": "小说阅读器: 阅读设置"
+        },
+        {
+          "command": "novelReader.refresh",
+          "when": "novelReader.hasNovel"
+        },
+        {
+          "command": "novelReader.prevChapter",
+          "when": "novelReader.hasNovel"
+        },
+        {
+          "command": "novelReader.nextChapter",
+          "when": "novelReader.hasNovel"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "novelReader.openFile",
+          "when": "resourceExtname == .txt",
+          "group": "navigation@10"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "小说阅读器",
+      "properties": {
+        "novelReader.fontSize": {
+          "type": "number",
+          "default": 16,
+          "minimum": 12,
+          "maximum": 32,
+          "description": "正文字号（像素）"
+        },
+        "novelReader.fontFamily": {
+          "type": "string",
+          "default": "system",
+          "enum": [
+            "system",
+            "songti",
+            "heiti",
+            "kaiti",
+            "fangsong",
+            "yahei"
+          ],
+          "enumDescriptions": [
+            "系统默认",
+            "宋体",
+            "黑体",
+            "楷体",
+            "仿宋",
+            "微软雅黑"
+          ],
+          "description": "正文字体族"
+        },
+        "novelReader.lineHeight": {
+          "type": "number",
+          "default": 1.8,
+          "minimum": 1.2,
+          "maximum": 2.8,
+          "description": "正文行距"
+        },
+        "novelReader.paragraphSpacing": {
+          "type": "number",
+          "default": 0.8,
+          "minimum": 0,
+          "maximum": 2,
+          "description": "段落间距（em）"
+        },
+        "novelReader.theme": {
+          "type": "string",
+          "default": "sepia",
+          "enum": [
+            "sepia",
+            "green",
+            "white",
+            "gray",
+            "dark",
+            "ink"
+          ],
+          "enumDescriptions": [
+            "米黄纸",
+            "护眼绿",
+            "纯净白",
+            "简约灰",
+            "暗夜",
+            "墨黑"
+          ],
+          "description": "阅读区主题配色"
+        },
+        "novelReader.contentWidth": {
+          "type": "number",
+          "default": 720,
+          "minimum": 480,
+          "maximum": 1200,
+          "description": "阅读区域最大宽度（像素）"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  }
+}
