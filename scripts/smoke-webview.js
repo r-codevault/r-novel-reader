@@ -202,6 +202,14 @@ assert(capturedHtml.includes("state.catReverse"), '应支持正序/倒序切换'
 assert(capturedHtml.includes("type: 'getChapter'"), '点击章节应跳转');
 assert(capturedHtml.includes('closeCatalog()'), '跳转后应关闭目录面板');
 assert(capturedHtml.includes('scrollIntoView'), '打开目录应定位到当前章');
+// 分卷标题只做展开/收起, 不得跳转或关闭面板(否则点箭头会误关整个面板)
+assert(capturedHtml.includes('class="cat-group-head" title="展开 / 收起本卷"'), '分卷标题应只负责展开收起');
+assert(
+  !capturedHtml.includes('gotoChapter(Number(head.dataset.i))'),
+  '分卷标题不应触发跳转/关闭面板'
+);
+// 目录字号应跟随阅读字号缩放
+assert(/\.cat-item \.cat-name\s*\{[^}]*var\(--font-size\)/.test(capturedHtml), '目录字号应随阅读字号自适应');
 console.log('目录面板(分卷/双列/高亮/跳转/倒序): 通过');
 
 // --- 进度条移到底部状态栏内 ---
