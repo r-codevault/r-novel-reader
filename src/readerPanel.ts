@@ -339,18 +339,39 @@ export class ReaderPanel {
   }
   #progressText { font-variant-numeric: tabular-nums; opacity: .85; white-space: nowrap; }
 
-  .progress-track { height: 3px; background: var(--chrome-border); position: sticky; top: 37px; z-index: 19; }
+  .progress-track { height: 3px; background: var(--chrome-border); position: sticky; top: var(--toolbar-h, 37px); z-index: 19; }
   .progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .2s ease; }
 
-  /* ---------- 设置面板 ---------- */
+  /* ---------- 设置面板(固定悬浮窗, 不随内容滚动) ---------- */
   #settingsPanel {
     display: none;
-    border-bottom: 1px solid var(--chrome-border);
-    background: var(--chrome-bg);
-    padding: 14px 18px 16px;
+    position: fixed;
+    top: var(--panel-top, 44px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(760px, calc(100vw - 32px));
+    max-height: calc(100vh - var(--panel-top, 44px) - 32px);
+    overflow-y: auto;
+    z-index: 40;
+    padding: 12px 18px 16px;
+    background: var(--vscode-editorWidget-background, var(--chrome-bg));
+    border: 1px solid var(--chrome-border);
+    border-radius: 8px;
+    box-shadow: 0 6px 24px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.3));
+    backdrop-filter: none;
   }
   #settingsPanel.open { display: block; }
-  #settingsPanel h3 { margin: 0 0 10px; font-size: 13px; font-weight: 600; }
+  .settings-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin: 0 0 10px;
+  }
+  .settings-head h3 { margin: 0; font-size: 13px; font-weight: 500; }
+  .settings-close {
+    border: none; background: none; cursor: pointer;
+    color: inherit; opacity: .7; font-size: 15px; line-height: 1;
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .settings-close:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, rgba(127,127,127,.2)); }
   .settings-grid {
     display: grid; grid-template-columns: 72px 1fr; gap: 10px 14px; align-items: center;
     max-width: 720px;
@@ -419,8 +440,11 @@ export class ReaderPanel {
 </header>
 <div class="progress-track"><div id="progressFill" class="progress-fill"></div></div>
 
-<section id="settingsPanel">
-  <h3>阅读设置</h3>
+<section id="settingsPanel" role="dialog" aria-label="阅读设置">
+  <div class="settings-head">
+    <h3>阅读设置</h3>
+    <button id="settingsClose" class="settings-close" title="关闭设置 (Esc)">✕</button>
+  </div>
   <div class="settings-grid">
     <label>字体大小</label>
     <div class="ctl-row">
@@ -477,7 +501,7 @@ export class ReaderPanel {
   var els = {
     prev: $('prevBtn'), next: $('nextBtn'), select: $('chapterSelect'),
     progressText: $('progressText'), progressFill: $('progressFill'),
-    settingsBtn: $('settingsBtn'), settingsPanel: $('settingsPanel'),
+    settingsBtn: $('settingsBtn'), settingsPanel: $('settingsPanel'), settingsClose: $('settingsClose'),
     fontMinus: $('fontMinus'), fontPlus: $('fontPlus'),
     fontSize: $('fontSize'), fontSizeVal: $('fontSizeVal'),
     fontFamily: $('fontFamily'),
@@ -485,8 +509,29 @@ export class ReaderPanel {
     paraSpacing: $('paraSpacing'), paraSpacingVal: $('paraSpacingVal'),
     contentWidth: $('contentWidth'), contentWidthVal: $('contentWidthVal'),
     themeSwatches: $('themeSwatches'), reset: $('resetSettings'),
-    content: $('content'), bookInfo: $('bookInfo'), chapterInfo: $('chapterInfo')
+    content: $('content'), bookInfo: $('bookInfo'), chapterInfo: $('chapterInfo'),
+    toolbar: document.querySelector('.toolbar'),
+    progressTrack: document.querySelector('.progress-track')
   };
+
+  /* ---------------- 设置面板: 固定悬浮定位与开关 ---------------- */
+  function syncPanelPosition() {
+    var toolbarH = els.toolbar ? els.toolbar.offsetHeight : 36;
+    var trackH = els.progressTrack ? els.progressTrack.offsetHeight : 3;
+    var root = document.documentElement;
+    root.style.setProperty('--toolbar-h', toolbarH + 'px');
+    root.style.setProperty('--panel-top', (toolbarH + trackH + 8) + 'px');
+  }
+  function openSettings() {
+    syncPanelPosition();
+    els.settingsPanel.classList.add('open');
+  }
+  function closeSettings() {
+    els.settingsPanel.classList.remove('open');
+  }
+  function settingsOpen() {
+    return els.settingsPanel.classList.contains('open');
+  }
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
@@ -635,10 +680,33 @@ export class ReaderPanel {
   els.prev.addEventListener('click', function () { gotoChapter(state.chapterIndex - 1); });
   els.next.addEventListener('click', function () { gotoChapter(state.chapterIndex + 1); });
   els.select.addEventListener('change', function () { gotoChapter(Number(this.value)); });
-  els.settingsBtn.addEventListener('click', function () {
-    els.settingsPanel.classList.toggle('open');
+  els.settingsBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (settingsOpen()) {
+      closeSettings();
+    } else {
+      openSettings();
+    }
   });
+  els.settingsClose.addEventListener('click', function (e) {
+    e.stopPropagation();
+    closeSettings();
+  });
+  // 点击面板外部关闭(用 mousedown: 拖动滑块时鼠标可能在面板外松开, 不应误关)
+  document.addEventListener('mousedown', function (e) {
+    if (!settingsOpen()) { return; }
+    if (els.settingsPanel.contains(e.target) || els.settingsBtn.contains(e.target)) { return; }
+    closeSettings();
+  });
+  window.addEventListener('resize', syncPanelPosition);
+  document.addEventListener('DOMContentLoaded', syncPanelPosition);
+  syncPanelPosition();
   document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && settingsOpen()) {
+      e.preventDefault();
+      closeSettings();
+      return;
+    }
     if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); gotoChapter(state.chapterIndex - 1); }
     if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); gotoChapter(state.chapterIndex + 1); }
   });
@@ -668,7 +736,7 @@ export class ReaderPanel {
           : p.totalWords + ' 字';
         els.bookInfo.textContent = p.bookTitle + (p.author ? ' · ' + p.author : '') +
           ' · 共 ' + p.totalChapters + ' 章 · 约 ' + words;
-        if (p.openSettings) { els.settingsPanel.classList.add('open'); }
+        if (p.openSettings) { openSettings(); }
         break;
       }
       case 'chapter':
@@ -678,8 +746,7 @@ export class ReaderPanel {
         applySettings(msg.payload);
         break;
       case 'openSettings':
-        els.settingsPanel.classList.add('open');
-        els.settingsPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        openSettings();
         break;
     }
   });

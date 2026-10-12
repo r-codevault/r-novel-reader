@@ -147,7 +147,7 @@ checkInlineScript(capturedHtml, '阅读面板');
 console.log('内嵌脚本语法: 通过');
 
 const panelIds = [
-  'chapterSelect', 'settingsPanel', 'themeSwatches', 'fontSize', 'fontFamily',
+  'chapterSelect', 'settingsPanel', 'settingsClose', 'themeSwatches', 'fontSize', 'fontFamily',
   'lineHeight', 'paraSpacing', 'contentWidth', 'progressFill', 'prevBtn',
   'nextBtn', 'settingsBtn', 'resetSettings', 'bookInfo', 'content',
 ];
@@ -155,6 +155,22 @@ for (const id of panelIds) {
   assert(capturedHtml.includes(`id="${id}"`), `阅读面板缺少元素 #${id}`);
 }
 console.log('关键 UI 元素: 通过 (' + panelIds.length + ' 个)');
+
+// --- 设置面板必须是固定悬浮窗(不随内容滚动) ---
+assert(
+  /#settingsPanel\s*\{[^}]*position:\s*fixed/.test(capturedHtml),
+  '设置面板必须是固定悬浮窗(position: fixed)'
+);
+assert(capturedHtml.includes('translateX(-50%)'), '悬浮窗应水平居中');
+assert(capturedHtml.includes('--panel-top'), '悬浮窗应定位在工具栏下方');
+assert(capturedHtml.includes('box-shadow'), '悬浮窗应有阴影以区分于正文');
+assert(capturedHtml.includes("e.key === 'Escape'"), '支持 Esc 关闭设置面板');
+assert(capturedHtml.includes("addEventListener('mousedown'"), '支持点击面板外关闭');
+assert(
+  !capturedHtml.includes("settingsPanel.scrollIntoView"),
+  '悬浮窗不应使用 scrollIntoView(会随内容滚动)'
+);
+console.log('设置面板悬浮窗: 通过');
 
 // --- 就绪后下发 init(含章内滚动位置) ---
 panelMessages = [];
