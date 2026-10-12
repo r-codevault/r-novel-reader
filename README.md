@@ -8,7 +8,7 @@
 | --- | --- |
 | 插件 ID | `local.novel-reader` |
 | 显示名称 | 小说阅读器 |
-| 当前版本 | 1.2.0 |
+| 当前版本 | 1.2.1 |
 | 要求 | VS Code 1.85.0+（实测 1.128.0），Node.js 18+（仅打包时需要） |
 | 开源协议 | MIT |
 
@@ -117,10 +117,10 @@ npm run compile
 
 # 3. 打包成 vsix
 npm run package
-# 生成 novel-reader-1.2.0.vsix
+# 生成 novel-reader-1.2.1.vsix
 
 # 4. 安装到 VS Code
-code --install-extension novel-reader-1.2.0.vsix
+code --install-extension novel-reader-1.2.1.vsix
 ```
 
 安装后**重启 VS Code**（或 `Ctrl+Shift+P` → `Developer: Reload Window`）。
@@ -183,7 +183,7 @@ npm run compile
 
 | 配置项 | 类型 | 默认值 | 可选范围 |
 | --- | --- | --- | --- |
-| `novelReader.libraryPath` | string | `""` | 书库目录绝对路径；留空 = 读取文件原路径 |
+| `novelReader.libraryPath` | string | `""` | 书库目录默认值；留空 = 读取文件原路径（侧边栏「设置」中选择的目录优先于此项） |
 | `novelReader.fontSize` | number | `16` | 12–32（像素） |
 | `novelReader.fontFamily` | string | `system` | `system` / `songti` / `heiti` / `kaiti` / `fangsong` / `yahei` |
 | `novelReader.lineHeight` | number | `1.8` | 1.2–2.8 |

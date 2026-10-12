@@ -2,7 +2,7 @@
   "name": "novel-reader",
   "displayName": "小说阅读器",
   "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面。支持我的书架、书库目录、字体大小/字体族/行距/主题配色等个性化设置，并自动延续上次阅读状态。",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -241,7 +241,7 @@
         "novelReader.libraryPath": {
           "type": "string",
           "default": "",
-          "description": "书库目录（绝对路径）。留空表示直接读取导入文件的原始路径；设置后，导入小说时会先把文件复制到该目录，并从副本读取（原文件可自行移动或删除）。"
+          "description": "书库目录（绝对路径）的默认值。留空表示直接读取导入文件的原始路径；在侧边栏「设置」中选择的目录保存于插件自身存储并优先于此项。设置后，导入小说时会先把文件复制到该目录，并从副本读取。"
         },
         "novelReader.fontSize": {
           "type": "number",

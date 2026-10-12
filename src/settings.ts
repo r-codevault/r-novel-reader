@@ -75,6 +75,8 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
 };
 
 const STORAGE_KEY = 'novelReader.settings';
+/** 书库目录(界面设置, 与 settings.json 的 novelReader.libraryPath 分离) */
+const LIBRARY_KEY = 'novelReader.libraryPath';
 const SETTING_KEYS: (keyof ReadingSettings)[] = [
     'fontSize',
     'fontFamily',
@@ -167,6 +169,26 @@ export class SettingsStore {
             return null;
         }
         return this.update(patch);
+    }
+
+    /**
+     * 书库目录(空 = 未设置, 直接读取文件原路径)。
+     * 优先级: 界面设置(globalState) > settings.json 的 novelReader.libraryPath。
+     * 用 globalState 落盘可以避开"配置未注册时 update() 被拒"的问题
+     * (更新扩展后仅重载窗口, 新增的配置项可能尚未注册)。
+     */
+    getLibraryPath(): string {
+        const stored = this.state.get<string | undefined>(LIBRARY_KEY);
+        if (typeof stored === 'string') {
+            return stored.trim();
+        }
+        const fromConfig = vscode.workspace.getConfiguration('novelReader').get<string>('libraryPath', '');
+        return (fromConfig || '').trim();
+    }
+
+    /** 保存书库目录(传空字符串表示恢复"读取原路径") */
+    async setLibraryPath(dir: string): Promise<void> {
+        await this.state.update(LIBRARY_KEY, (dir || '').trim());
     }
 }
 

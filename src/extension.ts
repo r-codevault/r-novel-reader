@@ -87,10 +87,9 @@ export function activate(context: vscode.ExtensionContext): void {
         chapterView.setShelf(shelfItems());
     }
 
-    /** 书库目录(空 = 未设置, 直接读取原路径) */
+    /** 书库目录(空 = 未设置, 直接读取原路径); 由 SettingsStore 统一读写 */
     function getLibraryPath(): string {
-        const raw = vscode.workspace.getConfiguration('novelReader').get<string>('libraryPath', '');
-        return (raw || '').trim();
+        return store.getLibraryPath();
     }
 
     function syncLibraryToView(): void {
@@ -355,9 +354,14 @@ export function activate(context: vscode.ExtensionContext): void {
                 return;
             }
             const dir = picked[0].fsPath;
-            await vscode.workspace
-                .getConfiguration('novelReader')
-                .update('libraryPath', dir, vscode.ConfigurationTarget.Global);
+            try {
+                await store.setLibraryPath(dir);
+            } catch (err) {
+                vscode.window.showErrorMessage(
+                    `保存书库目录失败：${err instanceof Error ? err.message : String(err)}`
+                );
+                return;
+            }
             syncLibraryToView();
             chapterView.setMode('settings');
             void vscode.commands.executeCommand('setContext', 'novelReader.viewMode', 'settings');
@@ -366,9 +370,14 @@ export function activate(context: vscode.ExtensionContext): void {
 
         // 取消书库目录(恢复读取原路径)
         vscode.commands.registerCommand('novelReader.clearLibraryPath', async () => {
-            await vscode.workspace
-                .getConfiguration('novelReader')
-                .update('libraryPath', '', vscode.ConfigurationTarget.Global);
+            try {
+                await store.setLibraryPath('');
+            } catch (err) {
+                vscode.window.showErrorMessage(
+                    `保存设置失败：${err instanceof Error ? err.message : String(err)}`
+                );
+                return;
+            }
             syncLibraryToView();
             chapterView.setMode('settings');
             void vscode.commands.executeCommand('setContext', 'novelReader.viewMode', 'settings');
