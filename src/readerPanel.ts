@@ -287,21 +287,23 @@ export class ReaderPanel {
   :root {
     --bg: ${themeById(settings.theme).bg};
     --fg: ${themeById(settings.theme).fg};
+    --page-bg: ${themeById(settings.theme).pageBg};
+    --chrome-bg: ${themeById(settings.theme).chromeBg};
+    --chrome-fg: ${themeById(settings.theme).fg};
+    --chrome-border: ${themeById(settings.theme).chromeBorder};
+    --accent: ${themeById(settings.theme).accent};
+    --accent-fg: ${themeById(settings.theme).accentFg};
+    --btn-bg: ${themeById(settings.theme).accent};
+    --btn-fg: ${themeById(settings.theme).accentFg};
+    --btn-hover: ${themeById(settings.theme).accent};
+    --input-bg: ${themeById(settings.theme).bg};
+    --input-fg: ${themeById(settings.theme).fg};
+    --input-border: ${themeById(settings.theme).chromeBorder};
     --font-size: ${settings.fontSize}px;
     --font-family: ${fontStackById(settings.fontFamily)};
     --line-height: ${settings.lineHeight};
     --para-spacing: ${settings.paragraphSpacing}em;
     --content-width: ${settings.contentWidth}px;
-    --chrome-bg: var(--vscode-editorWidget-background, #f8f8f8);
-    --chrome-fg: var(--vscode-editorWidget-foreground, #333333);
-    --chrome-border: var(--vscode-widget-border, #d4d4d4);
-    --accent: var(--vscode-focusBorder, #0060c0);
-    --btn-bg: var(--vscode-button-background, #0e639c);
-    --btn-fg: var(--vscode-button-foreground, #ffffff);
-    --btn-hover: var(--vscode-button-hoverBackground, #1177bb);
-    --input-bg: var(--vscode-input-background, #ffffff);
-    --input-fg: var(--vscode-input-foreground, #333333);
-    --input-border: var(--vscode-input-border, #c4c4c4);
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -348,7 +350,7 @@ export class ReaderPanel {
     max-height: calc(100vh - 76px);
     flex-direction: column;
     z-index: 45;
-    background: var(--vscode-editorWidget-background, var(--chrome-bg));
+    background: var(--chrome-bg);
     color: var(--chrome-fg);
     border: 1px solid var(--chrome-border);
     border-radius: 8px;
@@ -437,7 +439,7 @@ export class ReaderPanel {
     overflow-y: auto;
     z-index: 45;
     padding: 12px 18px 16px;
-    background: var(--vscode-editorWidget-background, var(--chrome-bg));
+    background: var(--chrome-bg);
     border: 1px solid var(--chrome-border);
     border-radius: 8px;
     box-shadow: 0 6px 24px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.3));
@@ -477,15 +479,21 @@ export class ReaderPanel {
   .swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
   #resetSettings { justify-self: start; grid-column: 2; }
 
-  /* ---------- 阅读区 ---------- */
+  /* ---------- 阅读区(留白底色 + 正文"纸面") ---------- */
   #reader {
-    background: var(--bg); color: var(--fg);
-    min-height: calc(100vh - 80px);
-    padding: 28px 20px 60px;
+    background: var(--page-bg); color: var(--fg);
+    min-height: 100vh;
+    padding: 24px 20px 70px;
   }
   #content {
     max-width: var(--content-width);
     margin: 0 auto;
+    background: var(--bg); color: var(--fg);
+    border: 1px solid var(--chrome-border);
+    border-radius: 6px;
+    box-shadow: 0 2px 16px rgba(0, 0, 0, .14);
+    padding: 26px 34px 46px;
+    min-height: calc(100vh - 120px);
     font-size: var(--font-size);
     font-family: var(--font-family);
     line-height: var(--line-height);
@@ -938,6 +946,18 @@ export class ReaderPanel {
     var root = document.documentElement;
     root.style.setProperty('--bg', t.bg);
     root.style.setProperty('--fg', t.fg);
+    root.style.setProperty('--page-bg', t.pageBg);
+    root.style.setProperty('--chrome-bg', t.chromeBg);
+    root.style.setProperty('--chrome-fg', t.fg);
+    root.style.setProperty('--chrome-border', t.chromeBorder);
+    root.style.setProperty('--accent', t.accent);
+    root.style.setProperty('--accent-fg', t.accentFg);
+    root.style.setProperty('--btn-bg', t.accent);
+    root.style.setProperty('--btn-fg', t.accentFg);
+    root.style.setProperty('--btn-hover', t.accent);
+    root.style.setProperty('--input-bg', t.bg);
+    root.style.setProperty('--input-fg', t.fg);
+    root.style.setProperty('--input-border', t.chromeBorder);
     root.style.setProperty('--font-size', s.fontSize + 'px');
     root.style.setProperty('--font-family', FONT_STACKS[s.fontFamily] || FONT_STACKS.system);
     root.style.setProperty('--line-height', String(s.lineHeight));

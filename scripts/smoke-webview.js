@@ -255,6 +255,28 @@ assert(capturedHtml.includes('id="chapterInfo"'), '底部应显示章节位置')
 assert(!capturedHtml.includes('id="progressText"'), '不应再有顶部章节计数');
 console.log('章节计数仅在底部: 通过');
 
+// --- 主题切换: 留白/纸面/面板/悬浮球 全部跟随主题 ---
+assert(/#reader\s*\{[^}]*background:\s*var\(--page-bg\)/.test(capturedHtml), '留白区域应使用主题留白色');
+assert(
+  /#content\s*\{[^}]*background:\s*var\(--bg\)/.test(capturedHtml),
+  '正文"纸面"应使用主题纸面色(与留白区分)'
+);
+assert(capturedHtml.includes('--page-bg:'), '主题应提供留白底色');
+assert(!capturedHtml.includes('--chrome-bg: var(--vscode-editorWidget'), '面板底色应跟随阅读主题而非 VS Code');
+assert(
+  /background:\s*var\(--chrome-bg\)/.test(capturedHtml),
+  '状态栏/面板应使用主题面板底色'
+);
+assert(
+  /--btn-bg:\s*#[0-9a-fA-F]{3,8}/.test(capturedHtml),
+  '悬浮球应使用主题主色(不再是 VS Code 按钮蓝)'
+);
+assert(
+  /--input-bg:\s*#[0-9a-fA-F]{3,8}/.test(capturedHtml),
+  '输入控件应跟随主题纸面色'
+);
+console.log('主题(留白/纸面/面板/悬浮球): 通过');
+
 // --- 设置面板必须是固定悬浮窗(不随内容滚动) ---
 assert(
   /#settingsPanel\s*\{[^}]*position:\s*fixed/.test(capturedHtml),

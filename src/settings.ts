@@ -34,6 +34,16 @@ export interface ThemeDef {
     bg: string;
     /** 正文文字色 */
     fg: string;
+    /** 留白区域底色(正文"纸面"四周, 与 bg 区分出层次) */
+    pageBg: string;
+    /** 面板/状态栏底色(设置面板、目录面板、悬浮球等) */
+    chromeBg: string;
+    /** 面板/状态栏边框色 */
+    chromeBorder: string;
+    /** 主题主色(悬浮球、进度条、当前章高亮) */
+    accent: string;
+    /** 主色上的文字色 */
+    accentFg: string;
 }
 
 export interface FontDef {
@@ -43,12 +53,18 @@ export interface FontDef {
 }
 
 export const THEMES: ThemeDef[] = [
-    { id: 'sepia', name: '米黄纸', bg: '#f5ecd7', fg: '#4b3f2a' },
-    { id: 'green', name: '护眼绿', bg: '#c7edcc', fg: '#274b27' },
-    { id: 'white', name: '纯净白', bg: '#ffffff', fg: '#333333' },
-    { id: 'gray', name: '简约灰', bg: '#e4e2dc', fg: '#3c3a36' },
-    { id: 'dark', name: '暗夜', bg: '#232323', fg: '#bababa' },
-    { id: 'ink', name: '墨黑', bg: '#000000', fg: '#9e9e9e' },
+    // 米黄纸: 暖米色纸面 + 更深的米色留白, 赭色主色
+    { id: 'sepia', name: '米黄纸', bg: '#f5ecd7', fg: '#4b3f2a', pageBg: '#e6d5ae', chromeBg: '#efe3c4', chromeBorder: '#d6c395', accent: '#a3652a', accentFg: '#fdf6e3' },
+    // 护眼绿: 淡绿纸面 + 深一档的绿留白
+    { id: 'green', name: '护眼绿', bg: '#c7edcc', fg: '#274b27', pageBg: '#a5d2ac', chromeBg: '#b8e2bf', chromeBorder: '#8cc094', accent: '#2e7d43', accentFg: '#f0fff2' },
+    // 纯净白: 白纸面 + 浅灰蓝留白
+    { id: 'white', name: '纯净白', bg: '#ffffff', fg: '#333333', pageBg: '#e8ecf1', chromeBg: '#f2f5f8', chromeBorder: '#d3dae2', accent: '#3567c4', accentFg: '#ffffff' },
+    // 简约灰: 灰纸面 + 更深的暖灰留白
+    { id: 'gray', name: '简约灰', bg: '#e4e2dc', fg: '#3c3a36', pageBg: '#c9c6be', chromeBg: '#d8d5ce', chromeBorder: '#b5b1a8', accent: '#5d594f', accentFg: '#f5f3ee' },
+    // 暗夜: 深灰纸面 + 近黑留白, 暖金主色
+    { id: 'dark', name: '暗夜', bg: '#232323', fg: '#bababa', pageBg: '#141414', chromeBg: '#1c1c1c', chromeBorder: '#333333', accent: '#c9963f', accentFg: '#191919' },
+    // 墨黑: 纯黑留白 + 近黑纸面
+    { id: 'ink', name: '墨黑', bg: '#0d0d0d', fg: '#9e9e9e', pageBg: '#000000', chromeBg: '#060606', chromeBorder: '#262626', accent: '#8a8a8a', accentFg: '#0d0d0d' },
 ];
 
 export const FONTS: FontDef[] = [
