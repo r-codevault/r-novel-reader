@@ -143,36 +143,55 @@ ReaderPanel.createOrShow(novel, 2, 0.5, store);
 console.log('[阅读面板]');
 console.log('HTML 长度:', capturedHtml.length);
 assert(capturedHtml.includes('Content-Security-Policy'), '应包含 CSP');
-assert(!capturedHtml.includes('undefined') && !capturedHtml.includes('NaN'), '模板中不应有 undefined/NaN');
+// 只检查 HTML/CSS 部分(脚本里合法使用的 isNaN 等不应误报)
+const htmlPart = capturedHtml.split('<script')[0];
+assert(!htmlPart.includes('undefined') && !htmlPart.includes('NaN'), '模板中不应有 undefined/NaN');
 checkInlineScript(capturedHtml, '阅读面板');
 console.log('内嵌脚本语法: 通过');
 
 const panelIds = [
-  'chapterSelect', 'settingsPanel', 'settingsClose', 'themeSwatches', 'fontSize', 'fontFamily',
-  'lineHeight', 'paraSpacing', 'contentWidth', 'progressFill', 'prevBtn',
-  'nextBtn', 'settingsBtn', 'resetSettings', 'bookInfo', 'content',
-  'toolbarToggle', 'fontSizeText', 'chapterInfo', 'floatBall',
+  'settingsPanel', 'settingsClose', 'themeSwatches', 'fontSize', 'fontFamily',
+  'lineHeight', 'paraSpacing', 'contentWidth', 'progressFill', 'content',
+  'bookInfo', 'chapterInfo',
+  'fabs', 'fabCatalog', 'fabSettings',
+  'catalogPanel', 'catSub', 'catBody', 'catClose', 'catReverse', 'catPrev', 'catNext', 'catPos',
 ];
 for (const id of panelIds) {
   assert(capturedHtml.includes(`id="${id}"`), `阅读面板缺少元素 #${id}`);
 }
 console.log('关键 UI 元素: 通过 (' + panelIds.length + ' 个)');
 
-// --- 工具栏可收起 + 悬浮球 ---
-assert(
-  /body\.toolbar-collapsed \.toolbar\s*\{\s*display:\s*none;?\s*\}/.test(capturedHtml),
-  '收起状态应隐藏工具栏'
-);
-assert(capturedHtml.includes('class="tbtn" title="收起工具栏"'), '工具栏应有收起按钮');
-assert(capturedHtml.includes('id="floatBall"'), '收起后应有悬浮球');
-assert(
-  /body\.toolbar-collapsed #floatBall\s*\{\s*display:\s*flex/.test(capturedHtml),
-  '悬浮球应仅在收起时显示'
-);
-assert(capturedHtml.includes('--statusbar-h'), '悬浮球应避开底部状态栏');
-assert(capturedHtml.includes('setToolbarCollapsed(false, true)'), '点击悬浮球应展开工具栏');
-assert(capturedHtml.includes('toolbarCollapsed:'), '收起状态应可持久化');
-console.log('工具栏可收起(+悬浮球): 通过');
+// --- 顶部工具栏已移除 ---
+for (const gone of [
+  'id="prevBtn"', 'id="nextBtn"', 'id="chapterSelect"', 'id="toolbarToggle"',
+  'id="fontSizeText"', 'class="toolbar"', 'id="floatBall"', 'id="settingsBtn"',
+]) {
+  assert(!capturedHtml.includes(gone), `工具栏元素应已移除: ${gone}`);
+}
+console.log('顶部工具栏已移除: 通过');
+
+// --- 两个悬浮球: 目录 / Aa设置 (可拖动 + 闲置淡化) ---
+assert(/\.fab\s*\{[^}]*border-radius:\s*50%/.test(capturedHtml), '悬浮球应为圆形');
+assert(capturedHtml.includes('fabCatalog') && capturedHtml.includes('fabSettings'), '应有目录与设置两个球');
+assert(capturedHtml.includes("title=\"目录\""), '目录球应有提示');
+assert(capturedHtml.includes('pointerdown'), '悬浮球应支持拖动');
+assert(capturedHtml.includes('fabLeft'), '拖动后的位置应可持久化');
+assert(capturedHtml.includes('#fabs.awake'), '闲置后应淡化以免遮挡正文');
+assert(capturedHtml.includes('setPointerCapture'), '拖动应捕获指针');
+console.log('悬浮球(目录/Aa设置, 可拖动+淡化): 通过');
+
+// --- 目录面板(参考起点中文网) ---
+assert(capturedHtml.includes('id="catalogPanel"'), '应有目录面板');
+assert(/\.cat-items\s*\{[^}]*grid-template-columns:\s*repeat\(2/.test(capturedHtml), '目录应为双列展示');
+assert(capturedHtml.includes('cat-group-head'), '目录应有分卷(层级)结构');
+assert(capturedHtml.includes('cat-group-count'), '分卷应显示章节数');
+assert(capturedHtml.includes('.cat-item.cur'), '当前章节应高亮');
+assert(capturedHtml.includes('chapterParts'), '目录应拆分章节序号与标题');
+assert(capturedHtml.includes("state.catReverse"), '应支持正序/倒序切换');
+assert(capturedHtml.includes("type: 'getChapter'"), '点击章节应跳转');
+assert(capturedHtml.includes('closeCatalog()'), '跳转后应关闭目录面板');
+assert(capturedHtml.includes('scrollIntoView'), '打开目录应定位到当前章');
+console.log('目录面板(分卷/双列/高亮/跳转/倒序): 通过');
 
 // --- 进度条移到底部状态栏内 ---
 assert(
@@ -186,11 +205,10 @@ assert(
 assert(capturedHtml.includes('.statusbar .progress-track'), '状态栏内应有进度条样式');
 console.log('进度条移到底部: 通过');
 
-// --- 顶部章节计数改为字号显示 ---
-assert(!capturedHtml.includes('id="progressText"'), '顶部章节计数应移除(底部已有)');
-assert(capturedHtml.includes('字号 16px'), '顶部应显示当前字号');
-assert(capturedHtml.includes("'字号 ' + s.fontSize + 'px'"), '字号显示应随设置更新');
-console.log('顶部改为字号显示: 通过');
+// --- 章节计数只在底部状态栏(顶部工具栏已移除) ---
+assert(capturedHtml.includes('id="chapterInfo"'), '底部应显示章节位置');
+assert(!capturedHtml.includes('id="progressText"'), '不应再有顶部章节计数');
+console.log('章节计数仅在底部: 通过');
 
 // --- 设置面板必须是固定悬浮窗(不随内容滚动) ---
 assert(
@@ -198,15 +216,15 @@ assert(
   '设置面板必须是固定悬浮窗(position: fixed)'
 );
 assert(capturedHtml.includes('translateX(-50%)'), '悬浮窗应水平居中');
-assert(capturedHtml.includes('--panel-top'), '悬浮窗应定位在工具栏下方');
+assert(capturedHtml.includes('#settingsPanel') && capturedHtml.includes('top: 12px'), '面板应固定在顶部');
 assert(capturedHtml.includes('box-shadow'), '悬浮窗应有阴影以区分于正文');
-assert(capturedHtml.includes("e.key === 'Escape'"), '支持 Esc 关闭设置面板');
+assert(capturedHtml.includes("e.key === 'Escape'"), '支持 Esc 关闭面板');
 assert(capturedHtml.includes("addEventListener('mousedown'"), '支持点击面板外关闭');
 assert(
   !capturedHtml.includes("settingsPanel.scrollIntoView"),
   '悬浮窗不应使用 scrollIntoView(会随内容滚动)'
 );
-console.log('设置面板悬浮窗: 通过');
+console.log('设置面板悬浮窗(逻辑未改动): 通过');
 
 // --- 就绪后下发 init(含章内滚动位置) ---
 panelMessages = [];

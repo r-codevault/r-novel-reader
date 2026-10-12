@@ -22,8 +22,9 @@ export interface ReadingSettings {
     theme: string;
     /** 阅读区最大宽度(px) */
     contentWidth: number;
-    /** 阅读页顶部工具栏是否收起 */
-    toolbarCollapsed: boolean;
+    /** 悬浮球位置(拖动后记录, 未拖动则不设置) */
+    fabLeft?: number;
+    fabTop?: number;
 }
 
 export interface ThemeDef {
@@ -74,7 +75,6 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
     paragraphSpacing: 0.8,
     theme: 'sepia',
     contentWidth: 720,
-    toolbarCollapsed: false,
 };
 
 const STORAGE_KEY = 'novelReader.settings';
@@ -111,7 +111,6 @@ function configDefaults(): ReadingSettings {
         ),
         theme: cfg.get<string>('theme', DEFAULT_SETTINGS.theme),
         contentWidth: clamp(cfg.get<number>('contentWidth', DEFAULT_SETTINGS.contentWidth), 480, 1200, DEFAULT_SETTINGS.contentWidth),
-        toolbarCollapsed: false,
     };
 }
 
@@ -135,9 +134,8 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
     if (typeof s.contentWidth === 'number') {
         out.contentWidth = clamp(s.contentWidth, 480, 1200, DEFAULT_SETTINGS.contentWidth);
     }
-    if (typeof s.toolbarCollapsed === 'boolean') {
-        out.toolbarCollapsed = s.toolbarCollapsed;
-    }
+    if (typeof s.fabLeft === 'number' && s.fabLeft >= 0) { out.fabLeft = Math.round(s.fabLeft); }
+    if (typeof s.fabTop === 'number' && s.fabTop >= 0) { out.fabTop = Math.round(s.fabTop); }
     return out;
 }
 

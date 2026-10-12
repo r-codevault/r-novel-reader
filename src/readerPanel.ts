@@ -311,67 +311,118 @@ export class ReaderPanel {
     color: var(--chrome-fg);
   }
 
-  /* ---------- 工具栏(可收起) ---------- */
-  .toolbar {
-    position: sticky; top: 0; z-index: 20;
-    display: flex; align-items: center; gap: 6px;
-    padding: 6px 10px;
-    background: var(--chrome-bg);
-    border-bottom: 1px solid var(--chrome-border);
-    font-size: 13px;
+  /* ---------- 悬浮球(目录 / 阅读设置), 可拖动 ---------- */
+  #fabs {
+    position: fixed; right: 16px; top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 10px;
+    z-index: 40;
+    opacity: .5; transition: opacity .25s ease;
   }
-  body.toolbar-collapsed .toolbar { display: none; }
-  .toolbar .spacer { flex: 1; }
-  .tbtn {
+  #fabs:hover, #fabs.dragging, #fabs.awake { opacity: 1; }
+  .fab {
+    width: 44px; height: 44px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--btn-bg); color: var(--btn-fg);
+    border: 1px solid var(--chrome-border);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, .32);
+    cursor: grab; user-select: none;
+    padding: 0; font-size: 13px; font-weight: 600;
+    transition: transform .15s ease, background .15s ease;
+  }
+  .fab:hover { transform: scale(1.07); background: var(--btn-hover); }
+  .fab:active { cursor: grabbing; }
+  #fabs.dragging .fab { transform: none; }
+  .fab svg { width: 20px; height: 20px; pointer-events: none; }
+  .fab .fab-txt { pointer-events: none; letter-spacing: -.02em; }
+
+  .progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .2s ease; }
+
+  /* ---------- 目录面板(参考起点中文网目录) ---------- */
+  #catalogPanel {
+    display: none;
+    position: fixed;
+    top: 12px; left: 50%; transform: translateX(-50%);
+    width: min(900px, calc(100vw - 32px));
+    max-height: calc(100vh - 76px);
+    flex-direction: column;
+    z-index: 45;
+    background: var(--vscode-editorWidget-background, var(--chrome-bg));
+    color: var(--chrome-fg);
+    border: 1px solid var(--chrome-border);
+    border-radius: 8px;
+    box-shadow: 0 8px 28px var(--vscode-widget-shadow, rgba(0, 0, 0, .35));
+    overflow: hidden;
+  }
+  #catalogPanel.open { display: flex; }
+  .cat-head {
+    flex: none;
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 12px 16px 10px;
+    border-bottom: 1px solid var(--chrome-border);
+  }
+  .cat-title { font-size: 15px; font-weight: 600; }
+  .cat-sub { font-size: 12px; opacity: .6; }
+  .cat-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .cat-btn {
     border: 1px solid var(--input-border);
     background: var(--input-bg); color: var(--chrome-fg);
     border-radius: 4px; padding: 3px 10px; cursor: pointer;
-    font-size: 13px; line-height: 1.4; white-space: nowrap;
+    font-size: 12px; font-family: inherit; line-height: 1.5; white-space: nowrap;
   }
-  .tbtn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-  .tbtn:disabled { opacity: .45; cursor: default; }
-  .tbtn.primary { background: var(--btn-bg); color: var(--btn-fg); border-color: transparent; }
-  .tbtn.primary:hover:not(:disabled) { background: var(--btn-hover); color: var(--btn-fg); }
-  .tbtn.ghost {
-    border-color: transparent; background: transparent;
-    opacity: .85; font-variant-numeric: tabular-nums; padding: 3px 6px;
+  .cat-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .cat-btn.on { border-color: var(--accent); color: var(--accent); }
+  .cat-close {
+    border: none; background: none; cursor: pointer; color: inherit;
+    opacity: .65; font-size: 15px; line-height: 1; padding: 2px 6px; border-radius: 4px;
   }
-  .tbtn.ghost:hover:not(:disabled) { background: var(--input-bg); border-color: var(--input-border); }
-  #chapterSelect {
-    max-width: 46vw; min-width: 180px;
-    background: var(--input-bg); color: var(--input-fg);
-    border: 1px solid var(--input-border); border-radius: 4px;
-    padding: 3px 6px; font-size: 13px;
+  .cat-close:hover { opacity: 1; background: var(--input-bg); }
+  .cat-body { flex: 1 1 auto; overflow-y: auto; padding: 4px 0 10px; }
+  .cat-group { border-bottom: 1px solid var(--chrome-border); }
+  .cat-group:last-child { border-bottom: none; }
+  .cat-group-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 16px; cursor: pointer; user-select: none;
+    background: var(--input-bg);
   }
-
-  /* 收起后右下角的"悬浮球": 点击展开工具栏 */
-  #floatBall {
-    display: none;
-    position: fixed; right: 18px; bottom: calc(var(--statusbar-h, 30px) + 14px);
-    width: 44px; height: 44px; border-radius: 50%;
-    align-items: center; justify-content: center;
-    background: var(--btn-bg); color: var(--btn-fg);
-    border: 1px solid var(--chrome-border);
-    box-shadow: 0 3px 12px rgba(0, 0, 0, .35);
-    cursor: pointer; z-index: 40;
-    opacity: .65; transition: opacity .15s ease, transform .15s ease;
+  .cat-group-head:hover { color: var(--accent); }
+  .cat-group-name { font-size: 13px; font-weight: 600; }
+  .cat-group-count { font-size: 12px; opacity: .55; }
+  .cat-group-toggle { margin-left: auto; opacity: .6; font-size: 12px; }
+  .cat-group.collapsed .cat-group-toggle { transform: rotate(180deg); }
+  .cat-group.collapsed .cat-items { display: none; }
+  .cat-items {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2px 14px; padding: 8px 16px 12px;
   }
-  body.toolbar-collapsed #floatBall { display: flex; }
-  #floatBall:hover { opacity: 1; transform: scale(1.06); }
-  #floatBall:active { transform: scale(0.97); }
-  #floatBall svg { width: 20px; height: 20px; }
-
-  .progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .2s ease; }
+  @media (max-width: 720px) { .cat-items { grid-template-columns: 1fr; } }
+  .cat-item {
+    display: flex; align-items: baseline; gap: 6px;
+    padding: 5px 8px; border-radius: 4px; cursor: pointer;
+    white-space: nowrap; overflow: hidden;
+  }
+  .cat-item:hover { background: var(--input-bg); }
+  .cat-item .cat-no { font-size: 12px; opacity: .55; flex: none; }
+  .cat-item .cat-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+  .cat-item.cur { background: var(--input-bg); }
+  .cat-item.cur .cat-no { color: var(--accent); opacity: 1; font-weight: 600; }
+  .cat-item.cur .cat-name { color: var(--accent); font-weight: 600; }
+  .cat-foot {
+    flex: none;
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 16px;
+    border-top: 1px solid var(--chrome-border);
+  }
+  .cat-foot .cat-pos { margin-left: auto; font-size: 12px; opacity: .6; font-variant-numeric: tabular-nums; }
 
   /* ---------- 设置面板(固定悬浮窗, 不随内容滚动) ---------- */
   #settingsPanel {
     display: none;
     position: fixed;
-    top: var(--panel-top, 44px);
+    top: 12px;
     left: 50%;
     transform: translateX(-50%);
     width: min(760px, calc(100vw - 32px));
-    max-height: calc(100vh - var(--panel-top, 44px) - 32px);
+    max-height: calc(100vh - 76px);
     overflow-y: auto;
     z-index: 45;
     padding: 12px 18px 16px;
@@ -452,17 +503,35 @@ export class ReaderPanel {
 </style>
 </head>
 <body>
-<header class="toolbar">
-  <button id="prevBtn" class="tbtn" title="上一章 (Alt+←)">‹ 上一章</button>
-  <select id="chapterSelect" title="章节目录"></select>
-  <button id="nextBtn" class="tbtn" title="下一章 (Alt+→)">下一章 ›</button>
-  <span class="spacer"></span>
-  <button id="fontSizeText" class="tbtn ghost" title="当前字号，点击调整">字号 16px</button>
-  <button id="fontMinus" class="tbtn" title="减小字号">A-</button>
-  <button id="fontPlus" class="tbtn" title="增大字号">A+</button>
-  <button id="settingsBtn" class="tbtn primary" title="阅读设置">Aa 设置</button>
-  <button id="toolbarToggle" class="tbtn" title="收起工具栏">⌃</button>
-</header>
+<!-- 悬浮球: 目录 / 阅读设置 (可拖动) -->
+<div id="fabs">
+  <button id="fabCatalog" class="fab" type="button" title="目录" aria-label="目录">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+      <path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>
+    </svg>
+  </button>
+  <button id="fabSettings" class="fab" type="button" title="阅读设置" aria-label="阅读设置">
+    <span class="fab-txt">Aa</span>
+  </button>
+</div>
+
+<!-- 目录面板: 参考起点中文网目录(分卷 + 双列 + 当前章高亮) -->
+<section id="catalogPanel" role="dialog" aria-label="目录">
+  <div class="cat-head">
+    <span class="cat-title">目录</span>
+    <span class="cat-sub" id="catSub"></span>
+    <span class="cat-tools">
+      <button class="cat-btn" id="catReverse" type="button" title="切换正序 / 倒序">倒序</button>
+      <button class="cat-close" id="catClose" type="button" title="关闭 (Esc)">✕</button>
+    </span>
+  </div>
+  <div class="cat-body" id="catBody"></div>
+  <div class="cat-foot">
+    <button class="cat-btn" id="catPrev" type="button" title="上一章 (Alt+←)">‹ 上一章</button>
+    <button class="cat-btn" id="catNext" type="button" title="下一章 (Alt+→)">下一章 ›</button>
+    <span class="cat-pos" id="catPos"></span>
+  </div>
+</section>
 
 <section id="settingsPanel" role="dialog" aria-label="阅读设置">
   <div class="settings-head">
@@ -514,13 +583,6 @@ export class ReaderPanel {
   </div>
 </footer>
 
-<!-- 工具栏收起后显示的悬浮球 -->
-<button id="floatBall" type="button" title="展开工具栏" aria-label="展开工具栏">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-    <path d="M4 7h16M4 12h16M4 17h16"/>
-  </svg>
-</button>
-
 <script nonce="${nonce}">
 (function () {
   'use strict';
@@ -529,16 +591,15 @@ export class ReaderPanel {
   var THEMES = ${themes};
   var DEFAULT_SETTINGS = ${defaults};
 
-  var state = { novel: null, settings: DEFAULT_SETTINGS, chapterIndex: 0 };
+  var state = { novel: null, settings: DEFAULT_SETTINGS, chapterIndex: 0, chapters: [], catReverse: false, catCollapsed: [] };
 
   function $(id) { return document.getElementById(id); }
   var els = {
-    prev: $('prevBtn'), next: $('nextBtn'), select: $('chapterSelect'),
-    progressFill: $('progressFill'), fontSizeText: $('fontSizeText'),
-    toolbarToggle: $('toolbarToggle'), floatBall: $('floatBall'),
-    statusbar: document.querySelector('.statusbar'),
-    settingsBtn: $('settingsBtn'), settingsPanel: $('settingsPanel'), settingsClose: $('settingsClose'),
-    fontMinus: $('fontMinus'), fontPlus: $('fontPlus'),
+    fabs: $('fabs'), fabCatalog: $('fabCatalog'), fabSettings: $('fabSettings'),
+    catalogPanel: $('catalogPanel'), catBody: $('catBody'), catSub: $('catSub'),
+    catClose: $('catClose'), catReverse: $('catReverse'),
+    catPrev: $('catPrev'), catNext: $('catNext'), catPos: $('catPos'),
+    settingsPanel: $('settingsPanel'), settingsClose: $('settingsClose'),
     fontSize: $('fontSize'), fontSizeVal: $('fontSizeVal'),
     fontFamily: $('fontFamily'),
     lineHeight: $('lineHeight'), lineHeightVal: $('lineHeightVal'),
@@ -546,32 +607,240 @@ export class ReaderPanel {
     contentWidth: $('contentWidth'), contentWidthVal: $('contentWidthVal'),
     themeSwatches: $('themeSwatches'), reset: $('resetSettings'),
     content: $('content'), bookInfo: $('bookInfo'), chapterInfo: $('chapterInfo'),
-    toolbar: document.querySelector('.toolbar'),
-    progressTrack: document.querySelector('.progress-track')
+    progressFill: $('progressFill'),
+    statusbar: document.querySelector('.statusbar'),
   };
 
-  /* ---------------- 设置面板: 固定悬浮定位与开关 ---------------- */
-  function syncPanelPosition() {
-    var collapsed = document.body.classList.contains('toolbar-collapsed');
-    var toolbarH = collapsed || !els.toolbar ? 0 : els.toolbar.offsetHeight;
-    var root = document.documentElement;
-    root.style.setProperty('--panel-top', (toolbarH + 8) + 'px');
-    // 悬浮球需要避开底部状态栏
-    root.style.setProperty('--statusbar-h', (els.statusbar ? els.statusbar.offsetHeight : 30) + 'px');
+  /* ---------------- 悬浮球: 拖动 + 闲置淡化 ---------------- */
+  var IDLE_MS = 3000;
+  var idleTimer = null;
+
+  function wakeFabs() {
+    els.fabs.classList.add('awake');
+    if (idleTimer) { clearTimeout(idleTimer); }
+    idleTimer = setTimeout(function () { els.fabs.classList.remove('awake'); }, IDLE_MS);
+  }
+  document.addEventListener('mousemove', wakeFabs, { passive: true });
+  document.addEventListener('scroll', wakeFabs, { passive: true });
+
+  function applyFabPosition(pos) {
+    if (!pos) { return; }
+    var maxX = Math.max(0, window.innerWidth - 60);
+    var maxY = Math.max(0, window.innerHeight - 110);
+    els.fabs.style.left = Math.min(Math.max(0, pos.left), maxX) + 'px';
+    els.fabs.style.top = Math.min(Math.max(0, pos.top), maxY) + 'px';
+    els.fabs.style.right = 'auto';
+    els.fabs.style.transform = 'none';
   }
 
-  /* ---------------- 工具栏收起/展开 ---------------- */
-  function setToolbarCollapsed(collapsed, persist) {
-    document.body.classList.toggle('toolbar-collapsed', !!collapsed);
-    els.toolbarToggle.textContent = collapsed ? '⌄' : '⌃';
-    els.toolbarToggle.title = collapsed ? '展开工具栏' : '收起工具栏';
-    syncPanelPosition();
-    if (persist) {
-      persistSettings({ toolbarCollapsed: !!collapsed });
+  (function initFabDrag() {
+    var dragging = false;
+    var moved = false;
+    var startX = 0;
+    var startY = 0;
+    var originLeft = 0;
+    var originTop = 0;
+
+    els.fabs.addEventListener('pointerdown', function (e) {
+      dragging = true;
+      moved = false;
+      var rect = els.fabs.getBoundingClientRect();
+      originLeft = rect.left;
+      originTop = rect.top;
+      startX = e.clientX;
+      startY = e.clientY;
+      els.fabs.classList.add('dragging');
+      els.fabs.classList.add('awake');
+      wakeFabs();
+      if (els.fabs.setPointerCapture) { els.fabs.setPointerCapture(e.pointerId); }
+    });
+
+    els.fabs.addEventListener('pointermove', function (e) {
+      if (!dragging) { return; }
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) { moved = true; }
+      if (!moved) { return; }
+      e.preventDefault();
+      applyFabPosition({ left: originLeft + dx, top: originTop + dy });
+    });
+
+    function endDrag() {
+      if (!dragging) { return; }
+      dragging = false;
+      els.fabs.classList.remove('dragging');
+      if (moved) {
+        var rect = els.fabs.getBoundingClientRect();
+        // 松手后吸附到最近的左右边, 视觉更整齐
+        var left = rect.left < window.innerWidth / 2 ? 16 : window.innerWidth - rect.width - 16;
+        applyFabPosition({ left: left, top: rect.top });
+        persistSettings({ fabLeft: left, fabTop: Math.round(rect.top) });
+      }
     }
+    els.fabs.addEventListener('pointerup', endDrag);
+    els.fabs.addEventListener('pointercancel', endDrag);
+  })();
+
+  /* ---------------- 目录面板(参考起点中文网) ---------------- */
+  function chapterParts(title) {
+    var m = /^(第[0-9０-９一二三四五六七八九十百千零两]+[章节回卷部篇集])(.*)$/.exec(title.trim());
+    if (m) { return { no: m[1], name: m[2].trim() }; }
+    var m2 = /^(Chapter\s*\d+)(.*)$/i.exec(title.trim());
+    if (m2) { return { no: m2[1], name: m2[2].trim() }; }
+    return { no: '', name: title.trim() };
   }
+
+  /**
+   * 按 卷/部/篇/集 类章节切分目录层级(无此类章节则整体归入"正文")。
+   * 卷标题本身也是正文章节, 因此它既作组名, 也作为该组的可点击入口(head.hash),
+   * 不会出现"内容不可达"或重复条目。
+   */
+  function buildCatalogGroups(chapters) {
+    // 卷/部/篇/集 标记需出现在标题前部, 避免正文标题里偶尔提及"第X篇"被误判为分卷
+    var isVolume = function (title) { return /^.{0,10}第[0-9０-９一二三四五六七八九十百千零两]+[卷部篇集]/.test(title); };
+    var groups = [];
+    var cur = null;
+    for (var i = 0; i < chapters.length; i++) {
+      var c = chapters[i];
+      if (isVolume(c.title)) {
+        if (cur) { groups.push(cur); }
+        cur = { name: c.title, entry: c.index, items: [] };
+      } else {
+        if (!cur) { cur = { name: '正文', entry: -1, items: [] }; }
+        cur.items.push(c);
+      }
+    }
+    if (cur) { groups.push(cur); }
+    return groups;
+  }
+
+  function renderCatalog() {
+    var chapters = state.chapters || [];
+    if (!state.novel || chapters.length === 0) {
+      els.catBody.innerHTML = '<div class="empty-tip">尚未打开小说</div>';
+      els.catSub.textContent = '';
+      return;
+    }
+    els.catSub.textContent = '共 ' + chapters.length + ' 章';
+    var groups = buildCatalogGroups(chapters);
+    if (state.catReverse) {
+      groups = groups
+        .slice()
+        .reverse()
+        .map(function (g) { return { name: g.name, entry: g.entry, items: g.items.slice().reverse() }; });
+    }
+
+    var html = '';
+    for (var gi = 0; gi < groups.length; gi++) {
+      var g = groups[gi];
+      var collapsed = (state.catCollapsed || []).indexOf(g.name) >= 0 ? ' collapsed' : '';
+      var total = g.items.length + (g.entry >= 0 ? 1 : 0);
+      html += '<div class="cat-group' + collapsed + '" data-g="' + escapeHtml(g.name) + '">' +
+        '<div class="cat-group-head"' + (g.entry >= 0 ? ' data-i="' + g.entry + '"' : '') +
+        ' title="点击跳转 · 右侧箭头展开/收起">' +
+        '<span class="cat-group-name">' + escapeHtml(g.name) + '</span>' +
+        '<span class="cat-group-count">共 ' + total + ' 章</span>' +
+        '<span class="cat-group-toggle" title="展开 / 收起">⌃</span></div>' +
+        '<div class="cat-items">';
+      if (g.entry >= 0) {
+        var pe = chapterParts(g.name);
+        html += '<div class="cat-item" data-i="' + g.entry + '" title="' + escapeHtml(g.name) + '">' +
+          (pe.no ? '<span class="cat-no">' + escapeHtml(pe.no) + '</span>' : '') +
+          '<span class="cat-name">' + escapeHtml(pe.name || g.name) + '</span></div>';
+      }
+      for (var i = 0; i < g.items.length; i++) {
+        var c = g.items[i];
+        var p = chapterParts(c.title);
+        html += '<div class="cat-item" data-i="' + c.index + '" title="' + escapeHtml(c.title) + '">' +
+          (p.no ? '<span class="cat-no">' + escapeHtml(p.no) + '</span>' : '') +
+          '<span class="cat-name">' + escapeHtml(p.name || c.title) + '</span></div>';
+      }
+      html += '</div></div>';
+    }
+    els.catBody.innerHTML = html;
+    updateCatalogCurrent(true);
+  }
+
+  /** 更新当前章高亮 + 底部位置信息 */
+  function updateCatalogCurrent(scrollToCurrent) {
+    var chapters = state.chapters || [];
+    if (chapters.length === 0) { return; }
+    var prev = els.catBody.querySelector('.cat-item.cur');
+    if (prev) { prev.classList.remove('cur'); }
+    var el = els.catBody.querySelector('.cat-item[data-i="' + state.chapterIndex + '"]');
+    if (el) {
+      el.classList.add('cur');
+      // 当前章所在分组自动展开
+      var group = el.closest ? el.closest('.cat-group') : null;
+      if (group) { group.classList.remove('collapsed'); }
+      if (scrollToCurrent && catalogOpen()) {
+        el.scrollIntoView({ block: 'center' });
+      }
+    }
+    els.catPos.textContent = '第 ' + (state.chapterIndex + 1) + ' / ' + chapters.length + ' 章';
+  }
+
+  function catalogOpen() {
+    return els.catalogPanel.classList.contains('open');
+  }
+  function openCatalog() {
+    closeSettings();
+    els.catalogPanel.classList.add('open');
+    renderCatalog();
+  }
+  function closeCatalog() {
+    els.catalogPanel.classList.remove('open');
+  }
+
+  els.fabCatalog.addEventListener('click', function () {
+    if (catalogOpen()) { closeCatalog(); } else { openCatalog(); }
+  });
+  els.fabSettings.addEventListener('click', function () {
+    closeCatalog();
+    if (settingsOpen()) { closeSettings(); } else { openSettings(); }
+  });
+  els.catClose.addEventListener('click', closeCatalog);
+  els.catReverse.addEventListener('click', function () {
+    state.catReverse = !state.catReverse;
+    els.catReverse.classList.toggle('on', !!state.catReverse);
+    els.catReverse.textContent = state.catReverse ? '正序' : '倒序';
+    renderCatalog();
+  });
+  els.catPrev.addEventListener('click', function () { gotoChapter(state.chapterIndex - 1); });
+  els.catNext.addEventListener('click', function () { gotoChapter(state.chapterIndex + 1); });
+  els.catBody.addEventListener('click', function (e) {
+    var target = e.target;
+    // 分卷标题: 点右侧箭头 -> 折叠/展开; 点其它区域 -> 跳到该卷章节
+    var head = target.closest ? target.closest('.cat-group-head') : null;
+    if (head) {
+      var group = head.parentElement;
+      if (target.closest('.cat-group-toggle')) {
+        group.classList.toggle('collapsed');
+        var name = group.dataset.g;
+        var list = state.catCollapsed || [];
+        var at = list.indexOf(name);
+        if (group.classList.contains('collapsed')) {
+          if (at < 0) { list.push(name); }
+        } else if (at >= 0) {
+          list.splice(at, 1);
+        }
+        state.catCollapsed = list;
+        return;
+      }
+      if (head.dataset.i !== undefined && head.dataset.i !== '') {
+        gotoChapter(Number(head.dataset.i));
+        closeCatalog();
+      }
+      return;
+    }
+    var item = target.closest ? target.closest('.cat-item') : null;
+    if (item) {
+      gotoChapter(Number(item.dataset.i));
+      closeCatalog();
+    }
+  });
+
   function openSettings() {
-    syncPanelPosition();
     els.settingsPanel.classList.add('open');
   }
   function closeSettings() {
@@ -604,13 +873,16 @@ export class ReaderPanel {
     root.style.setProperty('--para-spacing', s.paragraphSpacing + 'em');
     root.style.setProperty('--content-width', s.contentWidth + 'px');
     syncControls(s);
-    setToolbarCollapsed(!!s.toolbarCollapsed, false);
+    applyFabPosition(
+      typeof s.fabLeft === 'number' && typeof s.fabTop === 'number'
+        ? { left: s.fabLeft, top: s.fabTop }
+        : null
+    );
   }
 
   function syncControls(s) {
     els.fontSize.value = s.fontSize;
     els.fontSizeVal.textContent = s.fontSize + 'px';
-    els.fontSizeText.textContent = '字号 ' + s.fontSize + 'px';
     els.fontFamily.value = s.fontFamily;
     els.lineHeight.value = s.lineHeight;
     els.lineHeightVal.textContent = s.lineHeight.toFixed(1);
@@ -652,10 +924,10 @@ export class ReaderPanel {
       if (p) { html += '<p>' + escapeHtml(p) + '</p>'; }
     }
     els.content.innerHTML = html || '<p class="empty-tip">(本章无内容)</p>';
-    els.select.value = String(payload.index);
-    els.prev.disabled = payload.index <= 0;
-    els.next.disabled = payload.index >= payload.totalChapters - 1;
+    els.catPrev.disabled = payload.index <= 0;
+    els.catNext.disabled = payload.index >= payload.totalChapters - 1;
     updateProgress();
+    updateCatalogCurrent(false);
     requestAnimationFrame(function () {
       var max = document.body.scrollHeight - window.innerHeight;
       window.scrollTo(0, max > 0 ? payload.scrollRatio * max : 0);
@@ -670,14 +942,6 @@ export class ReaderPanel {
     els.chapterInfo.textContent = state.novel
       ? ('第 ' + idx + ' 章 / 共 ' + total + ' 章')
       : '';
-  }
-
-  function buildChapterSelect(chapters) {
-    var html = '';
-    for (var i = 0; i < chapters.length; i++) {
-      html += '<option value="' + chapters[i].index + '">' + escapeHtml(chapters[i].title) + '</option>';
-    }
-    els.select.innerHTML = html;
   }
 
   /* ---------------- 进度保存(节流) ---------------- */
@@ -708,12 +972,6 @@ export class ReaderPanel {
   els.lineHeight.addEventListener('input', function () { persistSettings({ lineHeight: Number(this.value) }); });
   els.paraSpacing.addEventListener('input', function () { persistSettings({ paragraphSpacing: Number(this.value) }); });
   els.contentWidth.addEventListener('input', function () { persistSettings({ contentWidth: Number(this.value) }); });
-  els.fontMinus.addEventListener('click', function () {
-    persistSettings({ fontSize: Math.max(12, state.settings.fontSize - 1) });
-  });
-  els.fontPlus.addEventListener('click', function () {
-    persistSettings({ fontSize: Math.min(32, state.settings.fontSize + 1) });
-  });
   els.themeSwatches.addEventListener('click', function (e) {
     var btn = e.target.closest('.swatch');
     if (btn) { persistSettings({ theme: btn.dataset.theme }); }
@@ -726,51 +984,30 @@ export class ReaderPanel {
   function gotoChapter(index) {
     vscode.postMessage({ type: 'getChapter', index: index });
   }
-  els.prev.addEventListener('click', function () { gotoChapter(state.chapterIndex - 1); });
-  els.next.addEventListener('click', function () { gotoChapter(state.chapterIndex + 1); });
-  els.select.addEventListener('change', function () { gotoChapter(Number(this.value)); });
-  els.settingsBtn.addEventListener('click', function (e) {
-    e.stopPropagation();
-    if (settingsOpen()) {
-      closeSettings();
-    } else {
-      openSettings();
-    }
-  });
-  // 收起/展开工具栏
-  els.toolbarToggle.addEventListener('click', function () {
-    setToolbarCollapsed(!document.body.classList.contains('toolbar-collapsed'), true);
-  });
-  // 悬浮球: 展开工具栏
-  els.floatBall.addEventListener('click', function () {
-    setToolbarCollapsed(false, true);
-  });
-  // 点击字号标签直接打开设置(原来是章节计数, 现在显示当前字号)
-  els.fontSizeText.addEventListener('click', function () {
-    if (settingsOpen()) {
-      closeSettings();
-    } else {
-      openSettings();
-    }
-  });
   els.settingsClose.addEventListener('click', function (e) {
     e.stopPropagation();
     closeSettings();
   });
   // 点击面板外部关闭(用 mousedown: 拖动滑块时鼠标可能在面板外松开, 不应误关)
   document.addEventListener('mousedown', function (e) {
-    if (!settingsOpen()) { return; }
-    if (els.settingsPanel.contains(e.target) || els.settingsBtn.contains(e.target)) { return; }
-    closeSettings();
-  });
-  window.addEventListener('resize', syncPanelPosition);
-  document.addEventListener('DOMContentLoaded', syncPanelPosition);
-  syncPanelPosition();
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && settingsOpen()) {
-      e.preventDefault();
+    if (settingsOpen() && !els.settingsPanel.contains(e.target) && !els.fabSettings.contains(e.target)) {
       closeSettings();
-      return;
+    }
+    if (catalogOpen() && !els.catalogPanel.contains(e.target) && !els.fabCatalog.contains(e.target)) {
+      closeCatalog();
+    }
+  });
+  window.addEventListener('resize', function () {
+    var left = parseFloat(els.fabs.style.left);
+    var top = parseFloat(els.fabs.style.top);
+    if (!isNaN(left) && !isNaN(top)) {
+      applyFabPosition({ left: left, top: top });
+    }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      if (catalogOpen()) { e.preventDefault(); closeCatalog(); return; }
+      if (settingsOpen()) { e.preventDefault(); closeSettings(); return; }
     }
     if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); gotoChapter(state.chapterIndex - 1); }
     if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); gotoChapter(state.chapterIndex + 1); }
@@ -789,7 +1026,13 @@ export class ReaderPanel {
           bookTitle: p.bookTitle
         };
         document.title = p.bookTitle + ' - 小说阅读';
-        buildChapterSelect(p.chapters);
+        state.chapters = p.chapters || [];
+        state.catReverse = false;
+        state.catCollapsed = [];
+        els.catReverse.classList.remove('on');
+        els.catReverse.textContent = '倒序';
+        els.catSub.textContent = '共 ' + state.chapters.length + ' 章';
+        els.catBody.innerHTML = ''; // 目录按需渲染(打开面板时)
         applySettings(p.settings);
         renderChapter({
           index: p.chapterIndex, title: p.chapterTitle,
