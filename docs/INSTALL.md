@@ -58,7 +58,7 @@ npm run compile    # 编译 src/*.ts → dist/*.js
 npm run package
 ```
 
-成功后当前目录会出现 `novel-reader-<版本号>.vsix`，例如 `novel-reader-1.0.2.vsix`。
+成功后当前目录会出现 `novel-reader-<版本号>.vsix`，例如 `novel-reader-1.1.0.vsix`。
 
 > **为什么不用 `npx @vscode/vsce package`？** vsce 只能自动识别 GitHub/GitLab 仓库，本项目托管在 Gitee，README 中的相对链接会让打包报错。`npm run package` 已在脚本中固化所需参数：
 >
@@ -73,13 +73,13 @@ npm run package
 ### 4. 安装
 
 ```bash
-code --install-extension novel-reader-1.0.2.vsix
+code --install-extension novel-reader-1.1.0.vsix
 ```
 
 Windows 上若 `code` 不在 PATH，请用 VS Code 安装目录下的命令：
 
 ```powershell
-& "D:\Program Files (x86)\Microsoft VS Code\bin\code.cmd" --install-extension novel-reader-1.0.2.vsix
+& "D:\Program Files (x86)\Microsoft VS Code\bin\code.cmd" --install-extension novel-reader-1.1.0.vsix
 ```
 
 或直接用图形界面（见方式二）。
@@ -95,9 +95,9 @@ Windows 上若 `code` 不在 PATH，请用 VS Code 安装目录下的命令：
 ### 命令行安装
 
 ```bash
-code --install-extension novel-reader-1.0.2.vsix
+code --install-extension novel-reader-1.1.0.vsix
 # 覆盖安装时加 --force：
-code --install-extension novel-reader-1.0.2.vsix --force
+code --install-extension novel-reader-1.1.0.vsix --force
 ```
 
 ### 图形界面安装
@@ -146,14 +146,14 @@ npm test        # 可选：跑一遍解析器与界面冒烟测试
 
 2. **解包 vsix**
 
-   将 `novel-reader-1.0.2.vsix` 改名为 `.zip` 后解压（或直接解压 vsix），取出内层 `extension/` 目录的内容。
+   将 `novel-reader-1.1.0.vsix` 改名为 `.zip` 后解压（或直接解压 vsix），取出内层 `extension/` 目录的内容。
 
 3. **放入正确的目录名**
 
    目录名必须是 `<publisher>.<name>-<version>`，本插件为：
 
    ```
-   <扩展目录>/local.novel-reader-1.0.2/
+   <扩展目录>/local.novel-reader-1.1.0/
        ├── package.json
        ├── README.md
        ├── dist/
@@ -188,9 +188,10 @@ npm test        # 可选：跑一遍解析器与界面冒烟测试
 ## 验证是否安装成功
 
 1. **活动栏图标**：左侧活动栏出现书本图标，悬停显示「小说阅读」
-2. **命令面板**：`Ctrl+Shift+P` 输入「小说阅读器」，应能看到 5 条命令
+2. **命令面板**：`Ctrl+Shift+P` 输入「小说阅读器」，应能看到 7 条命令（打开小说文件 / 我的书架 / 显示章节目录 / 回到当前阅读章节 / 上一章 / 下一章 / 阅读设置 / 刷新目录）
 3. **扩展面板**：`Ctrl+Shift+X` 搜索 `@id:local.novel-reader`，显示「小说阅读器 · local」，且**没有黄色警告三角**
-4. **实际使用**：点击图标 → 侧边栏标题栏 `＋` → 选择 txt → 出现章节目录与阅读页
+4. **侧边栏带书架**：点开侧边栏，标题栏应有 `我的书架` 按钮；书架为空时显示「书架空空如也」
+5. **实际使用**：点击图标 → 标题栏 `＋` → 选择 txt → 自动加入书架并进入章节目录 + 阅读页
 
 ---
 
@@ -199,7 +200,7 @@ npm test        # 可选：跑一遍解析器与界面冒烟测试
 **方式二/三（vsix 安装）**：直接安装新 vsix 即可覆盖
 
 ```bash
-code --install-extension novel-reader-1.0.3.vsix
+code --install-extension novel-reader-1.2.0.vsix
 ```
 
 **方式四（离线解包）**：
@@ -218,7 +219,7 @@ code --install-extension novel-reader-1.0.3.vsix
 - **命令行**：`code --uninstall-extension local.novel-reader`
 - **离线安装的**：直接删除 `local.novel-reader-<版本>` 目录，并删除 `extensions.json` 中对应条目
 
-卸载后阅读偏好与进度仍保留在 VS Code 的全局存储中（属于该扩展的数据），如需彻底清理可同时删除 VS Code 用户数据里的对应项。
+卸载后**书架列表与阅读进度仍保留**在 VS Code 的全局存储中（按扩展 ID 归属），重新安装同一 ID 的插件即可继续使用；如需彻底清理可同时删除 VS Code 用户数据里的对应项。
 
 ---
 
@@ -228,6 +229,7 @@ code --install-extension novel-reader-1.0.3.vsix
 | --- | --- | --- |
 | 扩展面板出现「检测到无效的扩展 ⚠️」 | 离线安装时目录名/版本与 `extensions.json` 不一致 | 运行 `node scripts/register-local-extension.js`，重启 VS Code |
 | 插件装了但重启后消失 | 被 `.obsolete` 标记为待删除 | 同上：先跑登记脚本，再重启（脚本会清除误标） |
+| 书架里的书不见了 / 阅读进度丢失 | 扩展被卸载重装、或扩展 ID 变化导致读不到原数据 | 进度保存在 VS Code 全局存储中并**按扩展 ID（`local.novel-reader`）归属**，保持该 ID 不变即可自动延续；若确认目录名与清单一致，重启后仍会恢复 |
 | 活动栏没有「小说阅读」图标 | ① 未重启 VS Code；② 与其他小说插件的视图容器 ID 冲突 | ① 先 `Developer: Reload Window`；② 在扩展面板禁用其他小说插件后重启 |
 | 命令面板搜不到命令 | 扩展未激活或版本不兼容 | 检查 VS Code 版本是否 ≥ 1.85；查看 `帮助 → 切换开发人员工具 → 控制台` 有无报错 |
 | 中文正文全是乱码 | 罕见混合编码 | 用编辑器将文件另存为 UTF-8 后重新打开 |

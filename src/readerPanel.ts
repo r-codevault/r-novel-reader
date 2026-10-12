@@ -13,14 +13,6 @@ import * as crypto from 'crypto';
 import { Novel } from './novelParser';
 import { FONTS, ReadingSettings, SettingsStore, THEMES, fontStackById, themeById } from './settings';
 
-export interface SessionInfo {
-    filePath: string;
-    chapterIndex: number;
-    /** 0~1, 章节内滚动位置比例 */
-    scrollRatio: number;
-    updatedAt: number;
-}
-
 interface InitPayload {
     filePath: string;
     bookTitle: string;
@@ -52,28 +44,16 @@ type WebviewMessage =
     | { type: 'saveProgress'; chapterIndex: number; scrollRatio: number }
     | { type: 'openFile' };
 
-const SESSION_KEY = 'novelReader.session';
-
-export function getSession(state: vscode.Memento): SessionInfo | undefined {
-    return state.get<SessionInfo>(SESSION_KEY);
-}
-
-export async function saveSession(
-    state: vscode.Memento,
-    info: SessionInfo
-): Promise<void> {
-    await state.update(SESSION_KEY, { ...info, updatedAt: Date.now() });
-}
-
 export class ReaderPanel {
     public static readonly viewType = 'novelReader.reader';
     public static current: ReaderPanel | undefined;
-    /** 章节变化回调(供侧边栏目录树同步高亮/滚动定位) */
+    /** 章节变化回调(供侧边栏「当前阅读」条与目录同步) */
     public static onDidChangeChapter?: (index: number) => void;
+    /** 阅读进度回调(由插件入口写入书架) */
+    public static onProgress?: (chapterIndex: number, scrollRatio: number) => void;
 
     private readonly _panel: vscode.WebviewPanel;
     private readonly _store: SettingsStore;
-    private readonly _state: vscode.Memento;
     private _novel: Novel;
     private _chapterIndex: number;
     private _settings: ReadingSettings;
@@ -87,15 +67,13 @@ export class ReaderPanel {
         novel: Novel,
         chapterIndex: number,
         scrollRatio: number,
-        store: SettingsStore,
-        state: vscode.Memento
+        store: SettingsStore
     ) {
         this._panel = panel;
         this._novel = novel;
         this._chapterIndex = Math.min(Math.max(0, chapterIndex), Math.max(0, novel.chapters.length - 1));
         this._scrollRatio = scrollRatio;
         this._store = store;
-        this._state = state;
         this._settings = store.get();
 
         this._panel.webview.html = this._getHtml(this._settings);
@@ -114,7 +92,6 @@ export class ReaderPanel {
         chapterIndex: number,
         scrollRatio: number,
         store: SettingsStore,
-        state: vscode.Memento,
         column: vscode.ViewColumn = vscode.ViewColumn.One,
         openSettings = false
     ): void {
@@ -140,7 +117,7 @@ export class ReaderPanel {
             retainContextWhenHidden: true,
             localResourceRoots: [],
         });
-        ReaderPanel.current = new ReaderPanel(panel, novel, chapterIndex, scrollRatio, store, state);
+        ReaderPanel.current = new ReaderPanel(panel, novel, chapterIndex, scrollRatio, store);
         ReaderPanel.current._openSettingsOnLoad = openSettings;
     }
 
@@ -230,12 +207,11 @@ export class ReaderPanel {
                 });
                 break;
             case 'saveProgress':
-                void saveSession(this._state, {
-                    filePath: this._novel.filePath,
-                    chapterIndex: msg.chapterIndex,
-                    scrollRatio: Math.min(1, Math.max(0, msg.scrollRatio || 0)),
-                    updatedAt: Date.now(),
-                });
+                // 进度交给插件入口写入书架(不再维护单独的 session)
+                ReaderPanel.onProgress?.(
+                    msg.chapterIndex,
+                    Math.min(1, Math.max(0, msg.scrollRatio || 0))
+                );
                 break;
             case 'openFile':
                 void vscode.commands.executeCommand('novelReader.openFile');

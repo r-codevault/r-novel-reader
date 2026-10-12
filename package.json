@@ -1,8 +1,8 @@
 {
   "name": "novel-reader",
   "displayName": "小说阅读器",
-  "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面。支持字体大小、字体族、行距、主题配色等个性化设置，并自动保存阅读偏好与进度。",
-  "version": "1.0.2",
+  "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面。支持我的书架、字体大小/字体族/行距/主题配色等个性化设置，并自动延续上次阅读状态。",
+  "version": "1.1.0",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -28,7 +28,11 @@
   "activationEvents": [
     "onView:novelReaderChapters",
     "onCommand:novelReader.openFile",
-    "onCommand:novelReader.continueReading",
+    "onCommand:novelReader.openBook",
+    "onCommand:novelReader.removeFromShelf",
+    "onCommand:novelReader.resumeCurrent",
+    "onCommand:novelReader.showBookshelf",
+    "onCommand:novelReader.showChapters",
     "onCommand:novelReader.openChapter",
     "onCommand:novelReader.refresh",
     "onCommand:novelReader.openSettings",
@@ -49,12 +53,22 @@
       "xiaoshuo-reader": [
         {
           "id": "novelReaderChapters",
-          "name": "章节目录",
+          "name": "书架 / 目录",
           "type": "webview"
         }
       ]
     },
     "commands": [
+      {
+        "command": "novelReader.showBookshelf",
+        "title": "我的书架",
+        "icon": "$(library)"
+      },
+      {
+        "command": "novelReader.showChapters",
+        "title": "章节目录",
+        "icon": "$(book)"
+      },
       {
         "command": "novelReader.openFile",
         "title": "打开小说文件",
@@ -69,11 +83,20 @@
       {
         "command": "novelReader.openSettings",
         "title": "阅读设置",
-        "icon": "$(settings-gear)"
+        "icon": "$(settings-gear)",
+        "enablement": "novelReader.hasNovel"
       },
       {
-        "command": "novelReader.continueReading",
-        "title": "继续阅读"
+        "command": "novelReader.resumeCurrent",
+        "title": "回到当前阅读章节"
+      },
+      {
+        "command": "novelReader.openBook",
+        "title": "打开书架中的小说"
+      },
+      {
+        "command": "novelReader.removeFromShelf",
+        "title": "从书架移除"
       },
       {
         "command": "novelReader.openChapter",
@@ -93,18 +116,29 @@
     "menus": {
       "view/title": [
         {
+          "command": "novelReader.showBookshelf",
+          "when": "view == novelReaderChapters && novelReader.viewMode != shelf",
+          "group": "navigation@1"
+        },
+        {
+          "command": "novelReader.showChapters",
+          "when": "view == novelReaderChapters && novelReader.viewMode == shelf",
+          "group": "navigation@1"
+        },
+        {
           "command": "novelReader.openFile",
           "when": "view == novelReaderChapters",
-          "group": "navigation"
+          "group": "navigation@2"
         },
         {
           "command": "novelReader.refresh",
-          "when": "view == novelReaderChapters"
+          "when": "view == novelReaderChapters && novelReader.viewMode != shelf && novelReader.hasNovel",
+          "group": "navigation@3"
         },
         {
           "command": "novelReader.openSettings",
-          "when": "view == novelReaderChapters",
-          "group": "navigation@2"
+          "when": "view == novelReaderChapters && novelReader.hasNovel",
+          "group": "navigation@4"
         }
       ],
       "commandPalette": [
@@ -113,12 +147,33 @@
           "title": "小说阅读器: 打开小说文件"
         },
         {
-          "command": "novelReader.continueReading",
-          "title": "小说阅读器: 继续阅读"
+          "command": "novelReader.showBookshelf",
+          "title": "小说阅读器: 我的书架"
+        },
+        {
+          "command": "novelReader.showChapters",
+          "title": "小说阅读器: 显示章节目录"
+        },
+        {
+          "command": "novelReader.resumeCurrent",
+          "title": "小说阅读器: 回到当前阅读章节"
         },
         {
           "command": "novelReader.openSettings",
-          "title": "小说阅读器: 阅读设置"
+          "title": "小说阅读器: 阅读设置",
+          "when": "novelReader.hasNovel"
+        },
+        {
+          "command": "novelReader.openBook",
+          "when": "false"
+        },
+        {
+          "command": "novelReader.removeFromShelf",
+          "when": "false"
+        },
+        {
+          "command": "novelReader.openChapter",
+          "when": "false"
         },
         {
           "command": "novelReader.refresh",
@@ -222,7 +277,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "package": "vsce package --baseContentUrl https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader/blob/master --baseImagesUrl https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader/raw/master",
-    "test": "node scripts/test-parser.js && node scripts/smoke-webview.js"
+    "test": "node scripts/test-shelf.js && node scripts/test-parser.js && node scripts/smoke-webview.js"
   },
   "devDependencies": {
     "@types/node": "^18.19.0",
