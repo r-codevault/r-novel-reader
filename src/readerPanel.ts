@@ -345,6 +345,8 @@ export class ReaderPanel {
   #fabs.dragging .fab { transform: none; }
   .fab svg { width: 20px; height: 20px; pointer-events: none; }
   .fab-label { font-size: clamp(10px, calc(var(--font-size) * 0.65), 13px); pointer-events: none; letter-spacing: .02em; }
+  /* 长文案(如"阅读设置")用更小字号, 保证不超出按钮宽度 */
+  .fab-label-sm { font-size: clamp(9px, calc(var(--font-size) * 0.55), 11px); letter-spacing: 0; }
   /* 首末章时上一章/下一章置灰不可点 */
   .fab.off { opacity: .35; pointer-events: none; }
 
@@ -555,9 +557,9 @@ export class ReaderPanel {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
     <span class="fab-label">下一章</span>
   </button>
-  <button id="fabSettings" class="fab" type="button" title="字体与主题设置" aria-label="字体设置">
+  <button id="fabSettings" class="fab" type="button" title="阅读设置" aria-label="阅读设置">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><text x="2.5" y="17.5" font-size="15" font-weight="600" stroke="none" fill="currentColor">A</text><text x="13.5" y="17.5" font-size="10" stroke="none" fill="currentColor">A</text></svg>
-    <span class="fab-label">字</span>
+    <span class="fab-label fab-label-sm">阅读设置</span>
   </button>
 </div>
 

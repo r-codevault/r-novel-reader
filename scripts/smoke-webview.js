@@ -176,9 +176,10 @@ assert(/\.fab\s*\{[^}]*border-radius:\s*12px/.test(capturedHtml), '悬浮球应�
 assert(capturedHtml.includes('fab-label'), '悬浮球应采用 icon+文字 样式');
 assert(
   capturedHtml.includes('>上一章</span>') && capturedHtml.includes('>目录</span>') &&
-    capturedHtml.includes('>下一章</span>') && capturedHtml.includes('>字</span>'),
-  '四球文案应为 上一章/目录/下一章/字'
+    capturedHtml.includes('>下一章</span>') && capturedHtml.includes('>阅读设置</span>'),
+  '四球文案应为 上一章/目录/下一章/阅读设置'
 );
+assert(/\.fab-label-sm\s*\{[^}]*var\(--font-size\) \* 0\.55/.test(capturedHtml), '长文案标签应用缩小字号');
 const fabOrder = ['fabPrev', 'fabCatalog', 'fabNext', 'fabSettings'].map((id) => capturedHtml.indexOf(`id="${id}"`));
 assert(
   fabOrder.every((v) => v >= 0) && fabOrder[0] < fabOrder[1] && fabOrder[1] < fabOrder[2] && fabOrder[2] < fabOrder[3],
@@ -217,7 +218,7 @@ assert(
   /if \(!dragging\)[\s\S]{0,400}setPointerCapture/.test(capturedHtml),
   '只有真正拖动后才捕获指针(避免吞掉点击)'
 );
-console.log('悬浮球工具栏(上/目录/下/字, 方形圆角): 通过');
+console.log('悬浮球工具栏(上/目录/下/阅读设置, 方形圆角): 通过');
 
 // --- 目录面板(参考起点中文网) ---
 assert(capturedHtml.includes('id="catalogPanel"'), '应有目录面板');
