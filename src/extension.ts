@@ -502,7 +502,15 @@ export function activate(context: vscode.ExtensionContext): void {
         await shelf.migrateLegacySession();
         refreshShelfView();
         const last = shelf.last();
-        if (last && fs.existsSync(last.filePath)) {
+        // 没有任何记录, 保持原样(只显示侧边栏)
+        if (!last || !fs.existsSync(last.filePath)) {
+            return;
+        }
+        if (last.chapterIndex >= 0) {
+            // 读过: 自动打开阅读面板, 恢复到上次的书/章节/章内位置
+            await loadNovel(last.filePath, { openPanel: true, silent: true });
+        } else {
+            // 只加进书架还没开始读: 只加载到侧边栏
             await loadNovel(last.filePath, { openPanel: false, silent: true });
         }
     })();

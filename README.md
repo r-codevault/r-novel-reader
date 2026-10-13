@@ -8,7 +8,7 @@
 | --- | --- |
 | 插件 ID | `local.novel-reader` |
 | 显示名称 | 小说阅读器 |
-| 当前版本 | 1.7.2 |
+| 当前版本 | 1.7.3 |
 | 要求 | VS Code 1.85.0+（实测 1.128.0），Node.js 18+（仅打包时需要） |
 | 开源协议 | MIT |
 
@@ -130,10 +130,10 @@ npm run compile
 
 # 3. 打包成 vsix
 npm run package
-# 生成 novel-reader-1.7.2.vsix
+# 生成 novel-reader-1.7.3.vsix
 
 # 4. 安装到 VS Code
-code --install-extension novel-reader-1.7.2.vsix
+code --install-extension novel-reader-1.7.3.vsix
 ```
 
 安装后**重启 VS Code**（或 `Ctrl+Shift+P` → `Developer: Reload Window`）。
@@ -164,6 +164,7 @@ npm run compile
 2. 首次使用书架是空的，点标题栏 `＋`（或命令面板 `小说阅读器: 打开小说文件`）选择 `.txt` 文件
 3. 文件解析完成后自动进入**目录模式**，点击任意章节即可跳转阅读
 4. 想换书时点标题栏的 **我的书架** 按钮，在书架上点击另一本即可（会从该书上次位置继续）
+5. **启动自动恢复**：重新打开 VS Code 时会自动打开上次读的那本书，并跳到上次的章节和章内位置；没有阅读记录则不做任何动作
 
 ### 命令列表
 
