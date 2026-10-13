@@ -216,6 +216,14 @@ assert(
   '纵向钳制应按悬浮球实测高度计算'
 );
 assert(capturedHtml.includes('els.fabs.offsetHeight') && !capturedHtml.includes('innerHeight - 110'), '不应再用写死的高度估算');
+// 视图尺寸变化(含侧边栏展开/收起) 后必须重新贴合正文两侧
+assert(capturedHtml.includes('function syncFabOnResize'), '应有尺寸变化后的位置修正');
+assert(capturedHtml.includes("addEventListener('resize', syncFabOnResize)"), '窗口缩放应触发位置修正');
+assert(capturedHtml.includes('ResizeObserver'), '侧边栏展开/收起应能被兜底捕获');
+assert(
+  /if \(!fabDragged\)[\s\S]{0,400}snapFabPosition/.test(capturedHtml),
+  '拖动过的情况下也应在尺寸变化后重新贴合正文两侧'
+);
 assert(capturedHtml.includes('fabLeft'), '拖动后的位置应可持久化');
 assert(capturedHtml.includes('#fabs.awake'), '闲置后应淡化以免遮挡正文');
 // 关键回归: 点击必须在 pointerup 上生效, 不能依赖 click 事件

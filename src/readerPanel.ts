@@ -1183,17 +1183,33 @@ export class ReaderPanel {
       closeCatalog();
     }
   });
-  window.addEventListener('resize', function () {
-    if (fabDragged) {
-      var left = parseFloat(els.fabs.style.left);
-      var top = parseFloat(els.fabs.style.top);
-      if (!isNaN(left) && !isNaN(top)) {
-        applyFabPosition({ left: left, top: top });
-      }
-    } else {
+  /**
+   * 视图尺寸变化(窗口缩放、侧边栏展开/收起)后修正悬浮球位置。
+   * 拖动过的: 保留纵向位置与所在侧, 水平方向重新贴回正文两侧;
+   * 未拖动的: 直接按新的阅读区域重算。
+   */
+  function syncFabOnResize() {
+    if (!fabDragged) {
       syncFabAnchor();
+      return;
     }
-  });
+    var left = parseFloat(els.fabs.style.left);
+    var top = parseFloat(els.fabs.style.top);
+    if (isNaN(left) || isNaN(top)) {
+      return;
+    }
+    var mid = left + (els.fabs.offsetWidth || 58) / 2;
+    var side = mid < window.innerWidth / 2 ? 'left' : 'right';
+    var pos = snapFabPosition(side, top);
+    applyFabPosition(pos);
+    persistSettings({ fabLeft: pos.left, fabTop: pos.top });
+  }
+
+  window.addEventListener('resize', syncFabOnResize);
+  // 侧边栏展开/收起不一定会触发 window resize, 用 ResizeObserver 兜底
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncFabOnResize).observe(document.body);
+  }
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       if (catalogOpen()) { e.preventDefault(); closeCatalog(); return; }
