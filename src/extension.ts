@@ -159,7 +159,9 @@ export function activate(context: vscode.ExtensionContext): void {
             const scrollRatio = opts.scrollRatio ?? (hasProgress ? entry.scrollRatio : 0);
 
             chapterView.setNovel(novel);
-            chapterView.setCurrent(chapterIndex);
+            // center=true: 换书/打开后把侧边栏列表滚动定位到当前章
+            // (否则会沿用上一本书的滚动位置)
+            chapterView.setCurrent(chapterIndex, true);
 
             if (opts.openPanel !== false) {
                 ReaderPanel.createOrShow(
@@ -170,7 +172,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     vscode.ViewColumn.One,
                     opts.openSettings
                 );
-                chapterView.setCurrent(chapterIndex);
+                chapterView.setCurrent(chapterIndex, true);
             }
             return novel;
         } catch (err) {

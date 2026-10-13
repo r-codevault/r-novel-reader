@@ -448,6 +448,7 @@ console.log('设置页(存储位置): 通过');
 // --- 侧边栏脚本运行时行为: 用最小 DOM 桩真实执行脚本 ---
 // (防止"引用未定义变量"之类的初始化/渲染抛错 —— v1.7.4 曾因 applyNovel 缺 var key 导致列表全空)
 const vm = require('vm');
+let scrollCalls = [];
 function makeEl() {
   const el = {
     children: [],
@@ -456,7 +457,7 @@ function makeEl() {
     addEventListener(){}, removeEventListener(){},
     querySelector(){ return makeEl(); }, querySelectorAll(){ return []; },
     closest(){ return null; }, contains(){ return false; },
-    scrollIntoView(){}, focus(){}, click(){}, appendChild(){},
+    scrollIntoView(opts) { scrollCalls.push(opts || null); }, focus(){}, click(){}, appendChild(){},
     setAttribute(){}, getAttribute(){ return null; },
     getBoundingClientRect(){ return { left: 0, top: 0, width: 58, height: 100 }; },
   };
@@ -533,7 +534,20 @@ dispatchNovel({
 });
 assert(elsById.chapterList.innerHTML.includes('第一章'), '切换书目后列表应更新为新书');
 assert(elsById.currentTitle.textContent.includes('第一章'), '切换书目后当前阅读条应更新');
-console.log('侧边栏脚本运行时(渲染/换书/高亮): 通过');
+
+// 带 center 的定位消息应触发滚动(换书后把列表滚到当前章)
+scrollCalls.length = 0;
+for (const fn of sidebarMessageHandlers) {
+  fn({ data: { type: 'current', index: 1, center: true } });
+}
+assert(scrollCalls.length > 0, 'center=true 时应滚动定位到当前章');
+assert(scrollCalls[0] && scrollCalls[0].block === 'center', '应把当前章滚动到列表中间');
+scrollCalls.length = 0;
+for (const fn of sidebarMessageHandlers) {
+  fn({ data: { type: 'current', index: 0, center: false } });
+}
+assert(scrollCalls.length === 0, 'center=false 时不应改变滚动位置(阅读中翻章不打扰)');
+console.log('侧边栏脚本运行时(渲染/换书/高亮/定位): 通过');
 
 
 // --- 消息协议 ---
@@ -550,6 +564,12 @@ assert(libMsg && libMsg.path === 'D:/我的书库', 'setLibrary 应推送书库�
 provider.setLibrary('');
 assert(received[received.length - 1].path === '', '未设置书库时应推送空路径');
 
+received.length = 0;
+provider.setCurrent(5, true);
+const centerMsg = received.find((m) => m.type === 'current');
+assert(centerMsg && centerMsg.center === true, 'setCurrent(center=true) 应推送居中定位消息');
+provider.setCurrent(6);
+assert(received[received.length - 1].center === false, '默认 setCurrent 不应触发滚动');
 received.length = 0;
 provider.setShelf([
   { filePath: 'D:/a.txt', title: '测试之书', author: '测试作者', chapterIndex: 275, totalChapters: 454, current: true },
