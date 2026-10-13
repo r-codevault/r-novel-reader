@@ -196,8 +196,12 @@ for (const gone of ['id="navPrev"', 'id="navCatalog"', 'id="navNext"']) {
 // 默认位置应跟随阅读区域(正文列右侧留白), 而非贴窗口右缘
 assert(capturedHtml.includes('function syncFabAnchor'), '悬浮球位置应跟随阅读区域');
 assert(
-  /function syncFabAnchor\(\)[\s\S]{0,600}--content-width/.test(capturedHtml),
-  '跟随位置应按阅读宽度计算'
+  /function fabLayoutMetrics[\s\S]{0,600}--content-width/.test(capturedHtml),
+  '位置计算应基于阅读宽度(--content-width)'
+);
+assert(
+  /function syncFabAnchor\(\)[\s\S]{0,300}fabLayoutMetrics\(\)/.test(capturedHtml),
+  '默认位置应按阅读宽度重算'
 );
 assert(
   /syncFabAnchor\(\)[\s\S]{0,80}else/.test(capturedHtml) || capturedHtml.includes('syncFabAnchor();'),
@@ -209,6 +213,15 @@ assert(capturedHtml.includes('fabLeft'), '拖动后的位置应可持久化');
 assert(capturedHtml.includes('#fabs.awake'), '闲置后应淡化以免遮挡正文');
 // 关键回归: 点击必须在 pointerup 上生效, 不能依赖 click 事件
 // (pointerdown 就 setPointerCapture 会把后续 click 重定向到容器, 导致点了没反应)
+assert(
+  /function snapFabPosition[\s\S]{0,300}fabLayoutMetrics\(\)/.test(capturedHtml),
+  '拖动松手应吸附到正文列两侧(按阅读宽度计算)'
+);
+assert(
+  /function endDrag\(\)[\s\S]{0,900}snapFabPosition/.test(capturedHtml),
+  '松手时应调用吸附函数'
+);
+assert(capturedHtml.includes("'left' : 'right'"), '应根据落点吸附到左侧或右侧');
 assert(capturedHtml.includes('function activateFab'), '应有统一的悬浮球动作处理');
 assert(
   /function endDrag\(\)[\s\S]{0,900}activateFab\(pressId\)/.test(capturedHtml),

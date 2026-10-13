@@ -716,20 +716,47 @@ export class ReaderPanel {
    * 悬浮球默认位置: 跟随阅读区域的右边缘(起点那样贴在正文列的右侧留白里)。
    * 留白不足时退回贴近窗口右侧, 避免压住正文。
    */
-  function syncFabAnchor() {
-    if (fabDragged) {
-      return;
-    }
+  function fabLayoutMetrics() {
     var BALL_W = 58;
-    var GAP = 12; // 与正文列右缘保持的间距
+    var GAP = 12; // 与正文列边缘保持的间距
     var vw = window.innerWidth;
     var cssW =
       parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--content-width')) ||
       720;
     var contentW = Math.min(cssW, Math.max(0, vw - 40)); // #reader 左右各 20px padding
     var gutter = (vw - contentW) / 2; // 正文列外侧留白
+    return { BALL_W: BALL_W, GAP: GAP, vw: vw, contentW: contentW, gutter: gutter };
+  }
+
+  /**
+   * 拖动松手后的吸附位置: 吸附到正文列两侧的留白里(贴着纸面边缘),
+   * 留白不足时退回贴近窗口边缘。
+   */
+  function snapFabPosition(side, top) {
+    var m = fabLayoutMetrics();
+    var hasRoom = m.gutter >= m.GAP + m.BALL_W + 12;
+    var left;
+    if (side === 'left') {
+      // 球的右缘贴在正文列左缘外 GAP 处
+      left = hasRoom ? m.gutter - m.GAP - m.BALL_W : 16;
+    } else {
+      // 球的左缘贴在正文列右缘外 GAP 处
+      left = hasRoom ? m.vw - m.gutter + m.GAP : m.vw - m.BALL_W - 16;
+    }
+    var maxY = Math.max(0, window.innerHeight - 110);
+    return {
+      left: Math.round(Math.min(Math.max(16, left), m.vw - m.BALL_W - 16)),
+      top: Math.round(Math.min(Math.max(8, top), maxY)),
+    };
+  }
+
+  function syncFabAnchor() {
+    if (fabDragged) {
+      return;
+    }
+    var m = fabLayoutMetrics();
     // 让球的左缘落在正文列右缘 + GAP 处
-    var right = gutter - BALL_W - GAP;
+    var right = m.gutter - m.BALL_W - m.GAP;
     if (!isFinite(right) || right < 12) {
       right = 12; // 留白不足时退回贴近窗口右侧
     }
@@ -778,11 +805,12 @@ export class ReaderPanel {
     function endDrag() {
       if (dragging) {
         var rect = els.fabs.getBoundingClientRect();
-        // 松手后吸附到最近的左右边
-        var left = rect.left < window.innerWidth / 2 ? 16 : window.innerWidth - rect.width - 16;
-        applyFabPosition({ left: left, top: rect.top });
+        // 松手后吸附到正文列两侧(左/右留白里, 贴着纸面边缘)
+        var side = rect.left + rect.width / 2 < window.innerWidth / 2 ? 'left' : 'right';
+        var pos = snapFabPosition(side, rect.top);
+        applyFabPosition(pos);
         fabDragged = true;
-        persistSettings({ fabLeft: left, fabTop: Math.round(rect.top) });
+        persistSettings({ fabLeft: pos.left, fabTop: pos.top });
       } else if (pressId) {
         // 未移动 -> 视为点击(不依赖 click 事件, 避免指针捕获/事件重定向导致无响应)
         lastPointerActivate = Date.now();
