@@ -209,6 +209,13 @@ assert(
 );
 assert(capturedHtml.includes('fabDragged'), '拖动过之后应以拖动位置为准');
 assert(capturedHtml.includes('resetFabPosition'), '双击应能恢复跟随阅读区域的位置');
+// 纵向边界: 必须按实测高度 + 底部状态栏钳制, 不能用写死的估算值(四球工具栏会超出下边界)
+assert(capturedHtml.includes('function fabMaxTop'), '应有纵向边界钳制函数');
+assert(
+  /function fabMaxTop\(\)[\s\S]{0,300}offsetHeight/.test(capturedHtml),
+  '纵向钳制应按悬浮球实测高度计算'
+);
+assert(capturedHtml.includes('els.fabs.offsetHeight') && !capturedHtml.includes('innerHeight - 110'), '不应再用写死的高度估算');
 assert(capturedHtml.includes('fabLeft'), '拖动后的位置应可持久化');
 assert(capturedHtml.includes('#fabs.awake'), '闲置后应淡化以免遮挡正文');
 // 关键回归: 点击必须在 pointerup 上生效, 不能依赖 click 事件

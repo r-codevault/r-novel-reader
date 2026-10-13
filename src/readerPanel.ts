@@ -702,12 +702,18 @@ export class ReaderPanel {
   document.addEventListener('mousemove', wakeFabs, { passive: true });
   document.addEventListener('scroll', wakeFabs, { passive: true });
 
+  /** 悬浮球纵向可放的最大 top(避免下边界超出: 减去实测高度与底部状态栏) */
+  function fabMaxTop() {
+    var h = els.fabs.offsetHeight || 240;
+    var statusH = els.statusbar ? els.statusbar.offsetHeight : 30;
+    return Math.max(8, window.innerHeight - h - statusH - 8);
+  }
+
   function applyFabPosition(pos) {
     if (!pos) { return; }
     var maxX = Math.max(0, window.innerWidth - 60);
-    var maxY = Math.max(0, window.innerHeight - 110);
     els.fabs.style.left = Math.min(Math.max(0, pos.left), maxX) + 'px';
-    els.fabs.style.top = Math.min(Math.max(0, pos.top), maxY) + 'px';
+    els.fabs.style.top = Math.min(Math.max(0, pos.top), fabMaxTop()) + 'px';
     els.fabs.style.right = 'auto';
     els.fabs.style.transform = 'none';
   }
@@ -743,7 +749,7 @@ export class ReaderPanel {
       // 球的左缘贴在正文列右缘外 GAP 处
       left = hasRoom ? m.vw - m.gutter + m.GAP : m.vw - m.BALL_W - 16;
     }
-    var maxY = Math.max(0, window.innerHeight - 110);
+    var maxY = fabMaxTop();
     return {
       left: Math.round(Math.min(Math.max(16, left), m.vw - m.BALL_W - 16)),
       top: Math.round(Math.min(Math.max(8, top), maxY)),
@@ -762,8 +768,16 @@ export class ReaderPanel {
     }
     els.fabs.style.right = right + 'px';
     els.fabs.style.left = 'auto';
-    els.fabs.style.top = '50%';
-    els.fabs.style.transform = 'translateY(-50%)';
+    // 默认垂直居中; 空间不足(窗口太矮)时贴顶, 避免下边界超出
+    var h = els.fabs.offsetHeight || 240;
+    var avail = window.innerHeight - (els.statusbar ? els.statusbar.offsetHeight : 30) - 16;
+    if (h > avail) {
+      els.fabs.style.top = '8px';
+      els.fabs.style.transform = 'none';
+    } else {
+      els.fabs.style.top = '50%';
+      els.fabs.style.transform = 'translateY(-50%)';
+    }
   }
 
   (function initFabDrag() {
