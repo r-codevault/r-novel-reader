@@ -396,6 +396,108 @@ assert(init2.payload.chapterIndex === 1, '换书后应定位到该书进度章�
 assert(panelTitle === '第二本书 - 小说阅读', '编辑器标签标题应更新为新书');
 console.log('换书重建阅读面板(回归): 通过');
 
+// --- 阅读面板脚本运行时行为: 用最小 DOM 桩真实执行脚本并派发消息 ---
+// (防止"字段没传下去/引用未定义变量"这类只有运行时才暴露的问题)
+{
+  const vm = require('vm');
+  const byId = {};
+  const scrollCalls2 = [];
+  function el2() {
+    const el = {
+      children: [], textContent: '', value: '', title: '', dataset: {},
+      style: { setProperty() {}, getPropertyValue() { return ''; }, removeProperty() {} },
+      disabled: false, offsetHeight: 246, offsetWidth: 58,
+      classList: { add(){}, remove(){}, toggle(){}, contains(){ return false; } },
+      addEventListener(){}, removeEventListener(){},
+      querySelector(){ return el2(); }, querySelectorAll(){ return []; },
+      closest(){ return null; }, contains(){ return false; },
+      scrollIntoView(o){ scrollCalls2.push(o || null); }, focus(){}, click(){}, appendChild(){},
+      setAttribute(){}, getAttribute(){ return null; }, setPointerCapture(){},
+      getBoundingClientRect(){ return { left: 0, top: 0, width: 58, height: 246 }; },
+    };
+    Object.defineProperty(el, 'innerHTML', {
+      configurable: true,
+      get() { return el._html || ''; },
+      set(v) {
+        el._html = String(v);
+        const count = (el._html.match(/<div\b/g) || []).length;
+        el.children = [];
+        for (let i = 0; i < count; i++) { el.children.push(el2()); }
+      },
+    });
+    return el;
+  }
+  const panelMsgHandlers = [];
+  const panelPosted = [];
+  const panelScript = capturedHtml
+    .split('<script nonce=')[1]
+    .split('</script>')[0]
+    .replace(/^[^>]*>/, '');
+  const sandbox2 = {
+    acquireVsCodeApi() {
+      return { postMessage(m) { panelPosted.push(m); }, getState() { return {}; }, setState() {} };
+    },
+    document: {
+      getElementById(id) { return (byId[id] ||= el2()); },
+      querySelector() { return el2(); },
+      querySelectorAll() { return []; },
+      createElement() { return el2(); },
+      addEventListener() {},
+      body: el2(),
+      documentElement: el2(),
+      title: '',
+    },
+    window: {
+      addEventListener(type, fn) { if (type === 'message') { panelMsgHandlers.push(fn); } },
+      innerWidth: 1400, innerHeight: 900, scrollTo() {},
+    },
+    getComputedStyle() { return { getPropertyValue() { return '720px'; } }; },
+    requestAnimationFrame(fn) { fn(); },
+    ResizeObserver: class { observe() {} disconnect() {} },
+    console, setTimeout, clearTimeout,
+    location: { href: '' }, navigator: { userAgent: 'node' },
+  };
+  vm.createContext(sandbox2);
+  vm.runInContext(panelScript, sandbox2, { filename: 'readerPanel-webview.js' });
+  assert(panelMsgHandlers.length > 0, '阅读面板脚本应注册 message 监听');
+
+  function dispatch2(msg) {
+    for (const fn of panelMsgHandlers) { fn({ data: msg }); }
+  }
+  dispatch2({
+    type: 'init',
+    payload: {
+      filePath: 'D:/a.txt', bookTitle: '运行时测试书', author: '作者',
+      chapters: [
+        { index: 0, title: '第1章 甲' }, { index: 1, title: '第2章 乙' }, { index: 2, title: '第3章 丙' },
+      ],
+      chapterIndex: 2, chapterTitle: '第3章 丙',
+      paragraphs: ['第一段', '第二段'], totalChapters: 3, totalWords: 3000,
+      chapterWords: 1234, scrollRatio: 0.25,
+      settings: {
+        fontSize: 16, fontFamily: 'system', lineHeight: 1.8,
+        paragraphSpacing: 0.8, theme: 'sepia', contentWidth: 720,
+      },
+    },
+  });
+  assert(byId.content.innerHTML.includes('第3章 丙'), 'init 后应渲染正文');
+  assert(byId.chapterInfo.textContent === '第 3 章 / 共 3 章', 'init 后应显示章节位置');
+  // 关键回归: init 时必须把本章字数一起传给渲染(否则底部字数空白, 点目录后才出现)
+  assert(byId.chapterWords.textContent === '本章 1,234 字', 'init 后底部应显示本章字数');
+  assert(byId.catSub.textContent === '共 3 章', '侧栏目录应显示总章数');
+
+  dispatch2({
+    type: 'chapter',
+    payload: {
+      index: 0, title: '第1章 甲', paragraphs: ['x'], totalChapters: 3,
+      chapterWords: 55, scrollRatio: 0,
+    },
+  });
+  assert(byId.chapterWords.textContent === '本章 55 字', '切章后字数应更新');
+  assert(byId.chapterInfo.textContent === '第 1 章 / 共 3 章', '切章后章节位置应更新');
+  console.log('阅读面板脚本运行时(正文/字数/章节位置): 通过');
+}
+
 // ================================================================ 2. 侧边栏视图
 const { ChapterViewProvider } = require('../dist/chapterViewProvider');
 

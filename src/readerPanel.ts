@@ -849,7 +849,8 @@ export class ReaderPanel {
   function chapterParts(title) {
     var m = /^(第[0-9０-９一二三四五六七八九十百千零两]+[章节回卷部篇集])(.*)$/.exec(title.trim());
     if (m) { return { no: m[1], name: m[2].trim() }; }
-    var m2 = /^(Chapter\s*\d+)(.*)$/i.exec(title.trim());
+    // 注意: 模板字符串里 \s \d 会被吃掉反斜杠, 必须写成 \\s \\d
+    var m2 = /^(Chapter\\s*\\d+)(.*)$/i.exec(title.trim());
     if (m2) { return { no: m2[1], name: m2[2].trim() }; }
     return { no: '', name: title.trim() };
   }
@@ -1126,7 +1127,7 @@ export class ReaderPanel {
     var words = state.chapterWords || 0;
     els.chapterWords.textContent =
       state.novel && words > 0
-        ? '本章 ' + String(words).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' 字'
+        ? '本章 ' + String(words).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',') + ' 字'
         : '';
   }
 
@@ -1243,6 +1244,7 @@ export class ReaderPanel {
         renderChapter({
           index: p.chapterIndex, title: p.chapterTitle,
           paragraphs: p.paragraphs, totalChapters: p.totalChapters,
+          chapterWords: p.chapterWords || 0,
           scrollRatio: p.scrollRatio || 0
         });
         var words = p.totalWords >= 10000
