@@ -523,6 +523,7 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
+    var key = payload.bookTitle + '|' + payload.chapters.length;
     var bookChanged = key !== renderedKey;
     if (bookChanged) {
       chapters = payload.chapters;

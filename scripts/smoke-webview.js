@@ -445,6 +445,97 @@ assert(chapterHtml.includes('导入时会把小说复制到该目录'), '设置�
 assert(chapterHtml.includes('选择书库目录'), '设置页应有选择目录按钮');
 console.log('设置页(存储位置): 通过');
 
+// --- 侧边栏脚本运行时行为: 用最小 DOM 桩真实执行脚本 ---
+// (防止"引用未定义变量"之类的初始化/渲染抛错 —— v1.7.4 曾因 applyNovel 缺 var key 导致列表全空)
+const vm = require('vm');
+function makeEl() {
+  const el = {
+    children: [],
+    textContent: '', value: '', title: '', dataset: {}, style: {},
+    classList: { add(){}, remove(){}, toggle(){}, contains(){ return false; } },
+    addEventListener(){}, removeEventListener(){},
+    querySelector(){ return makeEl(); }, querySelectorAll(){ return []; },
+    closest(){ return null; }, contains(){ return false; },
+    scrollIntoView(){}, focus(){}, click(){}, appendChild(){},
+    setAttribute(){}, getAttribute(){ return null; },
+    getBoundingClientRect(){ return { left: 0, top: 0, width: 58, height: 100 }; },
+  };
+  // 极简 innerHTML 模拟: 赋值时按 <div 出现次数生成 children, 供 renderChapters 的
+  // `Array.prototype.slice.call(el.children)` 遍历
+  Object.defineProperty(el, 'innerHTML', {
+    configurable: true,
+    get() { return el._html || ''; },
+    set(v) {
+      el._html = String(v);
+      const count = (el._html.match(/<div\b/g) || []).length;
+      el.children = [];
+      for (let i = 0; i < count; i++) { el.children.push(makeEl()); }
+    },
+  });
+  return el;
+}
+const sidebarPosted = [];
+const elsById = {};
+const sidebarMessageHandlers = [];
+const sidebarScript = chapterHtml
+  .split('<script nonce=')[1]
+  .split('</script>')[0]
+  .replace(/^[^>]*>/, '');
+const sidebarSandbox = {
+  acquireVsCodeApi() {
+    return {
+      postMessage(m) { sidebarPosted.push(m); },
+      getState() { return {}; },
+      setState() {},
+    };
+  },
+  document: {
+    getElementById(id) { return (elsById[id] ||= makeEl()); },
+    querySelector() { return makeEl(); },
+    querySelectorAll() { return []; },
+    createElement() { return makeEl(); },
+    addEventListener() {},
+    body: makeEl(),
+    documentElement: makeEl(),
+  },
+  window: {
+    addEventListener(type, fn) { if (type === 'message') { sidebarMessageHandlers.push(fn); } },
+    innerWidth: 1200, innerHeight: 800,
+    getComputedStyle() { return { getPropertyValue() { return '720px'; } }; },
+    scrollTo() {},
+  },
+  console, setTimeout, clearTimeout,
+  location: { href: '' }, navigator: { userAgent: 'node' },
+};
+vm.createContext(sidebarSandbox);
+vm.runInContext(sidebarScript, sidebarSandbox, { filename: 'sidebar-webview.js' });
+assert(sidebarMessageHandlers.length > 0, '侧边栏脚本应注册 message 监听');
+
+function dispatchNovel(payload) {
+  for (const fn of sidebarMessageHandlers) {
+    fn({ data: { type: 'novel', payload } });
+  }
+}
+// 第一本书(3 章, 当前第 3 章)
+dispatchNovel({
+  hasNovel: true, bookTitle: '测试书A',
+  chapters: [ { index: 0, title: '第1章 甲' }, { index: 1, title: '第2章 乙' }, { index: 2, title: '第3章 丙' } ],
+  currentIndex: 2,
+});
+assert(elsById.chapterList.innerHTML.includes('data-i="2"'), '应渲染章节列表');
+assert(elsById.currentTitle.textContent.includes('第3章'), '当前阅读条应显示当前章');
+
+// 切换到另一本书(2 章, 当前第 2 章) —— v1.7.4 换书滚动定位的回归点
+dispatchNovel({
+  hasNovel: true, bookTitle: '测试书B',
+  chapters: [ { index: 0, title: '序章' }, { index: 1, title: '第一章' } ],
+  currentIndex: 1,
+});
+assert(elsById.chapterList.innerHTML.includes('第一章'), '切换书目后列表应更新为新书');
+assert(elsById.currentTitle.textContent.includes('第一章'), '切换书目后当前阅读条应更新');
+console.log('侧边栏脚本运行时(渲染/换书/高亮): 通过');
+
+
 // --- 消息协议 ---
 received.length = 0;
 provider.setMode('shelf');
