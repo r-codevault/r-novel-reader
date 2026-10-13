@@ -523,15 +523,17 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    var key = payload.bookTitle + '|' + payload.chapters.length;
-    if (key !== renderedKey) {
+    var bookChanged = key !== renderedKey;
+    if (bookChanged) {
       chapters = payload.chapters;
       renderChapters(chapters);
       renderedKey = key;
       currentIndex = -1;
     }
     elCurrentWrap.classList.add('visible');
-    setCurrent(typeof payload.currentIndex === 'number' ? payload.currentIndex : -1, false);
+    var idx = typeof payload.currentIndex === 'number' ? payload.currentIndex : -1;
+    // 换书/重建列表后滚动定位到当前章, 避免沿用上一本书的滚动位置
+    setCurrent(idx, bookChanged && idx >= 0);
   }
 
   function setCurrent(index, center) {
