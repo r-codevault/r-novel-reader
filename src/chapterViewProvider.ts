@@ -425,6 +425,12 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
     elPaneShelf.classList.toggle('active', mode === 'shelf');
     elPaneChapters.classList.toggle('active', mode === 'chapters');
     elPaneSettings.classList.toggle('active', mode === 'settings');
+    // 切回目录模式时重新定位到当前章:
+    // 章节列表在书架模式下是隐藏的, 隐藏期间 scrollIntoView 不生效,
+    // 因此必须等章节面板可见后再定位一次
+    if (mode === 'chapters' && currentIndex >= 0) {
+      setCurrent(currentIndex, true);
+    }
   }
 
   /* ---------------- 设置: 书库目录 ---------------- */

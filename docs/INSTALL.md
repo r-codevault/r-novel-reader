@@ -58,7 +58,7 @@ npm run compile    # 编译 src/*.ts → dist/*.js
 npm run package
 ```
 
-成功后当前目录会出现 `novel-reader-<版本号>.vsix`，例如 `novel-reader-1.7.9.vsix`。
+成功后当前目录会出现 `novel-reader-<版本号>.vsix`，例如 `novel-reader-1.7.10.vsix`。
 
 > **为什么不用 `npx @vscode/vsce package`？** vsce 只能自动识别 GitHub/GitLab 仓库，本项目托管在 Gitee，README 中的相对链接会让打包报错。`npm run package` 已在脚本中固化所需参数：
 >
@@ -73,13 +73,13 @@ npm run package
 ### 4. 安装
 
 ```bash
-code --install-extension novel-reader-1.7.9.vsix
+code --install-extension novel-reader-1.7.10.vsix
 ```
 
 Windows 上若 `code` 不在 PATH，请用 VS Code 安装目录下的命令：
 
 ```powershell
-& "D:\Program Files (x86)\Microsoft VS Code\bin\code.cmd" --install-extension novel-reader-1.7.9.vsix
+& "D:\Program Files (x86)\Microsoft VS Code\bin\code.cmd" --install-extension novel-reader-1.7.10.vsix
 ```
 
 或直接用图形界面（见方式二）。
@@ -95,9 +95,9 @@ Windows 上若 `code` 不在 PATH，请用 VS Code 安装目录下的命令：
 ### 命令行安装
 
 ```bash
-code --install-extension novel-reader-1.7.9.vsix
+code --install-extension novel-reader-1.7.10.vsix
 # 覆盖安装时加 --force：
-code --install-extension novel-reader-1.7.9.vsix --force
+code --install-extension novel-reader-1.7.10.vsix --force
 ```
 
 ### 图形界面安装
@@ -146,14 +146,14 @@ npm test        # 可选：跑一遍解析器与界面冒烟测试
 
 2. **解包 vsix**
 
-   将 `novel-reader-1.7.9.vsix` 改名为 `.zip` 后解压（或直接解压 vsix），取出内层 `extension/` 目录的内容。
+   将 `novel-reader-1.7.10.vsix` 改名为 `.zip` 后解压（或直接解压 vsix），取出内层 `extension/` 目录的内容。
 
 3. **放入正确的目录名**
 
    目录名必须是 `<publisher>.<name>-<version>`，本插件为：
 
    ```
-   <扩展目录>/local.novel-reader-1.7.9/
+   <扩展目录>/local.novel-reader-1.7.10/
        ├── package.json
        ├── README.md
        ├── dist/
@@ -201,7 +201,7 @@ npm test        # 可选：跑一遍解析器与界面冒烟测试
 **方式二/三（vsix 安装）**：直接安装新 vsix 即可覆盖
 
 ```bash
-code --install-extension novel-reader-1.7.9.vsix
+code --install-extension novel-reader-1.7.10.vsix
 ```
 
 **方式四（离线解包）**：
@@ -233,7 +233,7 @@ code --install-extension novel-reader-1.7.9.vsix
 | 书架里的书不见了 / 阅读进度丢失 | 扩展被卸载重装、或扩展 ID 变化导致读不到原数据 | 进度保存在 VS Code 全局存储中并**按扩展 ID（`local.novel-reader`）归属**，保持该 ID 不变即可自动延续；若确认目录名与清单一致，重启后仍会恢复 |
 | 点书架里的书提示「文件已不在原位置」 | txt 被移动、改名或删除（插件只记录路径，不搬动文件） | 在弹窗里选 **重新选择文件** 指向新位置（**阅读进度会保留**）；不想留了就选「从书架移除」 |
 | 导入时提示「复制到书库失败」 | 书库目录不存在、没有写权限或路径非法 | 在 `⚙ 设置 → 存储位置` 里重新选一个可写目录；插件会回退为直接读取原文件 |
-| 点了「选择书库目录」后界面没变化 | ① 扩展更新后**仅重载窗口**，新增的配置项可能尚未注册（`没有注册配置 ... 无法写入用户设置`）；② 旧版本插件 | 升级到 1.7.9+ 后**完全退出并重启 VS Code**（不只是 Reload Window）。新版把书库目录保存在插件自身存储里，不再依赖配置注册表 |
+| 点了「选择书库目录」后界面没变化 | ① 扩展更新后**仅重载窗口**，新增的配置项可能尚未注册（`没有注册配置 ... 无法写入用户设置`）；② 旧版本插件 | 升级到 1.7.10+ 后**完全退出并重启 VS Code**（不只是 Reload Window）。新版把书库目录保存在插件自身存储里，不再依赖配置注册表 |
 | 活动栏没有「小说阅读」图标 | ① 未重启 VS Code；② 与其他小说插件的视图容器 ID 冲突 | ① 先 `Developer: Reload Window`；② 在扩展面板禁用其他小说插件后重启 |
 | 命令面板搜不到命令 | 扩展未激活或版本不兼容 | 检查 VS Code 版本是否 ≥ 1.85；查看 `帮助 → 切换开发人员工具 → 控制台` 有无报错 |
 | 中文正文全是乱码 | 罕见混合编码 | 用编辑器将文件另存为 UTF-8 后重新打开 |

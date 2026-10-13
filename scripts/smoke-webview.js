@@ -664,6 +664,17 @@ for (const fn of sidebarMessageHandlers) {
   fn({ data: { type: 'current', index: 0, center: false } });
 }
 assert(scrollCalls.length === 0, 'center=false 时不应改变滚动位置(阅读中翻章不打扰)');
+
+// 从书架模式切回目录模式时必须重新定位(章节列表在书架模式下隐藏, 隐藏期间定位无效)
+scrollCalls.length = 0;
+for (const fn of sidebarMessageHandlers) {
+  fn({ data: { type: 'mode', mode: 'shelf' } });
+}
+assert(scrollCalls.length === 0, '切到书架模式不应触发滚动');
+for (const fn of sidebarMessageHandlers) {
+  fn({ data: { type: 'mode', mode: 'chapters' } });
+}
+assert(scrollCalls.length > 0, '切回目录模式应重新定位到当前章');
 console.log('侧边栏脚本运行时(渲染/换书/高亮/定位): 通过');
 
 
