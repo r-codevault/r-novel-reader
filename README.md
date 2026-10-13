@@ -8,7 +8,7 @@
 | --- | --- |
 | 插件 ID | `local.novel-reader` |
 | 显示名称 | 小说阅读器 |
-| 当前版本 | 1.7.10 |
+| 当前版本 | 1.8.0 |
 | 要求 | VS Code 1.85.0+（实测 1.128.0），Node.js 18+（仅打包时需要） |
 | 开源协议 | MIT |
 
@@ -130,10 +130,10 @@ npm run compile
 
 # 3. 打包成 vsix
 npm run package
-# 生成 novel-reader-1.7.10.vsix
+# 生成 novel-reader-1.8.0.vsix
 
 # 4. 安装到 VS Code
-code --install-extension novel-reader-1.7.10.vsix
+code --install-extension novel-reader-1.8.0.vsix
 ```
 
 安装后**重启 VS Code**（或 `Ctrl+Shift+P` → `Developer: Reload Window`）。
@@ -188,8 +188,12 @@ npm run compile
 
 | 按键 | 作用 |
 | --- | --- |
-| `Alt` + `←` | 上一章 |
-| `Alt` + `→` | 下一章 |
+| `Alt` + `←` | 上一章（**可自定义**） |
+| `Alt` + `→` | 下一章（**可自定义**） |
+| `Ctrl` + 滚轮 | 阅读页内放大 / 缩小正文字号（macOS 为 `Cmd` + 滚轮） |
+| `Esc` | 关闭目录 / 设置面板 |
+
+> 上一章/下一章按键可在 VS Code 设置里改：`novelReader.shortcutPrevChapter` / `novelReader.shortcutNextChapter`，写法如 `ctrl+shift+p`、`alt+[`、`alt+arrowleft`；**留空即禁用**。修改后立即生效（阅读页重新打开时会带上最新配置）。
 
 ### 阅读设置项
 
@@ -204,6 +208,8 @@ npm run compile
 | `novelReader.paragraphSpacing` | number | `0.8` | 0–2（em） |
 | `novelReader.contentWidth` | number | `720` | 480–1200（像素） |
 | `novelReader.theme` | string | `sepia` | `sepia` / `green` / `white` / `gray` / `dark` / `ink` |
+| `novelReader.shortcutPrevChapter` | string | `alt+arrowleft` | 阅读页内「上一章」快捷键，如 `ctrl+shift+p`；留空禁用 |
+| `novelReader.shortcutNextChapter` | string | `alt+arrowright` | 阅读页内「下一章」快捷键；留空禁用 |
 
 > 阅读偏好与书架数据都保存在 VS Code 的 `globalState` 中；`settings.json` 提供的是默认值，在阅读界面中的调整优先级更高。
 

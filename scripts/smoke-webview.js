@@ -111,15 +111,9 @@ function checkInlineScript(html, label) {
 // ================================================================ 1. 阅读面板
 const { ReaderPanel } = require('../dist/readerPanel');
 
-const defaults = {
-  fontSize: 16,
-  fontFamily: 'system',
-  lineHeight: 1.8,
-  paragraphSpacing: 0.8,
-  theme: 'sepia',
-  contentWidth: 720,
-  toolbarCollapsed: false,
-};
+// 直接复用真实的默认设置, 避免测试桩与 settings.ts 漂移
+const { DEFAULT_SETTINGS } = require('../dist/settings');
+const defaults = { ...DEFAULT_SETTINGS };
 const store = {
   get: () => ({ ...defaults }),
   update: async (p) => ({ ...defaults, ...p }),
@@ -155,7 +149,7 @@ const panelIds = [
   'bookInfo', 'chapterInfo',
   'fabs', 'fabPrev', 'fabCatalog', 'fabNext', 'fabSettings',
   'catalogPanel', 'catSub', 'catBody', 'catClose', 'catReverse', 'catPrev', 'catNext', 'catPos',
-  'chapterWords',
+  'chapterWords', 'shortcutHint',
 ];
 for (const id of panelIds) {
   assert(capturedHtml.includes(`id="${id}"`), `阅读面板缺少元素 #${id}`);
@@ -348,6 +342,15 @@ assert(capturedHtml.includes('id="chapterWords"'), '状态栏应有字数元素'
 console.log('状态栏本章字数: 通过');
 console.log('底部导航按钮已移除(并入悬浮球): 通过');
 
+// --- 可自定义快捷键 + Ctrl+滚轮缩放 ---
+assert(capturedHtml.includes('function parseShortcut'), '应有快捷键解析');
+assert(capturedHtml.includes('function matchShortcut'), '应有快捷键匹配');
+assert(capturedHtml.includes('state.prevCombo') && capturedHtml.includes('state.nextCombo'), '应使用配置的快捷键');
+assert(/addEventListener\(\s*'wheel'/.test(capturedHtml), '应监听滚轮事件');
+assert(capturedHtml.includes('passive: false'), '滚轮监听需可阻止默认缩放');
+assert(capturedHtml.includes('shortcutLabel'), '设置面板应展示快捷键提示');
+console.log('快捷键自定义 + Ctrl+滚轮缩放: 通过');
+
 // --- 设置面板必须是固定悬浮窗(不随内容滚动) ---
 assert(
   /#settingsPanel\s*\{[^}]*position:\s*fixed/.test(capturedHtml),
@@ -402,13 +405,24 @@ console.log('换书重建阅读面板(回归): 通过');
   const vm = require('vm');
   const byId = {};
   const scrollCalls2 = [];
+  const docListeners = {};
   function el2() {
+    const classes = new Set();
     const el = {
       children: [], textContent: '', value: '', title: '', dataset: {},
       style: { setProperty() {}, getPropertyValue() { return ''; }, removeProperty() {} },
       disabled: false, offsetHeight: 246, offsetWidth: 58,
-      classList: { add(){}, remove(){}, toggle(){}, contains(){ return false; } },
-      addEventListener(){}, removeEventListener(){},
+      classList: {
+        add(c) { classes.add(c); },
+        remove(c) { classes.delete(c); },
+        toggle(c, force) {
+          const on = force === undefined ? !classes.has(c) : !!force;
+          if (on) { classes.add(c); } else { classes.delete(c); }
+          return on;
+        },
+        contains(c) { return classes.has(c); },
+      },
+      addEventListener() {}, removeEventListener() {},
       querySelector(){ return el2(); }, querySelectorAll(){ return []; },
       closest(){ return null; }, contains(){ return false; },
       scrollIntoView(o){ scrollCalls2.push(o || null); }, focus(){}, click(){}, appendChild(){},
@@ -442,7 +456,7 @@ console.log('换书重建阅读面板(回归): 通过');
       querySelector() { return el2(); },
       querySelectorAll() { return []; },
       createElement() { return el2(); },
-      addEventListener() {},
+      addEventListener(type, fn) { (docListeners[type] ||= []).push(fn); },
       body: el2(),
       documentElement: el2(),
       title: '',
@@ -477,6 +491,7 @@ console.log('换书重建阅读面板(回归): 通过');
       settings: {
         fontSize: 16, fontFamily: 'system', lineHeight: 1.8,
         paragraphSpacing: 0.8, theme: 'sepia', contentWidth: 720,
+        shortcutPrev: 'alt+arrowleft', shortcutNext: 'alt+arrowright',
       },
     },
   });
@@ -495,7 +510,59 @@ console.log('换书重建阅读面板(回归): 通过');
   });
   assert(byId.chapterWords.textContent === '本章 55 字', '切章后字数应更新');
   assert(byId.chapterInfo.textContent === '第 1 章 / 共 3 章', '切章后章节位置应更新');
-  console.log('阅读面板脚本运行时(正文/字数/章节位置): 通过');
+
+  // 侧边栏「打开阅读设置」按钮 -> openSettings 消息必须真的打开设置面板
+  dispatch2({ type: 'openSettings' });
+  assert(byId.settingsPanel.classList.contains('open'), 'openSettings 消息应打开设置面板');
+
+  // 自定义快捷键: 默认 alt+arrowleft / alt+arrowright 应触发上/下一章
+  function keyEvent(key, mods) {
+    return Object.assign({ key, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false,
+      target: { tagName: 'BODY' }, preventDefault() {} }, mods || {});
+  }
+  // 先定位到第 2 章, 便于同时验证 上一章(->1) 与 下一章(->3)
+  dispatch2({
+    type: 'chapter',
+    payload: { index: 1, title: '第2章 乙', paragraphs: ['y'], totalChapters: 3, chapterWords: 88, scrollRatio: 0 },
+  });
+  panelPosted.length = 0;
+  for (const fn of (docListeners.keydown || [])) { fn(keyEvent('ArrowLeft', { altKey: true })); }
+  assert(
+    panelPosted.some((m) => m.type === 'getChapter' && m.index === 0),
+    '默认 alt+← 应切到上一章'
+  );
+  panelPosted.length = 0;
+  for (const fn of (docListeners.keydown || [])) { fn(keyEvent('ArrowRight', { altKey: true })); }
+  assert(
+    panelPosted.some((m) => m.type === 'getChapter' && m.index === 2),
+    '默认 alt+→ 应切到下一章'
+  );
+  // 输入控件获得焦点时不应触发翻章(避免与滑块方向键冲突)
+  panelPosted.length = 0;
+  for (const fn of (docListeners.keydown || [])) {
+    fn(keyEvent('ArrowLeft', { altKey: true, target: { tagName: 'INPUT' } }));
+  }
+  assert(panelPosted.length === 0, '设置面板输入控件聚焦时不应翻章');
+
+  // Ctrl + 滚轮 缩放字号
+  dispatch2({
+    type: 'settings',
+    payload: {
+      fontSize: 16, fontFamily: 'system', lineHeight: 1.8,
+      paragraphSpacing: 0.8, theme: 'sepia', contentWidth: 720,
+      shortcutPrev: 'alt+arrowleft', shortcutNext: 'alt+arrowright',
+    },
+  });
+  const wheelHandler = (docListeners.wheel || [])[0];
+  assert(wheelHandler, '应注册 wheel 监听');
+  let prevented = 0;
+  wheelHandler({ ctrlKey: true, deltaY: -1, preventDefault() { prevented++; } });
+  assert(byId.fontSize.value === 17, 'Ctrl+滚轮上滚应放大字号');
+  assert(prevented > 0, 'Ctrl+滚轮应阻止默认缩放');
+  wheelHandler({ ctrlKey: false, deltaY: -1, preventDefault() { prevented++; } });
+  assert(byId.fontSize.value === 17, '无 Ctrl 的滚轮不应改变字号');
+
+  console.log('阅读面板脚本运行时(正文/字数/设置面板/快捷键/缩放): 通过');
 }
 
 // ================================================================ 2. 侧边栏视图

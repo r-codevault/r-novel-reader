@@ -2,7 +2,7 @@
   "name": "novel-reader",
   "displayName": "小说阅读器",
   "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面：悬浮球 + 起点风格目录面板、我的书架、书库目录、字体/主题个性化设置，自动延续上次阅读状态。",
-  "version": "1.7.10",
+  "version": "1.8.0",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -312,6 +312,16 @@
           "minimum": 480,
           "maximum": 1200,
           "description": "阅读区域最大宽度（像素）"
+        },
+        "novelReader.shortcutPrevChapter": {
+          "type": "string",
+          "default": "alt+arrowleft",
+          "markdownDescription": "阅读页内「上一章」快捷键。写法：`alt+arrowleft`、`ctrl+shift+p`、`ctrl+[` 等（不区分大小写，`left`/`right` 可简写）。**留空表示禁用**。默认 `alt+arrowleft`"
+        },
+        "novelReader.shortcutNextChapter": {
+          "type": "string",
+          "default": "alt+arrowright",
+          "markdownDescription": "阅读页内「下一章」快捷键。写法同上一章，**留空表示禁用**。默认 `alt+arrowright`"
         }
       }
     }

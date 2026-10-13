@@ -114,6 +114,12 @@ export class ReaderPanel {
             }
             if (sameFile && cur._ready) {
                 cur._postChapter();
+                // 同书重开时只补发章节, 但"打开阅读设置"必须显式通知 webview,
+                // 否则侧边栏的"打开阅读设置"按钮点了没有任何反应
+                if (cur._openSettingsOnLoad) {
+                    cur._openSettingsOnLoad = false;
+                    void cur._panel.webview.postMessage({ type: 'openSettings' });
+                }
             } else {
                 // 同书重开或换书: 重新下发 init 整体重建阅读页
                 // (若 webview 尚未就绪, _postInit 会跳过, 由 ready 回调兜底重发)
@@ -499,6 +505,11 @@ export class ReaderPanel {
     border: 1px solid var(--input-border); cursor: pointer;
   }
   #resetSettings:hover { border-color: var(--accent); color: var(--accent); }
+  .settings-hint {
+    margin-top: 10px; line-height: 1.6;
+    font-size: clamp(11px, calc(var(--font-size) * 0.72), 15px);
+    opacity: .6;
+  }
 
   /* ---------- 阅读区(留白底色 + 正文"纸面") ---------- */
   #reader {
@@ -616,6 +627,7 @@ export class ReaderPanel {
     <label></label>
     <button id="resetSettings" class="tbtn">恢复默认设置</button>
   </div>
+  <div class="settings-hint" id="shortcutHint"></div>
 </section>
 
 <main id="reader">
@@ -640,7 +652,64 @@ export class ReaderPanel {
   var THEMES = ${themes};
   var DEFAULT_SETTINGS = ${defaults};
 
-  var state = { novel: null, settings: DEFAULT_SETTINGS, chapterIndex: 0, chapterWords: 0, chapters: [], catReverse: false, catCollapsed: [] };
+  var state = { novel: null, settings: DEFAULT_SETTINGS, chapterIndex: 0, chapterWords: 0, chapters: [], catReverse: false, catCollapsed: [], prevCombo: null, nextCombo: null };
+
+  /** 快捷键字符串 -> {ctrl,alt,shift,meta,key}; 空/非法返回 null(表示禁用) */
+  function parseShortcut(str) {
+    if (!str || typeof str !== 'string') { return null; }
+    // 不用正则: 模板字符串会吃掉反斜杠转义
+    var raw = str.toLowerCase().split('+');
+    var parts = [];
+    for (var i = 0; i < raw.length; i++) {
+      var trimmed = raw[i].split(' ').join('');
+      if (trimmed) { parts.push(trimmed); }
+    }
+    var combo = { ctrl: false, alt: false, shift: false, meta: false, key: '' };
+    for (var j = 0; j < parts.length; j++) {
+      var p = parts[j];
+      if (p === 'ctrl' || p === 'control') { combo.ctrl = true; }
+      else if (p === 'alt' || p === 'option') { combo.alt = true; }
+      else if (p === 'shift') { combo.shift = true; }
+      else if (p === 'meta' || p === 'cmd' || p === 'command' || p === 'win') { combo.meta = true; }
+      else { combo.key = normalizeKey(p); }
+    }
+    return combo.key ? combo : null;
+  }
+
+  function normalizeKey(k) {
+    if (k === 'left') { return 'arrowleft'; }
+    if (k === 'right') { return 'arrowright'; }
+    if (k === 'up') { return 'arrowup'; }
+    if (k === 'down') { return 'arrowdown'; }
+    if (k === 'esc') { return 'escape'; }
+    if (k === 'space' || k === 'spacebar') { return ' '; }
+    return k;
+  }
+
+  function matchShortcut(combo, e) {
+    if (!combo) { return false; }
+    var key = (e.key || '').toLowerCase();
+    if (key === 'esc') { key = 'escape'; }
+    return (
+      !!combo.ctrl === !!e.ctrlKey &&
+      !!combo.alt === !!e.altKey &&
+      !!combo.shift === !!e.shiftKey &&
+      !!combo.meta === !!e.metaKey &&
+      combo.key === key
+    );
+  }
+
+  /** 快捷键展示文案(给设置面板底部提示用) */
+  function shortcutLabel(str) {
+    if (!str) { return '未设置'; }
+    return String(str)
+      .toLowerCase()
+      .split('arrowleft').join('←')
+      .split('arrowright').join('→')
+      .split('arrowup').join('↑')
+      .split('arrowdown').join('↓')
+      .split('+').join(' + ');
+  }
 
   function $(id) { return document.getElementById(id); }
   var els = {
@@ -655,6 +724,7 @@ export class ReaderPanel {
     paraSpacing: $('paraSpacing'), paraSpacingVal: $('paraSpacingVal'),
     contentWidth: $('contentWidth'), contentWidthVal: $('contentWidthVal'),
     themeSwatches: $('themeSwatches'), reset: $('resetSettings'),
+    shortcutHint: $('shortcutHint'),
     content: $('content'), bookInfo: $('bookInfo'), chapterInfo: $('chapterInfo'),
     chapterWords: $('chapterWords'),
     fabPrev: $('fabPrev'), fabNext: $('fabNext'),
@@ -1038,6 +1108,9 @@ export class ReaderPanel {
     root.style.setProperty('--input-bg', t.bg);
     root.style.setProperty('--input-fg', t.fg);
     root.style.setProperty('--input-border', t.chromeBorder);
+    // 快捷键(可在 VS Code 设置里自定义 novelReader.shortcutPrevChapter / NextChapter)
+    state.prevCombo = parseShortcut(s.shortcutPrev);
+    state.nextCombo = parseShortcut(s.shortcutNext);
     root.style.setProperty('--font-size', s.fontSize + 'px');
     root.style.setProperty('--font-family', FONT_STACKS[s.fontFamily] || FONT_STACKS.system);
     root.style.setProperty('--line-height', String(s.lineHeight));
@@ -1071,6 +1144,10 @@ export class ReaderPanel {
     for (var i = 0; i < swatches.length; i++) {
       swatches[i].classList.toggle('active', swatches[i].dataset.theme === s.theme);
     }
+    els.shortcutHint.textContent =
+      'Ctrl + 滚轮 缩放字号 · 上一章 ' + shortcutLabel(s.shortcutPrev) +
+      ' · 下一章 ' + shortcutLabel(s.shortcutNext) +
+      '（可在 VS Code 设置中自定义）';
   }
 
   function buildSettingsControls() {
@@ -1216,9 +1293,34 @@ export class ReaderPanel {
       if (catalogOpen()) { e.preventDefault(); closeCatalog(); return; }
       if (settingsOpen()) { e.preventDefault(); closeSettings(); return; }
     }
-    if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); gotoChapter(state.chapterIndex - 1); }
-    if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); gotoChapter(state.chapterIndex + 1); }
+    // 设置面板里的滑块/下拉保留自身按键行为(方向键调值等)
+    var tag = e.target && e.target.tagName ? String(e.target.tagName).toLowerCase() : '';
+    if (tag === 'input' || tag === 'select' || tag === 'textarea') { return; }
+    if (matchShortcut(state.prevCombo, e)) {
+      e.preventDefault();
+      gotoChapter(state.chapterIndex - 1);
+      return;
+    }
+    if (matchShortcut(state.nextCombo, e)) {
+      e.preventDefault();
+      gotoChapter(state.chapterIndex + 1);
+    }
   });
+
+  // Ctrl(或 macOS 的 Cmd) + 滚轮: 放大 / 缩小字号
+  document.addEventListener(
+    'wheel',
+    function (e) {
+      if (!e.ctrlKey && !e.metaKey) { return; }
+      e.preventDefault();
+      var cur = state.settings.fontSize || DEFAULT_SETTINGS.fontSize;
+      var next = Math.min(32, Math.max(12, cur + (e.deltaY < 0 ? 1 : -1)));
+      if (next !== cur) {
+        persistSettings({ fontSize: next });
+      }
+    },
+    { passive: false }
+  );
 
   /* ---------------- 消息 ---------------- */
   window.addEventListener('message', function (e) {

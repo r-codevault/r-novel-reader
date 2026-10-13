@@ -25,6 +25,10 @@ export interface ReadingSettings {
     /** 悬浮球位置(拖动后记录; -1 表示"跟随阅读区域"的默认位置) */
     fabLeft?: number;
     fabTop?: number;
+    /** 上一章快捷键(如 alt+arrowleft; 在阅读页内生效, 留空禁用) */
+    shortcutPrev: string;
+    /** 下一章快捷键(如 alt+arrowright) */
+    shortcutNext: string;
 }
 
 export interface ThemeDef {
@@ -91,6 +95,8 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
     paragraphSpacing: 0.8,
     theme: 'sepia',
     contentWidth: 720,
+    shortcutPrev: 'alt+arrowleft',
+    shortcutNext: 'alt+arrowright',
 };
 
 const STORAGE_KEY = 'novelReader.settings';
@@ -103,6 +109,8 @@ const SETTING_KEYS: (keyof ReadingSettings)[] = [
     'paragraphSpacing',
     'theme',
     'contentWidth',
+    'shortcutPrev',
+    'shortcutNext',
 ];
 
 function clamp(n: number, min: number, max: number, fallback: number): number {
@@ -127,6 +135,8 @@ function configDefaults(): ReadingSettings {
         ),
         theme: cfg.get<string>('theme', DEFAULT_SETTINGS.theme),
         contentWidth: clamp(cfg.get<number>('contentWidth', DEFAULT_SETTINGS.contentWidth), 480, 1200, DEFAULT_SETTINGS.contentWidth),
+        shortcutPrev: cfg.get<string>('shortcutPrevChapter', DEFAULT_SETTINGS.shortcutPrev),
+        shortcutNext: cfg.get<string>('shortcutNextChapter', DEFAULT_SETTINGS.shortcutNext),
     };
 }
 
@@ -152,6 +162,8 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
     }
     if (typeof s.fabLeft === 'number') { out.fabLeft = Math.round(s.fabLeft); }
     if (typeof s.fabTop === 'number') { out.fabTop = Math.round(s.fabTop); }
+    if (typeof s.shortcutPrev === 'string') { out.shortcutPrev = s.shortcutPrev; }
+    if (typeof s.shortcutNext === 'string') { out.shortcutNext = s.shortcutNext; }
     return out;
 }
 
