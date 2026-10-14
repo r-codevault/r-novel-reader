@@ -659,6 +659,7 @@ const sideIds = [
   'paneShelf', 'shelfList', 'shelfEmpty', 'shelfFoot',
   'paneChapters', 'chapterList', 'currentCard', 'currentTitle',
   'paneSettings', 'libValue', 'btnPickLib', 'btnOpenLib', 'btnClearLib',
+  'btnAddBook', 'shelfCount',
 ];
 for (const id of sideIds) {
   assert(chapterHtml.includes(`id="${id}"`), `侧边栏缺少元素 #${id}`);
@@ -669,6 +670,12 @@ assert(!chapterHtml.includes('openReaderSettings'), '侧边栏不应再发送 op
 // 按钮文案统一为「添加书籍」, 不再出现别扭的"打开小说文件"
 assert(chapterHtml.includes('>添加书籍</button>'), '侧边栏按钮文案应为「添加书籍」');
 assert(!chapterHtml.includes('打开小说文件'), '侧边栏不应再出现「打开小说文件」');
+// 书架底部黏底按钮: 书籍多时列表内部滚动, 按钮固定不随滚动
+assert(chapterHtml.includes('id="btnAddBook"'), '书架底部应有「添加书籍」按钮');
+assert(/\.shelf-foot\s*\{[^}]*position:\s*sticky/.test(chapterHtml), '书架底部按钮区应黏底');
+assert(/\.shelf-foot\s*\{[^}]*z-index/.test(chapterHtml), '黏底区应有层级避免被列表覆盖');
+assert(!/elShelfFoot\.textContent\s*=/.test(chapterHtml), '计数应写入独立元素, 不能覆盖底部按钮');
+assert(chapterHtml.includes('elShelfCount.textContent'), '书架计数应写入 #shelfCount');
 // 标题栏命令: 新增 addBook(短标签), 并占位在 view/title
 {
   const pkgJson = require('../package.json');
@@ -703,7 +710,8 @@ function makeEl() {
     children: [],
     textContent: '', value: '', title: '', dataset: {}, style: {},
     classList: { add(){}, remove(){}, toggle(){}, contains(){ return false; } },
-    addEventListener(){}, removeEventListener(){},
+    _ls: {},
+    addEventListener(type, fn) { (el._ls[type] ||= []).push(fn); }, removeEventListener(){},
     querySelector(){ return makeEl(); }, querySelectorAll(){ return []; },
     closest(){ return null; }, contains(){ return false; },
     scrollIntoView(opts) { scrollCalls.push(opts || null); }, focus(){}, click(){}, appendChild(){},
@@ -807,7 +815,28 @@ for (const fn of sidebarMessageHandlers) {
   fn({ data: { type: 'mode', mode: 'chapters' } });
 }
 assert(scrollCalls.length > 0, '切回目录模式应重新定位到当前章');
-console.log('侧边栏脚本运行时(渲染/换书/高亮/定位): 通过');
+
+// 书架: 计数写入独立元素 + 底部「添加书籍」按钮接线
+function fireSide(id, type, ev) {
+  const el = elsById[id];
+  const list = (el && el._ls && el._ls[type]) || [];
+  for (const fn of list) { fn(ev); }
+}
+for (const fn of sidebarMessageHandlers) {
+  fn({ data: { type: 'shelf', items: [
+    { filePath: 'D:/a.txt', title: 'A', author: '', chapterIndex: 2, totalChapters: 10, current: true },
+    { filePath: 'D:/b.txt', title: 'B', author: '', chapterIndex: -1, totalChapters: 5, current: false },
+  ] } });
+}
+assert(elsById.shelfCount.textContent === '共 2 本 · 阅读进度自动记录', '书架底部应显示册数统计');
+assert(elsById.shelfList.innerHTML.includes('A') && elsById.shelfList.innerHTML.includes('B'), '书架列表应渲染');
+sidebarPosted.length = 0;
+fireSide('btnAddBook', 'click', {});
+assert(
+  sidebarPosted.some((m) => m.type === 'openFile'),
+  '点击底部「添加书籍」应触发添加小说流程'
+);
+console.log('侧边栏脚本运行时(渲染/换书/高亮/定位/书架/添加书籍): 通过');
 
 
 // --- 消息协议 ---

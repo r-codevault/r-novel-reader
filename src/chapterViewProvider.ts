@@ -294,9 +294,22 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
   .bk:hover .bk-del { opacity: .55; }
   .bk-del:hover { opacity: 1 !important; background: var(--vscode-toolbar-hoverBackground, rgba(127,127,127,.2)); color: var(--vscode-errorForeground, #f14c4c); }
   .shelf-foot {
-    flex: none; padding: 7px 10px; font-size: 11px; opacity: .55;
+    flex: none; padding: 8px 10px 9px;
     border-top: 1px solid var(--vscode-widget-border, rgba(128,128,128,.25));
+    /* 黏底: 书籍过多时列表内部滚动, 底部按钮固定不动 */
+    position: sticky; bottom: 0; z-index: 2;
+    background: var(--vscode-sideBar-background, transparent);
   }
+  .shelf-add {
+    width: 100%; padding: 5px 8px; cursor: pointer;
+    font-family: inherit; font-size: 12px;
+    color: var(--vscode-button-foreground, #ffffff);
+    background: var(--vscode-button-background, #0e639c);
+    border: 1px solid transparent; border-radius: 4px;
+  }
+  .shelf-add:hover { background: var(--vscode-button-hoverBackground, #1177bb); }
+  .shelf-add:focus-visible { outline: 2px solid var(--vscode-focusBorder, #0060c0); outline-offset: 1px; }
+  .shelf-count { margin-top: 6px; font-size: 11px; opacity: .55; }
 
   /* ---------- 设置(存储位置等) ---------- */
   .set-sec { padding: 10px 12px; border-bottom: 1px solid var(--vscode-widget-border, rgba(128,128,128,.25)); }
@@ -337,7 +350,10 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
     <p>书架空空如也。</p>
     <button id="btnOpenFromShelf">添加书籍</button>
   </div>
-  <div class="shelf-foot" id="shelfFoot" style="display:none"></div>
+  <div class="shelf-foot" id="shelfFoot" style="display:none">
+    <button id="btnAddBook" class="shelf-add" title="添加本地 txt 小说">＋ 添加书籍</button>
+    <div class="shelf-count" id="shelfCount"></div>
+  </div>
 </div>
 
 <div id="paneChapters" class="pane active">
@@ -395,6 +411,7 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
   var elShelfList = document.getElementById('shelfList');
   var elShelfEmpty = document.getElementById('shelfEmpty');
   var elShelfFoot = document.getElementById('shelfFoot');
+  var elShelfCount = document.getElementById('shelfCount');
   var elChapterList = document.getElementById('chapterList');
   var elChapterEmpty = document.getElementById('chapterEmpty');
   var elCurrentWrap = document.getElementById('currentWrap');
@@ -452,7 +469,7 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
     elShelfFoot.style.display = has ? '' : 'none';
     if (!has) {
       elShelfList.innerHTML = '';
-      elShelfFoot.textContent = '';
+      elShelfCount.textContent = '';
       return;
     }
     var html = '';
@@ -471,7 +488,7 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
       '</div>';
     }
     elShelfList.innerHTML = html;
-    elShelfFoot.textContent = '共 ' + items.length + ' 本 · 阅读进度自动记录';
+    elShelfCount.textContent = '共 ' + items.length + ' 本 · 阅读进度自动记录';
   }
 
   elShelfList.addEventListener('click', function (e) {
@@ -487,6 +504,10 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
     }
   });
   document.getElementById('btnOpenFromShelf').addEventListener('click', function () {
+    vscode.postMessage({ type: 'openFile' });
+  });
+  // 书架底部黏底按钮: 与空状态按钮同行为
+  document.getElementById('btnAddBook').addEventListener('click', function () {
     vscode.postMessage({ type: 'openFile' });
   });
   document.getElementById('btnGoShelf').addEventListener('click', function () {
