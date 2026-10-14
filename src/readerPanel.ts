@@ -570,27 +570,14 @@ export class ReaderPanel {
     height: 100%;
     cursor: ew-resize;
     z-index: 5;
-    /* 默认隐形, 悬停/拖动时显现细线提示 */
+    /* 默认隐形, 悬停/拖动时只给极淡的底色提示(不显示线) */
     opacity: 0;
     transition: opacity .15s ease;
   }
-  .width-handle::before {
-    content: '';
-    position: absolute;
-    top: 24px;
-    bottom: 70px;
-    width: 2px;
-    background: var(--accent);
-    opacity: 0;
-    transition: opacity .15s ease;
-  }
-  #widthHandleLeft::before { left: 5px; }
-  #widthHandleRight::before { right: 5px; }
   .width-handle:hover, .width-handle.dragging {
     opacity: 1;
-    background: rgba(127, 127, 127, .06);
+    background: rgba(127, 127, 127, .05);
   }
-  .width-handle:hover::before, .width-handle.dragging::before { opacity: .55; }
   #reader.resizing-width { cursor: ew-resize; user-select: none; }
 
   /* ---------- 底部状态栏(含整书进度条) ---------- */
@@ -1486,6 +1473,11 @@ export class ReaderPanel {
       startW: els.content.getBoundingClientRect().width,
     };
     handle.classList.add('dragging');
+    // 捕获指针: 后续 pointermove/pointerup 即使移出手柄也定向到本元素,
+    // 保证松手(手指抬起)即结束拖拽, 不需要再点一下
+    if (handle.setPointerCapture && e.pointerId !== undefined) {
+      try { handle.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
+    }
     if (readerEl) { readerEl.classList.add('resizing-width'); }
     document.body.style.userSelect = 'none';
     positionWidthHandles();
@@ -1504,8 +1496,12 @@ export class ReaderPanel {
     positionWidthHandles();
   }
 
-  function endWidthDrag() {
+  function endWidthDrag(e) {
     if (!widthDrag) { return; }
+    // 显式释放指针捕获(防止占用后续点击)
+    if (e && widthDrag.handle.releasePointerCapture && e.pointerId !== undefined) {
+      try { widthDrag.handle.releasePointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
+    }
     widthDrag.handle.classList.remove('dragging');
     if (readerEl) { readerEl.classList.remove('resizing-width'); }
     document.body.style.userSelect = '';
