@@ -245,6 +245,18 @@ assert(
 );
 console.log('悬浮球工具栏(上/目录/下/阅读设置, 方形圆角): 通过');
 
+// --- 正文宽度拖拽(左右边缘手柄) ---
+assert(capturedHtml.includes('id="widthHandleLeft"') && capturedHtml.includes('id="widthHandleRight"'), '正文两侧应有拖拽调宽手柄');
+assert(/\.width-handle\s*\{[^}]*cursor:\s*ew-resize/.test(capturedHtml), '拖拽手柄应显示左右缩放光标');
+assert(capturedHtml.includes('function beginWidthDrag'), '应有调宽拖拽起点处理');
+assert(capturedHtml.includes('function moveWidthDrag'), '应有调宽拖拽过程处理');
+assert(capturedHtml.includes('function endWidthDrag'), '应有调宽拖拽结束处理');
+assert(capturedHtml.includes('function positionWidthHandles'), '应能把手柄对齐到正文两侧');
+assert(capturedHtml.includes("--content-width', next + 'px'") || capturedHtml.includes('--content-width\', next'), '拖拽中应实时更新正文宽度变量');
+assert(/persistSettings\(\{ contentWidth/.test(capturedHtml), '松手后应持久化正文宽度');
+assert(capturedHtml.includes("'left' : 'right'") || capturedHtml.includes("side === 'left'"), '左右手柄拖拽方向应区分');
+console.log('正文宽度拖拽(左右边缘): 通过');
+
 // --- 目录面板(参考起点中文网) ---
 assert(capturedHtml.includes('id="catalogPanel"'), '应有目录面板');
 assert(/\.cat-items\s*\{[^}]*grid-template-columns:\s*repeat\(2/.test(capturedHtml), '目录应为双列展示');

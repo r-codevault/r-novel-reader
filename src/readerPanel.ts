@@ -535,6 +535,7 @@ export class ReaderPanel {
 
   /* ---------- 阅读区(留白底色 + 正文"纸面") ---------- */
   #reader {
+    position: relative;
     background: var(--page-bg); color: var(--fg);
     min-height: 100vh;
     padding: 24px 20px 70px;
@@ -560,6 +561,37 @@ export class ReaderPanel {
     margin: .4em 0 1.2em; letter-spacing: .05em;
   }
   .empty-tip { text-align: center; padding: 60px 0; opacity: .7; }
+
+  /* ---------- 正文宽度拖拽手柄(左右边缘) ---------- */
+  .width-handle {
+    position: absolute;
+    top: 0;
+    width: 12px;
+    height: 100%;
+    cursor: ew-resize;
+    z-index: 5;
+    /* 默认隐形, 悬停/拖动时显现细线提示 */
+    opacity: 0;
+    transition: opacity .15s ease;
+  }
+  .width-handle::before {
+    content: '';
+    position: absolute;
+    top: 24px;
+    bottom: 70px;
+    width: 2px;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity .15s ease;
+  }
+  #widthHandleLeft::before { left: 5px; }
+  #widthHandleRight::before { right: 5px; }
+  .width-handle:hover, .width-handle.dragging {
+    opacity: 1;
+    background: rgba(127, 127, 127, .06);
+  }
+  .width-handle:hover::before, .width-handle.dragging::before { opacity: .55; }
+  #reader.resizing-width { cursor: ew-resize; user-select: none; }
 
   /* ---------- 底部状态栏(含整书进度条) ---------- */
   .statusbar {
@@ -661,6 +693,8 @@ export class ReaderPanel {
 
 <main id="reader">
   <article id="content"><p class="empty-tip">加载中…</p></article>
+  <div id="widthHandleLeft" class="width-handle" aria-hidden="true"></div>
+  <div id="widthHandleRight" class="width-handle" aria-hidden="true"></div>
 </main>
 
 <footer class="statusbar">
@@ -757,6 +791,7 @@ export class ReaderPanel {
     shortcutHint: $('shortcutHint'),
     content: $('content'), bookInfo: $('bookInfo'), chapterInfo: $('chapterInfo'),
     chapterWords: $('chapterWords'),
+    widthHandleLeft: $('widthHandleLeft'), widthHandleRight: $('widthHandleRight'),
     fabPrev: $('fabPrev'), fabNext: $('fabNext'),
     progressFill: $('progressFill'),
     statusbar: document.querySelector('.statusbar'),
@@ -1204,6 +1239,10 @@ export class ReaderPanel {
     root.style.setProperty('--para-spacing', s.paragraphSpacing + 'em');
     root.style.setProperty('--content-width', s.contentWidth + 'px');
     syncControls(s);
+    // 正文宽度变化后重新对齐两侧拖拽手柄
+    if (typeof positionWidthHandles === 'function') {
+      requestAnimationFrame(positionWidthHandles);
+    }
     // 悬浮球位置: 拖动过(fabLeft >= 0)就保持拖动位置, 否则跟随阅读区域右缘
     fabDragged =
       typeof s.fabLeft === 'number' &&
@@ -1287,6 +1326,7 @@ export class ReaderPanel {
     requestAnimationFrame(function () {
       var max = document.body.scrollHeight - window.innerHeight;
       window.scrollTo(0, max > 0 ? payload.scrollRatio * max : 0);
+      positionWidthHandles();
     });
     sendProgress(true);
   }
@@ -1419,6 +1459,74 @@ export class ReaderPanel {
   if (typeof ResizeObserver !== 'undefined') {
     new ResizeObserver(syncFabOnResize).observe(document.body);
   }
+
+  /* ---------------- 正文宽度拖拽(左右边缘) ---------------- */
+  var WIDTH_MIN = 400; // 允许的最小正文宽度(px)
+  var widthDrag = null; // { handle, startX, startW, side }
+  var readerEl = document.getElementById('reader');
+
+  /** 把两个手柄水平定位到正文列两侧边缘 */
+  function positionWidthHandles() {
+    if (!els.content) { return; }
+    var rect = els.content.getBoundingClientRect();
+    var readerRect = readerEl ? readerEl.getBoundingClientRect() : { left: 0, width: window.innerWidth };
+    var left = rect.left - readerRect.left;
+    var right = readerRect.right - rect.right;
+    els.widthHandleLeft.style.left = left + 'px';
+    els.widthHandleRight.style.right = right + 'px';
+  }
+
+  function beginWidthDrag(handle, side, e) {
+    if (e.button !== 0) { return; }
+    e.preventDefault();
+    widthDrag = {
+      handle: handle,
+      side: side,
+      startX: e.clientX,
+      startW: els.content.getBoundingClientRect().width,
+    };
+    handle.classList.add('dragging');
+    if (readerEl) { readerEl.classList.add('resizing-width'); }
+    document.body.style.userSelect = 'none';
+    positionWidthHandles();
+  }
+
+  function moveWidthDrag(e) {
+    if (!widthDrag) { return; }
+    var delta = e.clientX - widthDrag.startX;
+    // 左缘向右拖 → 变窄(减宽); 右缘向右拖 → 变宽(加宽)
+    var factor = widthDrag.side === 'left' ? -1 : 1;
+    var vw = window.innerWidth;
+    var maxW = Math.max(WIDTH_MIN, vw - 40); // #reader 左右各 20px padding
+    var next = Math.min(maxW, Math.max(WIDTH_MIN, Math.round(widthDrag.startW + factor * delta)));
+    // 实时更新 CSS 变量, 让正文立即跟随
+    document.documentElement.style.setProperty('--content-width', next + 'px');
+    positionWidthHandles();
+  }
+
+  function endWidthDrag() {
+    if (!widthDrag) { return; }
+    widthDrag.handle.classList.remove('dragging');
+    if (readerEl) { readerEl.classList.remove('resizing-width'); }
+    document.body.style.userSelect = '';
+    // 读取最终宽度并持久化
+    var finalW = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--content-width')
+    );
+    if (isFinite(finalW) && finalW > 0) {
+      persistSettings({ contentWidth: Math.round(finalW) });
+    }
+    widthDrag = null;
+  }
+
+  els.widthHandleLeft.addEventListener('pointerdown', function (e) { beginWidthDrag(els.widthHandleLeft, 'left', e); });
+  els.widthHandleRight.addEventListener('pointerdown', function (e) { beginWidthDrag(els.widthHandleRight, 'right', e); });
+  document.addEventListener('pointermove', moveWidthDrag);
+  document.addEventListener('pointerup', endWidthDrag);
+  document.addEventListener('pointercancel', endWidthDrag);
+  // 尺寸变化 / 章节渲染后重新对齐手柄
+  window.addEventListener('resize', positionWidthHandles);
+  requestAnimationFrame(positionWidthHandles);
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       if (catalogOpen()) { e.preventDefault(); closeCatalog(); return; }
