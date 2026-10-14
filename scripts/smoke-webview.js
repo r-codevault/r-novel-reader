@@ -687,11 +687,13 @@ assert(chapterHtml.includes('elShelfCount.textContent'), '书架计数应写入 
   assert(!titleItems.includes('novelReader.addBook'), '标题栏不应再有「＋ 添加」');
   assert(!titleItems.includes('novelReader.openFile'), '标题栏不应挂「打开小说文件」');
   assert(titleItems.includes('novelReader.refresh'), '刷新目录按钮应保留');
-  // 切换入口必须是"文字按钮": 带 icon 时 VS Code 只显示图标, 用户找不到书架/目录入口
-  for (const cmd of ['novelReader.showBookshelf', 'novelReader.showChapters']) {
+  // 切换入口必须带图标且标题完整(用户偏好图标按钮)
+  for (const [cmd, icon, title] of [
+    ['novelReader.showBookshelf', '$(library)', '我的书架'],
+    ['novelReader.showChapters', '$(book)', '章节目录'],
+  ]) {
     const def = cmds.find((x) => x.command === cmd);
-    assert(def && !def.icon, `${cmd} 不应带 icon(否则标题栏只剩图标, 入口不明确)`);
-    assert(def.title.length <= 4, `${cmd} 标题应简短(文字按钮宽度有限)`);
+    assert(def && def.icon === icon && def.title === title, `${cmd} 应为图标按钮(${icon}/${title})`);
   }
   // 激活事件: onCommand/onView 由 VS Code 自动生成, 手写会报警告
   const manual = (pkgJson.activationEvents || []).filter((e) => /^on(Command|View):/.test(e));
@@ -717,16 +719,11 @@ assert(chapterHtml.includes('elShelfCount.textContent'), '书架计数应写入 
     '视图 when 条件应与 viewMode 对应'
   );
   assert(viewIds.length === 3 && new Set(viewIds).size === 3, '视图 id 不能重复');
-  // 菜单条件里的视图 id 必须真实存在(改成新视图 id 后忘了同步 when -> 按钮全不显示)
+  // when 必须用 view =~ /novelReader/ 匹配三个视图
+  // (禁用 view == 旧 id: 只对单视图有效; 禁用 view in 字面量列表: 右侧必须是 context key, 两者都会让按钮全消失)
   for (const m of pkgJson.contributes.menus['view/title']) {
-    const ids = (m.when || '').match(/view == (\S+)|view in ([\w,]+)/);
-    if (!ids) {
-      continue;
-    }
-    const used = (ids[2] ? ids[2].split(',') : [ids[1]]).filter(Boolean);
-    for (const id of used) {
-      assert(viewIds.includes(id), `标题栏条件引用了不存在的视图 id: ${id}`);
-    }
+    assert(/view =~ \/novelReader\//.test(m.when || ''), `标题栏 when 应用 view =~ /novelReader/ 匹配视图: ${m.command}`);
+    assert(!/view in |view == novelReaderChapters/.test(m.when || ''), `标题栏 when 禁用坏语法: ${m.command}`);
   }
   // 兜底: 上下文键未设置时也要有可见视图, 否则活动栏图标会整个消失
   assert(

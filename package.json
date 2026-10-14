@@ -2,7 +2,7 @@
   "name": "r-novel-reader",
   "displayName": "小说阅读器",
   "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面：悬浮球 + 起点风格目录面板、我的书架、书库目录、字体/主题个性化设置，自动延续上次阅读状态。",
-  "version": "1.9.4",
+  "version": "1.9.5",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -63,11 +63,13 @@
     "commands": [
       {
         "command": "novelReader.showBookshelf",
-        "title": "书架"
+        "title": "我的书架",
+        "icon": "$(library)"
       },
       {
         "command": "novelReader.showChapters",
-        "title": "目录"
+        "title": "章节目录",
+        "icon": "$(book)"
       },
       {
         "command": "novelReader.showSettings",
@@ -139,27 +141,27 @@
       "view/title": [
         {
           "command": "novelReader.backFromSettings",
-          "when": "view in novelReaderShelf,novelReaderCatalog,novelReaderSettings && novelReader.viewMode == settings",
+          "when": "view =~ /novelReader/ && novelReader.viewMode == settings",
           "group": "navigation@1"
         },
         {
           "command": "novelReader.showBookshelf",
-          "when": "view in novelReaderShelf,novelReaderCatalog,novelReaderSettings && novelReader.viewMode == chapters",
+          "when": "view =~ /novelReader/ && novelReader.viewMode == chapters",
           "group": "navigation@1"
         },
         {
           "command": "novelReader.showChapters",
-          "when": "view in novelReaderShelf,novelReaderCatalog,novelReaderSettings && novelReader.viewMode == shelf",
+          "when": "view =~ /novelReader/ && novelReader.viewMode == shelf",
           "group": "navigation@1"
         },
         {
           "command": "novelReader.refresh",
-          "when": "view in novelReaderShelf,novelReaderCatalog,novelReaderSettings && novelReader.viewMode == chapters && novelReader.hasNovel",
+          "when": "view =~ /novelReader/ && novelReader.viewMode == chapters && novelReader.hasNovel",
           "group": "navigation@3"
         },
         {
           "command": "novelReader.showSettings",
-          "when": "view in novelReaderShelf,novelReaderCatalog,novelReaderSettings && novelReader.viewMode != settings",
+          "when": "view =~ /novelReader/ && novelReader.viewMode != settings",
           "group": "navigation@4"
         }
       ],
