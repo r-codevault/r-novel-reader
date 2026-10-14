@@ -334,7 +334,8 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "package": "vsce package --baseContentUrl https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader/blob/master --baseImagesUrl https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader/raw/master",
-    "test": "node scripts/test-shelf.js && node scripts/test-library.js && node scripts/test-parser.js && node scripts/smoke-webview.js"
+    "test": "node scripts/test-shelf.js && node scripts/test-library.js && node scripts/test-parser.js && node scripts/smoke-webview.js",
+    "playground": "node scripts/generate-playground.js"
   },
   "devDependencies": {
     "@types/node": "^18.19.0",

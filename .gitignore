@@ -20,3 +20,6 @@ dist/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# 调色台预览页(由 npm run playground 生成)
+theme-playground.html
