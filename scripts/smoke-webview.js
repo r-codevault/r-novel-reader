@@ -687,6 +687,15 @@ assert(chapterHtml.includes('elShelfCount.textContent'), '书架计数应写入 
   assert(!titleItems.includes('novelReader.addBook'), '标题栏不应再有「＋ 添加」');
   assert(!titleItems.includes('novelReader.openFile'), '标题栏不应挂「打开小说文件」');
   assert(titleItems.includes('novelReader.refresh'), '刷新目录按钮应保留');
+  // 切换入口必须是"文字按钮": 带 icon 时 VS Code 只显示图标, 用户找不到书架/目录入口
+  for (const cmd of ['novelReader.showBookshelf', 'novelReader.showChapters']) {
+    const def = cmds.find((x) => x.command === cmd);
+    assert(def && !def.icon, `${cmd} 不应带 icon(否则标题栏只剩图标, 入口不明确)`);
+    assert(def.title.length <= 4, `${cmd} 标题应简短(文字按钮宽度有限)`);
+  }
+  // 激活事件: onCommand/onView 由 VS Code 自动生成, 手写会报警告
+  const manual = (pkgJson.activationEvents || []).filter((e) => /^on(Command|View):/.test(e));
+  assert(manual.length === 0, '不应手写 onCommand/onView 激活事件: ' + manual.join(','));
   // 容器 id 与扩展标识统一(r- 前缀)
   assert(
     (pkgJson.contributes.viewsContainers.activitybar || []).some((v) => v.id === 'r-novel-reader'),
@@ -698,10 +707,8 @@ assert(chapterHtml.includes('elShelfCount.textContent'), '书架计数应写入 
   assert(names === '书架/目录/设置', '应有 书架/目录/设置 三个视图');
   const viewIds = views.map((v) => v.id);
   assert(
-    pkgJson.activationEvents.includes('onView:novelReaderShelf') &&
-      pkgJson.activationEvents.includes('onView:novelReaderCatalog') &&
-      pkgJson.activationEvents.includes('onView:novelReaderSettings'),
-    '三个视图都要登记激活事件'
+    viewIds.length === 3 && views.every((v) => v.type === 'webview'),
+    '三个视图都应是 webview 且登记在容器下(激活事件由 VS Code 自动生成)'
   );
   // when 必须与命令设置的 context key 对应(互斥)
   const modes = views.map((v) => (v.when || '').replace(/[^a-z]+/g, ''));
@@ -733,10 +740,6 @@ assert(chapterHtml.includes('elShelfCount.textContent'), '书架计数应写入 
   // 设置页标题栏: 只出现「返回」(分栏/刷新/设置 都要隐藏)
   const backCmd = cmds.find((c) => c.command === 'novelReader.backFromSettings');
   assert(backCmd && backCmd.title === '返回', '应有「返回」命令');
-  assert(
-    (pkgJson.activationEvents || []).includes('onCommand:novelReader.backFromSettings'),
-    '「返回」需登记激活事件'
-  );
   const titleMenus = pkgJson.contributes.menus['view/title'];
   const backMenu = titleMenus.find((m) => m.command === 'novelReader.backFromSettings');
   assert(backMenu && /viewMode == settings/.test(backMenu.when), '设置页应显示「返回」');
