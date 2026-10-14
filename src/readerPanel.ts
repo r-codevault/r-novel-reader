@@ -1176,20 +1176,21 @@ export class ReaderPanel {
     root.style.setProperty('--input-bg', t.bg);
     root.style.setProperty('--input-fg', t.fg);
     root.style.setProperty('--input-border', t.chromeBorder);
-    // 设置面板配色: 浅色主题=白面板+起点红(#e64c42); 黑夜=沿用深色面板与暖金(用户指定)
+    // 设置面板配色跟随主题面板色(像起点: 面板与阅读区同一色调), 黑夜沿用深色面板
     // 必须在这里实时设置 -- 静态注入的初值只对应生成 HTML 时的主题, 切主题后不会自动变
-    var isDark = s.theme === 'dark';
-    var darkTheme = null;
+    var curTheme = null;
     for (var ti = 0; ti < THEMES.length; ti++) {
-      if (THEMES[ti].id === 'dark') { darkTheme = THEMES[ti]; }
+      if (THEMES[ti].id === s.theme) { curTheme = THEMES[ti]; }
     }
-    root.style.setProperty('--sp-bg', isDark ? darkTheme.chromeBg : '#ffffff');
-    root.style.setProperty('--sp-fg', isDark ? darkTheme.fg : '#333333');
-    root.style.setProperty('--sp-border', isDark ? darkTheme.chromeBorder : '#e3e3e3');
-    root.style.setProperty('--sp-muted', isDark ? '#8a8a8a' : '#999999');
+    if (!curTheme) { curTheme = THEMES[0]; }
+    var isDark = curTheme.id === 'dark';
+    root.style.setProperty('--sp-bg', isDark ? '#1c1c1c' : curTheme.chromeBg);
+    root.style.setProperty('--sp-fg', isDark ? '#bababa' : curTheme.fg);
+    root.style.setProperty('--sp-border', isDark ? '#333333' : curTheme.chromeBorder);
+    root.style.setProperty('--sp-muted', isDark ? '#8a8a8a' : curTheme.fg + '99');
     root.style.setProperty('--sp-hover', isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.05)');
-    root.style.setProperty('--sp-accent', isDark ? darkTheme.accent : '#e64c42');
-    root.style.setProperty('--sp-control-bg', isDark ? darkTheme.bg : '#ffffff');
+    root.style.setProperty('--sp-accent', isDark ? '#c9963f' : '#f56c6c');
+    root.style.setProperty('--sp-control-bg', isDark ? '#232323' : curTheme.bg);
     // 快捷键(可在 VS Code 设置里自定义 novelReader.shortcutPrevChapter / NextChapter)
     state.prevCombo = parseShortcut(s.shortcutPrev);
     state.nextCombo = parseShortcut(s.shortcutNext);

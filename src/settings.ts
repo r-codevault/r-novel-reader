@@ -59,11 +59,11 @@ export interface FontDef {
 // 主题色同步起点中文网: 纯净白 / 米白 / 羊皮纸 / 护眼绿 / 浅蓝 / 黑夜
 // 黑夜按用户要求沿用原配色(深灰纸面 + 暖金主色)
 export const THEMES: ThemeDef[] = [
-    { id: 'white', name: '纯净白', bg: '#ffffff', fg: '#262626', pageBg: '#f3f3f3', chromeBg: '#f7f7f7', chromeBorder: '#e4e4e4', accent: '#e64c42', accentFg: '#ffffff' },
-    { id: 'beige', name: '米白', bg: '#f8f4ea', fg: '#33302a', pageBg: '#efe9db', chromeBg: '#f4f0e5', chromeBorder: '#e0d9c6', accent: '#e64c42', accentFg: '#ffffff' },
-    { id: 'sepia', name: '羊皮纸', bg: '#f4e8cd', fg: '#4b3f2a', pageBg: '#eadbb4', chromeBg: '#f0e3c2', chromeBorder: '#dbc79c', accent: '#e64c42', accentFg: '#ffffff' },
-    { id: 'green', name: '护眼绿', bg: '#d5ecd0', fg: '#2c3f2c', pageBg: '#c3e0ba', chromeBg: '#cde6c6', chromeBorder: '#a8cfa0', accent: '#e64c42', accentFg: '#ffffff' },
-    { id: 'blue', name: '浅蓝', bg: '#e4eef5', fg: '#2c3944', pageBg: '#d3e2ec', chromeBg: '#dfeaf2', chromeBorder: '#c3d5e1', accent: '#e64c42', accentFg: '#ffffff' },
+    { id: 'white', name: '纯净白', bg: '#ffffff', fg: '#262626', pageBg: '#f3f3f3', chromeBg: '#f7f7f7', chromeBorder: '#e4e4e4', accent: '#f56c6c', accentFg: '#ffffff' },
+    { id: 'beige', name: '米白', bg: '#f8f4ea', fg: '#33302a', pageBg: '#efe9db', chromeBg: '#f4f0e5', chromeBorder: '#e0d9c6', accent: '#f56c6c', accentFg: '#ffffff' },
+    { id: 'sepia', name: '羊皮纸', bg: '#f4e8cd', fg: '#4b3f2a', pageBg: '#eadbb4', chromeBg: '#f0e3c2', chromeBorder: '#dbc79c', accent: '#f56c6c', accentFg: '#ffffff' },
+    { id: 'green', name: '护眼绿', bg: '#d5ecd0', fg: '#2c3f2c', pageBg: '#c3e0ba', chromeBg: '#cde6c6', chromeBorder: '#a8cfa0', accent: '#f56c6c', accentFg: '#ffffff' },
+    { id: 'blue', name: '浅蓝', bg: '#e4eef5', fg: '#2c3944', pageBg: '#d3e2ec', chromeBg: '#dfeaf2', chromeBorder: '#c3d5e1', accent: '#f56c6c', accentFg: '#ffffff' },
     { id: 'dark', name: '黑夜', bg: '#232323', fg: '#bababa', pageBg: '#141414', chromeBg: '#1c1c1c', chromeBorder: '#333333', accent: '#c9963f', accentFg: '#191919' },
 ];
 

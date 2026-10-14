@@ -596,6 +596,7 @@ console.log('换书重建阅读面板(回归): 通过');
   });
   assert(styleVars['--sp-bg'] === '#1c1c1c', '黑夜主题下面板应用深色配色');
   assert(styleVars['--sp-accent'] === '#c9963f', '黑夜主题下面板沿用暖金强调');
+  assert(styleVars['--sp-accent'] === undefined || styleVars['--sp-accent'] !== '#e64c42', '浅色主题强调应为柔和起点红 #f56c6c');
   dispatch2({
     type: 'settings',
     payload: {
@@ -604,7 +605,8 @@ console.log('换书重建阅读面板(回归): 通过');
       shortcutPrev: 'alt+arrowleft', shortcutNext: 'alt+arrowright',
     },
   });
-  assert(styleVars['--sp-bg'] === '#ffffff', '浅色主题下面板应用白面板(起点风格)');
+  assert(styleVars['--sp-bg'] === '#f0e3c2', '面板背景应同步主题面板色(羊皮纸=米黄)');
+  assert(styleVars['--sp-accent'] === '#f56c6c', '浅色主题强调应为柔和起点红 #f56c6c');
 
   // Ctrl + 滚轮 缩放字号
   dispatch2({
