@@ -632,6 +632,8 @@ const viewStub = {
     },
   },
   onDidChangeVisibility: () => {},
+  onDidDispose: () => ({ dispose() {} }),
+  visible: true,
 };
 
 const provider = new ChapterViewProvider();
@@ -676,20 +678,34 @@ assert(/\.shelf-foot\s*\{[^}]*position:\s*sticky/.test(chapterHtml), '书架底�
 assert(/\.shelf-foot\s*\{[^}]*z-index/.test(chapterHtml), '黏底区应有层级避免被列表覆盖');
 assert(!/elShelfFoot\.textContent\s*=/.test(chapterHtml), '计数应写入独立元素, 不能覆盖底部按钮');
 assert(chapterHtml.includes('elShelfCount.textContent'), '书架计数应写入 #shelfCount');
-// 标题栏命令: 新增 addBook(短标签), 并占位在 view/title
+// 标题栏命令: 去掉「＋ 添加」按钮(统一走书架底部黏底按钮)
 {
   const pkgJson = require('../package.json');
   const cmds = pkgJson.contributes.commands;
-  const addBook = cmds.find((c) => c.command === 'novelReader.addBook');
-  assert(addBook && addBook.title === '添加书籍', '应有「添加书籍」命令');
   const titleItems = (pkgJson.contributes.menus['view/title'] || []).map((m) => m.command);
-  assert(titleItems.includes('novelReader.addBook'), '标题栏应显示「添加书籍」');
-  assert(!titleItems.includes('novelReader.openFile'), '标题栏不应再挂「打开小说文件」');
+  assert(!cmds.some((c) => c.command === 'novelReader.addBook'), '「＋ 添加」命令应已移除');
+  assert(!titleItems.includes('novelReader.addBook'), '标题栏不应再有「＋ 添加」');
+  assert(!titleItems.includes('novelReader.openFile'), '标题栏不应挂「打开小说文件」');
+  assert(titleItems.includes('novelReader.refresh'), '刷新目录按钮应保留');
+  // 三个互斥视图: 视图名即标题栏文字
+  const views = pkgJson.contributes.views['xiaoshuo-reader'];
+  const names = views.map((v) => v.name).join('/');
+  assert(names === '书架/目录/设置', '应有 书架/目录/设置 三个视图');
+  const viewIds = views.map((v) => v.id);
   assert(
-    (pkgJson.activationEvents || []).includes('onCommand:novelReader.addBook'),
-    '新命令需登记激活事件'
+    pkgJson.activationEvents.includes('onView:novelReaderShelf') &&
+      pkgJson.activationEvents.includes('onView:novelReaderCatalog') &&
+      pkgJson.activationEvents.includes('onView:novelReaderSettings'),
+    '三个视图都要登记激活事件'
   );
-  // 设置页标题栏: 只出现「返回」(分栏/添加书籍/刷新/设置 都要隐藏)
+  // when 必须与命令设置的 context key 对应(互斥)
+  const modes = views.map((v) => (v.when || '').replace(/[^a-z]+/g, ''));
+  assert(
+    modes[0].includes('shelf') && modes[1].includes('chapters') && modes[2].includes('settings'),
+    '视图 when 条件应与 viewMode 对应'
+  );
+  assert(viewIds.length === 3 && new Set(viewIds).size === 3, '视图 id 不能重复');
+  // 设置页标题栏: 只出现「返回」(分栏/刷新/设置 都要隐藏)
   const backCmd = cmds.find((c) => c.command === 'novelReader.backFromSettings');
   assert(backCmd && backCmd.title === '返回', '应有「返回」命令');
   assert(
@@ -700,7 +716,6 @@ assert(chapterHtml.includes('elShelfCount.textContent'), '书架计数应写入 
   const backMenu = titleMenus.find((m) => m.command === 'novelReader.backFromSettings');
   assert(backMenu && /viewMode == settings/.test(backMenu.when), '设置页应显示「返回」');
   for (const [cmd, label] of [
-    ['novelReader.addBook', '添加书籍'],
     ['novelReader.refresh', '刷新目录'],
     ['novelReader.showSettings', '设置'],
     ['novelReader.showChapters', '目录切换'],

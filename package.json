@@ -2,7 +2,7 @@
   "name": "r-novel-reader",
   "displayName": "小说阅读器",
   "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面：悬浮球 + 起点风格目录面板、我的书架、书库目录、字体/主题个性化设置，自动延续上次阅读状态。",
-  "version": "1.8.6",
+  "version": "1.9.0",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -26,8 +26,6 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
-    "onView:novelReaderChapters",
-    "onCommand:novelReader.addBook",
     "onCommand:novelReader.openFile",
     "onCommand:novelReader.openBook",
     "onCommand:novelReader.removeFromShelf",
@@ -43,7 +41,10 @@
     "onCommand:novelReader.openSettings",
     "onCommand:novelReader.prevChapter",
     "onCommand:novelReader.nextChapter",
-    "onCommand:novelReader.backFromSettings"
+    "onCommand:novelReader.backFromSettings",
+    "onView:novelReaderShelf",
+    "onView:novelReaderCatalog",
+    "onView:novelReaderSettings"
   ],
   "contributes": {
     "viewsContainers": {
@@ -58,9 +59,22 @@
     "views": {
       "xiaoshuo-reader": [
         {
-          "id": "novelReaderChapters",
-          "name": "书架 / 目录",
-          "type": "webview"
+          "id": "novelReaderShelf",
+          "name": "书架",
+          "type": "webview",
+          "when": "novelReader.viewMode == shelf"
+        },
+        {
+          "id": "novelReaderCatalog",
+          "name": "目录",
+          "type": "webview",
+          "when": "novelReader.viewMode == chapters"
+        },
+        {
+          "id": "novelReaderSettings",
+          "name": "设置",
+          "type": "webview",
+          "when": "novelReader.viewMode == settings"
         }
       ]
     },
@@ -95,11 +109,6 @@
       {
         "command": "novelReader.openFile",
         "title": "打开小说文件",
-        "icon": "$(add)"
-      },
-      {
-        "command": "novelReader.addBook",
-        "title": "添加书籍",
         "icon": "$(add)"
       },
       {
@@ -162,11 +171,6 @@
           "command": "novelReader.showChapters",
           "when": "view == novelReaderChapters && novelReader.viewMode == shelf",
           "group": "navigation@1"
-        },
-        {
-          "command": "novelReader.addBook",
-          "when": "view == novelReaderChapters && novelReader.viewMode != settings",
-          "group": "navigation@2"
         },
         {
           "command": "novelReader.refresh",

@@ -55,9 +55,19 @@ const ICON_SHELF_BOOK = `<svg width="15" height="15" viewBox="0 0 16 16" fill="n
 const ICON_CLOSE = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>`;
 
 export class ChapterViewProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = 'novelReaderChapters';
+    /**
+     * 三种模式各对应一个视图: VS Code 的视图名(标题栏文字)是静态的,
+     * 想要「书架 / 目录 / 设置」随模式变化, 只能用三个 when 互斥的视图。
+     */
+    public static readonly viewIds: Record<ViewMode, string> = {
+        shelf: 'novelReaderShelf',
+        chapters: 'novelReaderCatalog',
+        settings: 'novelReaderSettings',
+    };
+    /** 主视图(目录) */
+    public static readonly viewType = 'novelReaderCatalog';
 
-    private _view?: vscode.WebviewView;
+    private readonly _views: { view: vscode.WebviewView; mode: ViewMode }[] = [];
     private _mode: ViewMode = 'chapters';
     /** 最近一次非设置模式(设置页「返回」按钮回到这里) */
     private _prevMode: Exclude<ViewMode, 'settings'> = 'chapters';
@@ -72,14 +82,20 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
     private _pendingCenter: number | null = null;
 
     resolveWebviewView(view: vscode.WebviewView): void {
-        this._view = view;
+        this.resolveForMode(this._mode, view);
+    }
+
+    /** 供各模式视图的注册器调用(VS Code 的 resolveWebviewView 拿不到 viewId) */
+    resolveForMode(mode: ViewMode, view: vscode.WebviewView): void {
+        const entry = { view, mode };
+        this._views.push(entry);
         view.webview.options = { enableScripts: true };
         view.webview.html = this._getHtml();
 
         view.webview.onDidReceiveMessage((msg: WebviewMessage) => {
             switch (msg.type) {
                 case 'ready':
-                    this._syncAll();
+                    this._syncAll(entry);
                     break;
                 case 'openChapter':
                     void vscode.commands.executeCommand('novelReader.openChapter', msg.index);
@@ -116,14 +132,20 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
 
         view.onDidChangeVisibility(() => {
             if (view.visible) {
-                this._syncAll();
+                this._syncAll(entry);
+            }
+        });
+        view.onDidDispose(() => {
+            const i = this._views.indexOf(entry);
+            if (i >= 0) {
+                this._views.splice(i, 1);
             }
         });
     }
 
-    /** 视图可见性(供命令判断) */
+    /** 任一视图可见(供命令判断) */
     get visible(): boolean {
-        return !!this._view?.visible;
+        return this._views.some((e) => e.view.visible);
     }
 
     get mode(): ViewMode {
@@ -187,7 +209,7 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
     /** 当前阅读章节变化; center=true 时滚动定位到列表中间 */
     setCurrent(index: number, center = false): void {
         this._currentIndex = index;
-        if (!this._view) {
+        if (this._views.length === 0) {
             if (center) {
                 this._pendingCenter = index;
             }
@@ -196,11 +218,18 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
         this._post({ type: 'current', index, center });
     }
 
-    private _syncAll(): void {
-        this._post({ type: 'mode', mode: this._mode });
-        this._post({ type: 'shelf', items: this._shelf });
-        this._post({ type: 'library', path: this._libraryPath });
-        this._post({
+    /** 同步全量状态; 传入 target 时只发给该视图(新视图首次就绪时) */
+    private _syncAll(target?: { view: vscode.WebviewView }): void {
+        const send = (message: unknown) => {
+            const targets = target ? [target] : this._views;
+            for (const t of targets) {
+                void t.view.webview.postMessage(message);
+            }
+        };
+        send({ type: 'mode', mode: this._mode });
+        send({ type: 'shelf', items: this._shelf });
+        send({ type: 'library', path: this._libraryPath });
+        send({
             type: 'novel',
             payload: {
                 hasNovel: this._hasNovel,
@@ -210,13 +239,15 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
             },
         });
         if (this._pendingCenter !== null) {
-            this._post({ type: 'current', index: this._pendingCenter, center: true });
+            send({ type: 'current', index: this._pendingCenter, center: true });
             this._pendingCenter = null;
         }
     }
 
     private _post(message: unknown): void {
-        void this._view?.webview.postMessage(message);
+        for (const e of this._views) {
+            void e.view.webview.postMessage(message);
+        }
     }
 
     // ---------------------------------------------------------------- HTML
@@ -622,5 +653,20 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
 </script>
 </body>
 </html>`;
+    }
+}
+
+/**
+ * 把同一个 ChapterViewProvider 挂到指定模式的视图上。
+ * (VS Code 的视图名是静态的, 想让标题栏随模式显示 书架/目录/设置 只能用互斥视图)
+ */
+export class ChapterViewRegistrar implements vscode.WebviewViewProvider {
+    constructor(
+        private readonly target: ChapterViewProvider,
+        private readonly mode: ViewMode
+    ) {}
+
+    resolveWebviewView(view: vscode.WebviewView): void {
+        this.target.resolveForMode(this.mode, view);
     }
 }

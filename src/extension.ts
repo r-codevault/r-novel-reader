@@ -13,7 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { parseNovel, Novel } from './novelParser';
-import { ChapterViewProvider, ShelfItemView, ViewMode } from './chapterViewProvider';
+import { ChapterViewProvider, ChapterViewRegistrar, ShelfItemView, ViewMode } from './chapterViewProvider';
 import { ReaderPanel } from './readerPanel';
 import { ShelfStore } from './shelf';
 import { ensureInLibrary } from './library';
@@ -51,11 +51,16 @@ export function activate(context: vscode.ExtensionContext): void {
     const store = new SettingsStore(context.globalState);
     const shelf = new ShelfStore(context.globalState);
     const chapterView = new ChapterViewProvider();
-    context.subscriptions.push(
-        vscode.window.registerWebviewViewProvider(ChapterViewProvider.viewType, chapterView, {
-            webviewOptions: { retainContextWhenHidden: true },
-        })
-    );
+    // 书架 / 目录 / 设置 三个互斥视图(视图名即标题栏文字, 靠 viewMode 上下文切换)
+    for (const mode of Object.keys(ChapterViewProvider.viewIds) as ViewMode[]) {
+        context.subscriptions.push(
+            vscode.window.registerWebviewViewProvider(
+                ChapterViewProvider.viewIds[mode],
+                new ChapterViewRegistrar(chapterView, mode),
+                { webviewOptions: { retainContextWhenHidden: true } }
+            )
+        );
+    }
 
     let currentNovel: Novel | null = null;
 
@@ -68,7 +73,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     function focusChapterView(): void {
         if (!chapterView.visible) {
-            void vscode.commands.executeCommand(`${ChapterViewProvider.viewType}.focus`);
+            const viewId = ChapterViewProvider.viewIds[chapterView.mode] ?? ChapterViewProvider.viewType;
+            void vscode.commands.executeCommand(`${viewId}.focus`);
         }
     }
 
@@ -206,10 +212,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // 打开/添加小说文件的共用实现(openFile 与标题栏「添加书籍」按钮同一行为)
     async function openNovelFile(arg?: vscode.Uri): Promise<void> {
-        // 资源管理器右键 .txt 文件时直接打开该文件
+        // 资源管理器右键 .txt 文件: 只加入书架, 不自动打开阅读面板
         if (arg && arg.fsPath) {
-            await loadNovel(arg.fsPath, { openPanel: true });
-            setViewMode('chapters');
+            await loadNovel(arg.fsPath, { openPanel: false });
             return;
         }
         const picked = await vscode.window.showOpenDialog({
@@ -219,16 +224,13 @@ export function activate(context: vscode.ExtensionContext): void {
             filters: { '小说文本 (*.txt)': ['txt'], '所有文件': ['*'] },
         });
         if (picked && picked[0]) {
-            await loadNovel(picked[0].fsPath, { openPanel: true });
-            setViewMode('chapters');
+            // 只添加进书架: 阅读面板由用户点书名时再打开
+            await loadNovel(picked[0].fsPath, { openPanel: false });
         }
     }
 
     context.subscriptions.push(
         vscode.commands.registerCommand('novelReader.openFile', openNovelFile),
-
-        // 标题栏「添加书籍」按钮(短标签, 命令面板仍用描述性的"打开小说文件")
-        vscode.commands.registerCommand('novelReader.addBook', () => openNovelFile()),
 
         // 书架: 打开某本书(自动延续该书上次的阅读进度)
         vscode.commands.registerCommand('novelReader.openBook', async (filePath: string) => {
