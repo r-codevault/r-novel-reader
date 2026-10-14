@@ -21,6 +21,8 @@ const crypto = require('crypto');
 
 const pkg = require(path.join(__dirname, '..', 'package.json'));
 const extId = `${pkg.publisher}.${pkg.name}`;
+// 改过 ID 的旧标识(需要清理旧目录/清单条目, 并迁移其 globalState)
+const legacyIds = ['local.novel-reader'].filter((id) => id !== extId);
 const version = pkg.version;
 const folderName = process.argv[2] || `${extId}-${version}`;
 
@@ -77,6 +79,17 @@ if (idx >= 0) {
   console.log(`· 新增条目: ${extId} -> ${folderName}`);
   manifest.push(entry);
 }
+// 移除旧扩展 ID 的残留条目(否则 VS Code 会提示无效扩展)
+if (legacyIds.length) {
+  const beforeLen = manifest.length;
+  for (let i = manifest.length - 1; i >= 0; i--) {
+    const id = manifest[i].identifier && manifest[i].identifier.id;
+    if (id && legacyIds.includes(id)) { manifest.splice(i, 1); }
+  }
+  if (manifest.length !== beforeLen) {
+    console.log(`✓ 已移除旧扩展 ID 清单条目: ${legacyIds.join(', ')}`);
+  }
+}
 fs.writeFileSync(manifestPath, JSON.stringify(manifest));
 console.log(`✓ extensions.json 已更新 (共 ${manifest.length} 条)`);
 
@@ -96,9 +109,11 @@ if (Object.prototype.hasOwnProperty.call(obsolete, folderName)) {
 fs.writeFileSync(obsoletePath, JSON.stringify(obsolete));
 
 // ---- 清理同扩展的旧版本目录(升级后残留的孤儿目录会被 VS Code 标记待删) ----
+// 含「旧扩展 ID」目录: 改 ID(r-novel-reader) 后旧目录必须清掉
+const stalePrefixes = [`${extId}-`, ...legacyIds.map((id) => `${id}-`)];
 const staleDirs = fs
   .readdirSync(extRoot, { withFileTypes: true })
-  .filter((d) => d.isDirectory() && d.name.startsWith(`${extId}-`) && d.name !== folderName)
+  .filter((d) => d.isDirectory() && stalePrefixes.some((p) => d.name.startsWith(p)) && d.name !== folderName)
   .map((d) => d.name);
 for (const stale of staleDirs) {
   fs.rmSync(path.join(extRoot, stale), { recursive: true, force: true });
@@ -108,6 +123,19 @@ for (const stale of staleDirs) {
     delete ob[stale];
     fs.writeFileSync(obsoletePath, JSON.stringify(ob));
   }
+}
+
+// ---- 旧扩展 ID 的 globalState 迁移(书架 / 阅读进度 / 阅读偏好) ----
+// 状态按扩展 ID 分区, 改 ID 后不迁移会表现为"书架清空、进度丢失"
+try {
+  const { execFileSync } = require('child_process');
+  const migrate = path.join(__dirname, 'migrate-state-id.js');
+  if (fs.existsSync(migrate)) {
+    const out = execFileSync(process.execPath, [migrate], { encoding: 'utf8' });
+    process.stdout.write(out);
+  }
+} catch (err) {
+  console.log(`· 状态迁移跳过: ${err instanceof Error ? err.message : String(err)}`);
 }
 
 // ---- 结果校验 ----
