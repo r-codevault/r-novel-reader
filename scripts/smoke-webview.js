@@ -310,8 +310,28 @@ assert(
   '状态栏/面板应使用主题面板底色'
 );
 assert(
-  /--btn-bg:\s*#[0-9a-fA-F]{3,8}/.test(capturedHtml),
-  '悬浮球应使用主题主色(不再是 VS Code 按钮蓝)'
+  /--fab-bg:\s*#[0-9a-fA-F]{3,8}/.test(capturedHtml),
+  '悬浮球应提供背景色变量'
+);
+assert(
+  /--fab-fg:\s*#[0-9a-fA-F]{3,8}/.test(capturedHtml),
+  '悬浮球应提供前景(图标)色变量'
+);
+assert(
+  /--fab-border:\s*#[0-9a-fA-F]{3,8}/.test(capturedHtml),
+  '悬浮球应提供描边色变量'
+);
+assert(
+  /background:\s*var\(--fab-bg\);\s*color:\s*var\(--fab-fg\)/.test(capturedHtml),
+  '悬浮球应使用 --fab-bg/--fab-fg 变量'
+);
+assert(
+  /border:\s*1px solid var\(--fab-border\)/.test(capturedHtml),
+  '悬浮球应有主题描边'
+);
+assert(
+  !/--btn-bg\s*:/.test(capturedHtml),
+  '不应残留旧的 --btn-bg 变量'
 );
 assert(
   /--input-bg:\s*#[0-9a-fA-F]{3,8}/.test(capturedHtml),

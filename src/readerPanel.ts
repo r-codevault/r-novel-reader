@@ -317,8 +317,10 @@ export class ReaderPanel {
     --chrome-border: ${themeById(settings.theme).chromeBorder};
     --accent: ${themeById(settings.theme).accent};
     --accent-fg: ${themeById(settings.theme).accentFg};
-    --btn-bg: ${themeById(settings.theme).accent};
-    --btn-fg: ${themeById(settings.theme).accentFg};
+    /* 悬浮球(起点风格): 浅色=白底+主题色图标/描边; 黑夜=深底+暖金图标 */
+    --fab-bg: ${settings.theme === 'dark' ? '#1c1c1c' : '#ffffff'};
+    --fab-fg: ${settings.theme === 'dark' ? '#c9963f' : themeById(settings.theme).accent};
+    --fab-border: ${settings.theme === 'dark' ? '#333333' : themeById(settings.theme).chromeBorder};
     --btn-hover: ${themeById(settings.theme).accent};
     --input-bg: ${themeById(settings.theme).bg};
     --input-fg: ${themeById(settings.theme).fg};
@@ -351,8 +353,8 @@ export class ReaderPanel {
     padding: 9px 4px 7px;
     border-radius: 12px;
     display: flex; flex-direction: column; align-items: center; gap: 3px;
-    background: var(--btn-bg); color: var(--btn-fg);
-    border: 1px solid var(--chrome-border);
+    background: var(--fab-bg); color: var(--fab-fg);
+    border: 1px solid var(--fab-border);
     box-shadow: 0 3px 12px rgba(0, 0, 0, .32);
     cursor: grab; user-select: none;
     touch-action: none;
@@ -1170,8 +1172,6 @@ export class ReaderPanel {
     root.style.setProperty('--chrome-border', t.chromeBorder);
     root.style.setProperty('--accent', t.accent);
     root.style.setProperty('--accent-fg', t.accentFg);
-    root.style.setProperty('--btn-bg', t.accent);
-    root.style.setProperty('--btn-fg', t.accentFg);
     root.style.setProperty('--btn-hover', t.accent);
     root.style.setProperty('--input-bg', t.bg);
     root.style.setProperty('--input-fg', t.fg);
@@ -1191,6 +1191,10 @@ export class ReaderPanel {
     root.style.setProperty('--sp-hover', isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.05)');
     root.style.setProperty('--sp-accent', isDark ? '#c9963f' : '#f56c6c');
     root.style.setProperty('--sp-control-bg', isDark ? '#232323' : curTheme.bg);
+    // 悬浮球: 白底 + 主题色图标/描边(黑夜深底 + 暖金图标)
+    root.style.setProperty('--fab-bg', isDark ? '#1c1c1c' : '#ffffff');
+    root.style.setProperty('--fab-fg', isDark ? '#c9963f' : curTheme.accent);
+    root.style.setProperty('--fab-border', isDark ? '#333333' : curTheme.chromeBorder);
     // 快捷键(可在 VS Code 设置里自定义 novelReader.shortcutPrevChapter / NextChapter)
     state.prevCombo = parseShortcut(s.shortcutPrev);
     state.nextCombo = parseShortcut(s.shortcutNext);
