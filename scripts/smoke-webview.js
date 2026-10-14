@@ -687,8 +687,13 @@ assert(chapterHtml.includes('elShelfCount.textContent'), '书架计数应写入 
   assert(!titleItems.includes('novelReader.addBook'), '标题栏不应再有「＋ 添加」');
   assert(!titleItems.includes('novelReader.openFile'), '标题栏不应挂「打开小说文件」');
   assert(titleItems.includes('novelReader.refresh'), '刷新目录按钮应保留');
+  // 容器 id 与扩展标识统一(r- 前缀)
+  assert(
+    (pkgJson.contributes.viewsContainers.activitybar || []).some((v) => v.id === 'r-novel-reader'),
+    '视图容器 id 应为 r-novel-reader'
+  );
   // 三个互斥视图: 视图名即标题栏文字
-  const views = pkgJson.contributes.views['xiaoshuo-reader'];
+  const views = pkgJson.contributes.views['r-novel-reader'];
   const names = views.map((v) => v.name).join('/');
   assert(names === '书架/目录/设置', '应有 书架/目录/设置 三个视图');
   const viewIds = views.map((v) => v.id);
@@ -705,6 +710,17 @@ assert(chapterHtml.includes('elShelfCount.textContent'), '书架计数应写入 
     '视图 when 条件应与 viewMode 对应'
   );
   assert(viewIds.length === 3 && new Set(viewIds).size === 3, '视图 id 不能重复');
+  // 菜单条件里的视图 id 必须真实存在(改成新视图 id 后忘了同步 when -> 按钮全不显示)
+  for (const m of pkgJson.contributes.menus['view/title']) {
+    const ids = (m.when || '').match(/view == (\S+)|view in ([\w,]+)/);
+    if (!ids) {
+      continue;
+    }
+    const used = (ids[2] ? ids[2].split(',') : [ids[1]]).filter(Boolean);
+    for (const id of used) {
+      assert(viewIds.includes(id), `标题栏条件引用了不存在的视图 id: ${id}`);
+    }
+  }
   // 兜底: 上下文键未设置时也要有可见视图, 否则活动栏图标会整个消失
   assert(
     views.some((v) => /!novelReader\.viewMode/.test(v.when || '')),
