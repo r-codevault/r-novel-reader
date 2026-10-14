@@ -323,6 +323,14 @@ export class ReaderPanel {
     --input-bg: ${themeById(settings.theme).bg};
     --input-fg: ${themeById(settings.theme).fg};
     --input-border: ${themeById(settings.theme).chromeBorder};
+    /* 设置面板配色: 浅色主题=白面板+起点红; 黑夜=沿用深色面板(用户指定) */
+    --sp-bg: ${settings.theme === 'dark' ? themeById('dark').chromeBg : '#ffffff'};
+    --sp-fg: ${settings.theme === 'dark' ? themeById('dark').fg : '#333333'};
+    --sp-border: ${settings.theme === 'dark' ? themeById('dark').chromeBorder : '#e3e3e3'};
+    --sp-muted: ${settings.theme === 'dark' ? '#8a8a8a' : '#999999'};
+    --sp-hover: ${settings.theme === 'dark' ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.05)'};
+    --sp-accent: ${settings.theme === 'dark' ? themeById('dark').accent : '#e64c42'};
+    --sp-control-bg: ${settings.theme === 'dark' ? themeById('dark').bg : '#ffffff'};
     --font-size: ${settings.fontSize}px;
     --font-family: ${fontStackById(settings.fontFamily)};
     --line-height: ${settings.lineHeight};
@@ -456,70 +464,78 @@ export class ReaderPanel {
   .cat-foot .cat-btn { font-size: clamp(12px, calc(var(--font-size) * 0.82), 17px); }
   .cat-head .cat-btn { font-size: clamp(12px, calc(var(--font-size) * 0.82), 17px); }
 
-  /* ---------- 设置面板(固定悬浮窗, 不随内容滚动) ---------- */
+  /* ---------- 设置面板(起点风格; 黑夜模式沿用深色面板) ---------- */
   #settingsPanel {
     display: none;
     position: fixed;
     top: 12px;
     left: 12px;
-    width: min(760px, calc(100vw - 24px));
+    width: 340px;
+    max-width: calc(100vw - 24px);
     max-height: calc(100vh - 24px);
     overflow-y: auto;
     z-index: 45;
-    padding: 12px 18px 16px;
-    background: var(--chrome-bg);
-    border: 1px solid var(--chrome-border);
-    border-radius: 8px;
-    box-shadow: 0 6px 24px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.3));
-    backdrop-filter: none;
+    padding: 14px 16px 12px;
+    background: var(--sp-bg);
+    color: var(--sp-fg);
+    border: 1px solid var(--sp-border);
+    border-radius: 10px;
+    box-shadow: 0 10px 32px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.25));
   }
   #settingsPanel.open { display: block; }
-  .settings-head {
-    display: flex; align-items: center; justify-content: space-between;
-    margin: 0 0 10px;
-  }
-  .settings-head h3 { margin: 0; font-size: clamp(16px, calc(var(--font-size) * 1.2), 24px); font-weight: 600; }
-  .settings-close {
+  .sp-head { display: flex; align-items: center; justify-content: space-between; margin: 0 0 12px; }
+  .sp-title { font-weight: 600; font-size: clamp(15px, calc(var(--font-size) * 1.05), 20px); }
+  .sp-close {
     border: none; background: none; cursor: pointer;
-    color: inherit; opacity: .7; font-size: clamp(15px, calc(var(--font-size) * 0.95), 20px); line-height: 1;
-    padding: 2px 6px; border-radius: 4px;
+    color: var(--sp-muted); font-size: 13px; line-height: 1;
+    padding: 3px 7px; border-radius: 50%;
   }
-  .settings-close:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, rgba(127,127,127,.2)); }
-  .settings-grid {
-    display: grid; grid-template-columns: max-content 1fr; gap: 12px 16px; align-items: center;
-    max-width: 780px;
+  .sp-close:hover { color: var(--sp-fg); background: var(--sp-hover); }
+  .sp-row { display: flex; align-items: center; gap: 10px; margin: 0 0 13px; }
+  .sp-label {
+    flex: none; width: 60px;
+    font-size: clamp(12px, calc(var(--font-size) * 0.8), 16px); color: var(--sp-muted);
   }
-  .settings-grid > label { font-size: clamp(13px, var(--font-size), 22px); opacity: .85; text-align: right; }
-  .ctl-row { display: flex; align-items: center; gap: 10px; }
-  .ctl-row output { font-size: clamp(13px, var(--font-size), 22px); min-width: 66px; font-variant-numeric: tabular-nums; opacity: .85; }
-  .ctl-row input[type="range"] { flex: 1; accent-color: var(--accent); }
-  .ctl-row select {
-    flex: 1; background: var(--input-bg); color: var(--input-fg);
-    border: 1px solid var(--input-border); border-radius: 4px; padding: 5px 8px;
-    font-size: clamp(13px, var(--font-size), 22px);
+  .sp-themes { display: flex; gap: 10px; flex-wrap: wrap; }
+  .sp-dot {
+    width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+    border: 1px solid var(--sp-border);
+    display: inline-flex; align-items: center; justify-content: center;
   }
-  .swatches { display: flex; gap: 9px; flex-wrap: wrap; }
-  .swatch {
-    width: clamp(46px, calc(var(--font-size) * 2.5), 58px);
-    height: clamp(32px, calc(var(--font-size) * 1.75), 40px);
-    border-radius: 4px; cursor: pointer;
-    border: 2px solid var(--chrome-border);
-    display: flex; align-items: center; justify-content: center;
-    font-size: clamp(13px, calc(var(--font-size) * 0.9), 20px); font-weight: 600;
+  .sp-dot.active { box-shadow: 0 0 0 2px var(--sp-accent); border-color: transparent; }
+  .sp-dot.active::after { content: '✓'; font-size: 12px; font-weight: 700; color: var(--sp-check, #ffffff); }
+  .sp-seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sp-seg-btn {
+    padding: 4px 12px; cursor: pointer; font-family: inherit;
+    font-size: clamp(12px, calc(var(--font-size) * 0.8), 15px);
+    background: var(--sp-control-bg); color: var(--sp-fg);
+    border: 1px solid var(--sp-border); border-radius: 4px;
   }
-  .swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
-  #resetSettings {
-    justify-self: start; grid-column: 2;
-    font-size: clamp(13px, calc(var(--font-size) * 0.95), 20px);
-    padding: 5px 14px; border-radius: 4px;
-    background: var(--input-bg); color: var(--input-fg);
-    border: 1px solid var(--input-border); cursor: pointer;
+  .sp-seg-btn:hover { border-color: var(--sp-accent); }
+  .sp-seg-btn.active { border-color: var(--sp-accent); color: var(--sp-accent); }
+  .sp-step { display: flex; align-items: stretch; border: 1px solid var(--sp-border); border-radius: 4px; overflow: hidden; }
+  .sp-step-btn {
+    border: none; background: var(--sp-control-bg); color: var(--sp-fg); cursor: pointer;
+    padding: 4px 10px; font-family: inherit;
+    font-size: clamp(12px, calc(var(--font-size) * 0.8), 15px); line-height: 1.4;
   }
-  #resetSettings:hover { border-color: var(--accent); color: var(--accent); }
+  .sp-step-btn:hover { color: var(--sp-accent); }
+  .sp-step-val {
+    min-width: 46px; text-align: center; padding: 4px 6px;
+    font-size: clamp(12px, calc(var(--font-size) * 0.8), 15px);
+    border-left: 1px solid var(--sp-border); border-right: 1px solid var(--sp-border);
+    font-variant-numeric: tabular-nums; align-self: center;
+  }
+  .sp-reset {
+    display: block; width: 100%; margin: 2px 0 10px; padding: 6px 0; cursor: pointer;
+    background: transparent; color: var(--sp-fg);
+    border: 1px solid var(--sp-border); border-radius: 4px;
+    font-size: clamp(12px, calc(var(--font-size) * 0.82), 16px); font-family: inherit;
+  }
+  .sp-reset:hover { border-color: var(--sp-accent); color: var(--sp-accent); }
   .settings-hint {
-    margin-top: 10px; line-height: 1.6;
-    font-size: clamp(11px, calc(var(--font-size) * 0.72), 15px);
-    opacity: .6;
+    line-height: 1.6;
+    font-size: clamp(11px, calc(var(--font-size) * 0.7), 14px); color: var(--sp-muted);
   }
 
   /* ---------- 阅读区(留白底色 + 正文"纸面") ---------- */
@@ -604,40 +620,47 @@ export class ReaderPanel {
 </section>
 
 <section id="settingsPanel" role="dialog" aria-label="阅读设置">
-  <div class="settings-head">
-    <h3>阅读设置</h3>
-    <button id="settingsClose" class="settings-close" title="关闭设置 (Esc)">✕</button>
+  <div class="sp-head">
+    <span class="sp-title">设置</span>
+    <button id="settingsClose" class="sp-close" title="关闭设置 (Esc)">✕</button>
   </div>
-  <div class="settings-grid">
-    <label>字体大小</label>
-    <div class="ctl-row">
-      <input type="range" id="fontSize" min="12" max="32" step="1">
-      <output id="fontSizeVal"></output>
-    </div>
-    <label>字体</label>
-    <div class="ctl-row">
-      <select id="fontFamily"></select>
-    </div>
-    <label>行距</label>
-    <div class="ctl-row">
-      <input type="range" id="lineHeight" min="1.2" max="2.8" step="0.1">
-      <output id="lineHeightVal"></output>
-    </div>
-    <label>段距</label>
-    <div class="ctl-row">
-      <input type="range" id="paraSpacing" min="0" max="2" step="0.1">
-      <output id="paraSpacingVal"></output>
-    </div>
-    <label>阅读宽度</label>
-    <div class="ctl-row">
-      <input type="range" id="contentWidth" min="480" max="1200" step="20">
-      <output id="contentWidthVal"></output>
-    </div>
-    <label>主题配色</label>
-    <div class="swatches" id="themeSwatches"></div>
-    <label></label>
-    <button id="resetSettings" class="tbtn">恢复默认设置</button>
+  <div class="sp-row">
+    <span class="sp-label">阅读主题</span>
+    <div class="sp-themes" id="themeSwatches"></div>
   </div>
+  <div class="sp-row">
+    <span class="sp-label">正文字体</span>
+    <div class="sp-seg" id="fontFamilySeg"></div>
+  </div>
+  <div class="sp-row">
+    <span class="sp-label">字号大小</span>
+    <div class="sp-step">
+      <button id="fontDec" class="sp-step-btn" title="缩小字号">A-</button>
+      <span id="fontSizeVal" class="sp-step-val"></span>
+      <button id="fontInc" class="sp-step-btn" title="放大字号">A+</button>
+    </div>
+  </div>
+  <div class="sp-row">
+    <span class="sp-label">行距</span>
+    <div class="sp-step">
+      <button id="lineDec" class="sp-step-btn" title="减小行距">−</button>
+      <span id="lineHeightVal" class="sp-step-val"></span>
+      <button id="lineInc" class="sp-step-btn" title="增大行距">＋</button>
+    </div>
+  </div>
+  <div class="sp-row">
+    <span class="sp-label">段距</span>
+    <div class="sp-step">
+      <button id="paraDec" class="sp-step-btn" title="减小段距">−</button>
+      <span id="paraSpacingVal" class="sp-step-val"></span>
+      <button id="paraInc" class="sp-step-btn" title="增大段距">＋</button>
+    </div>
+  </div>
+  <div class="sp-row">
+    <span class="sp-label">页面宽度</span>
+    <div class="sp-seg" id="widthSeg"></div>
+  </div>
+  <button id="resetSettings" class="sp-reset">恢复默认设置</button>
   <div class="settings-hint" id="shortcutHint"></div>
 </section>
 
@@ -729,11 +752,12 @@ export class ReaderPanel {
     catClose: $('catClose'), catReverse: $('catReverse'),
     catPrev: $('catPrev'), catNext: $('catNext'), catPos: $('catPos'),
     settingsPanel: $('settingsPanel'), settingsClose: $('settingsClose'),
-    fontSize: $('fontSize'), fontSizeVal: $('fontSizeVal'),
-    fontFamily: $('fontFamily'),
-    lineHeight: $('lineHeight'), lineHeightVal: $('lineHeightVal'),
-    paraSpacing: $('paraSpacing'), paraSpacingVal: $('paraSpacingVal'),
-    contentWidth: $('contentWidth'), contentWidthVal: $('contentWidthVal'),
+    fontSizeVal: $('fontSizeVal'),
+    fontDec: $('fontDec'), fontInc: $('fontInc'),
+    fontFamilySeg: $('fontFamilySeg'),
+    lineDec: $('lineDec'), lineInc: $('lineInc'), lineHeightVal: $('lineHeightVal'),
+    paraDec: $('paraDec'), paraInc: $('paraInc'), paraSpacingVal: $('paraSpacingVal'),
+    widthSeg: $('widthSeg'),
     themeSwatches: $('themeSwatches'), reset: $('resetSettings'),
     shortcutHint: $('shortcutHint'),
     content: $('content'), bookInfo: $('bookInfo'), chapterInfo: $('chapterInfo'),
@@ -1182,18 +1206,20 @@ export class ReaderPanel {
   }
 
   function syncControls(s) {
-    els.fontSize.value = s.fontSize;
-    els.fontSizeVal.textContent = s.fontSize + 'px';
-    els.fontFamily.value = s.fontFamily;
-    els.lineHeight.value = s.lineHeight;
-    els.lineHeightVal.textContent = s.lineHeight.toFixed(1);
-    els.paraSpacing.value = s.paragraphSpacing;
-    els.paraSpacingVal.textContent = s.paragraphSpacing.toFixed(1);
-    els.contentWidth.value = s.contentWidth;
-    els.contentWidthVal.textContent = s.contentWidth + 'px';
-    var swatches = els.themeSwatches.children;
-    for (var i = 0; i < swatches.length; i++) {
-      swatches[i].classList.toggle('active', swatches[i].dataset.theme === s.theme);
+    els.fontSizeVal.textContent = String(s.fontSize);
+    els.lineHeightVal.textContent = Number(s.lineHeight).toFixed(1);
+    els.paraSpacingVal.textContent = Number(s.paragraphSpacing).toFixed(1);
+    var dots = els.themeSwatches.children;
+    for (var i = 0; i < dots.length; i++) {
+      dots[i].classList.toggle('active', dots[i].dataset.theme === s.theme);
+    }
+    var fontBtns = els.fontFamilySeg.children;
+    for (var j = 0; j < fontBtns.length; j++) {
+      fontBtns[j].classList.toggle('active', fontBtns[j].dataset.font === s.fontFamily);
+    }
+    var wBtns = els.widthSeg.children;
+    for (var k = 0; k < wBtns.length; k++) {
+      wBtns[k].classList.toggle('active', Number(wBtns[k].dataset.w) === Number(s.contentWidth));
     }
     els.shortcutHint.textContent =
       'Ctrl + 滚轮 缩放字号 · 上一章 ' + shortcutLabel(s.shortcutPrev) +
@@ -1201,22 +1227,31 @@ export class ReaderPanel {
       '（可在 VS Code 设置中自定义）';
   }
 
+  // 页面宽度档位(起点风格)
+  var WIDTH_STEPS = [640, 800, 1000, 1200];
   function buildSettingsControls() {
-    var html = '';
+    var dots = '';
     for (var i = 0; i < THEMES.length; i++) {
       var t = THEMES[i];
-      html += '<button class="swatch" data-theme="' + t.id + '" title="' + t.name +
-        '" style="background:' + t.bg + ';color:' + t.fg + '">字</button>';
+      dots += '<span class="sp-dot" data-theme="' + t.id + '" title="' + t.name +
+        '" style="background:' + t.bg + ';color:' + t.fg + ';--sp-check:' + t.fg + '"></span>';
     }
-    els.themeSwatches.innerHTML = html;
+    els.themeSwatches.innerHTML = dots;
 
-    var fonts = '';
-    for (var j = 0; j < Object.keys(FONT_STACKS).length; j++) {
-      var id = Object.keys(FONT_STACKS)[j];
-      var name = { system: '系统默认', songti: '宋体', heiti: '黑体', kaiti: '楷体', fangsong: '仿宋', yahei: '微软雅黑' }[id] || id;
-      fonts += '<option value="' + id + '">' + name + '</option>';
+    // 起点风格: 黑体 / 宋体 / 楷体 三个按钮
+    var fontIds = ['heiti', 'songti', 'kaiti'];
+    var fontNames = { heiti: '黑体', songti: '宋体', kaiti: '楷体' };
+    var seg = '';
+    for (var j = 0; j < fontIds.length; j++) {
+      seg += '<button class="sp-seg-btn" data-font="' + fontIds[j] + '">' + (fontNames[fontIds[j]] || fontIds[j]) + '</button>';
     }
-    els.fontFamily.innerHTML = fonts;
+    els.fontFamilySeg.innerHTML = seg;
+
+    var widths = '';
+    for (var k = 0; k < WIDTH_STEPS.length; k++) {
+      widths += '<button class="sp-seg-btn" data-w="' + WIDTH_STEPS[k] + '">' + WIDTH_STEPS[k] + '</button>';
+    }
+    els.widthSeg.innerHTML = widths;
   }
 
   /* ---------------- 章节渲染 ---------------- */
@@ -1288,13 +1323,36 @@ export class ReaderPanel {
     }, 250);
   }
 
-  els.fontSize.addEventListener('input', function () { persistSettings({ fontSize: Number(this.value) }); });
-  els.fontFamily.addEventListener('change', function () { persistSettings({ fontFamily: this.value }); });
-  els.lineHeight.addEventListener('input', function () { persistSettings({ lineHeight: Number(this.value) }); });
-  els.paraSpacing.addEventListener('input', function () { persistSettings({ paragraphSpacing: Number(this.value) }); });
-  els.contentWidth.addEventListener('input', function () { persistSettings({ contentWidth: Number(this.value) }); });
+  function stepFontSize(d) {
+    var cur = state.settings.fontSize || DEFAULT_SETTINGS.fontSize;
+    var next = Math.min(32, Math.max(12, cur + d));
+    if (next !== cur) { persistSettings({ fontSize: next }); }
+  }
+  function stepSetting(key, d, min, max) {
+    var cur = Number(state.settings[key]) || 0;
+    var next = Math.min(max, Math.max(min, Math.round((cur + d) * 10) / 10));
+    if (next !== cur) {
+      var patch = {};
+      patch[key] = next;
+      persistSettings(patch);
+    }
+  }
+  els.fontDec.addEventListener('click', function () { stepFontSize(-1); });
+  els.fontInc.addEventListener('click', function () { stepFontSize(1); });
+  els.lineDec.addEventListener('click', function () { stepSetting('lineHeight', -0.1, 1.2, 2.8); });
+  els.lineInc.addEventListener('click', function () { stepSetting('lineHeight', 0.1, 1.2, 2.8); });
+  els.paraDec.addEventListener('click', function () { stepSetting('paragraphSpacing', -0.1, 0, 2); });
+  els.paraInc.addEventListener('click', function () { stepSetting('paragraphSpacing', 0.1, 0, 2); });
+  els.fontFamilySeg.addEventListener('click', function (e) {
+    var btn = e.target.closest('.sp-seg-btn');
+    if (btn) { persistSettings({ fontFamily: btn.dataset.font }); }
+  });
+  els.widthSeg.addEventListener('click', function (e) {
+    var btn = e.target.closest('.sp-seg-btn');
+    if (btn) { persistSettings({ contentWidth: Number(btn.dataset.w) }); }
+  });
   els.themeSwatches.addEventListener('click', function (e) {
-    var btn = e.target.closest('.swatch');
+    var btn = e.target.closest('.sp-dot');
     if (btn) { persistSettings({ theme: btn.dataset.theme }); }
   });
   els.reset.addEventListener('click', function () {

@@ -2,7 +2,7 @@
   "name": "r-novel-reader",
   "displayName": "小说阅读器",
   "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面：悬浮球 + 起点风格目录面板、我的书架、书库目录、字体/主题个性化设置，自动延续上次阅读状态。",
-  "version": "1.9.5",
+  "version": "1.10.0",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -292,20 +292,20 @@
           "type": "string",
           "default": "sepia",
           "enum": [
+            "white",
+            "beige",
             "sepia",
             "green",
-            "white",
-            "gray",
-            "dark",
-            "ink"
+            "blue",
+            "dark"
           ],
           "enumDescriptions": [
-            "米黄纸",
-            "护眼绿",
             "纯净白",
-            "简约灰",
-            "暗夜",
-            "墨黑"
+            "米白",
+            "羊皮纸",
+            "护眼绿",
+            "浅蓝",
+            "黑夜(沿用原配色)"
           ],
           "description": "阅读区主题配色"
         },

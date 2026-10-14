@@ -144,8 +144,11 @@ checkInlineScript(capturedHtml, '阅读面板');
 console.log('内嵌脚本语法: 通过');
 
 const panelIds = [
-  'settingsPanel', 'settingsClose', 'themeSwatches', 'fontSize', 'fontFamily',
-  'lineHeight', 'paraSpacing', 'contentWidth', 'progressFill', 'content',
+  'settingsPanel', 'settingsClose', 'themeSwatches',
+  'fontDec', 'fontInc', 'fontSizeVal', 'fontFamilySeg',
+  'lineDec', 'lineInc', 'lineHeightVal',
+  'paraDec', 'paraInc', 'paraSpacingVal', 'widthSeg',
+  'progressFill', 'content',
   'bookInfo', 'chapterInfo',
   'fabs', 'fabPrev', 'fabCatalog', 'fabNext', 'fabSettings',
   'catalogPanel', 'catSub', 'catBody', 'catClose', 'catReverse', 'catPrev', 'catNext', 'catPos',
@@ -316,22 +319,22 @@ assert(
 );
 console.log('主题(留白/纸面/面板/悬浮球): 通过');
 
-// --- 设置面板字号同步阅读字号 ---
+// --- 设置面板字号同步阅读字号(起点风格新结构) ---
 assert(
-  /\.settings-head h3\s*\{[^}]*var\(--font-size\) \* 1\.2/.test(capturedHtml),
+  /\.sp-title\s*\{[^}]*var\(--font-size\)/.test(capturedHtml),
   '设置面板标题应随阅读字号'
 );
 assert(
-  /\.settings-grid > label\s*\{[^}]*var\(--font-size\)/.test(capturedHtml),
+  /\.sp-label\s*\{[^}]*var\(--font-size\)/.test(capturedHtml),
   '设置面板标签应随阅读字号'
 );
 assert(
-  /\.ctl-row output\s*\{[^}]*var\(--font-size\)/.test(capturedHtml),
-  '设置面板数值应随阅读字号'
+  /\.sp-dot\s*\{[^}]*border-radius:\s*50%/.test(capturedHtml),
+  '主题色块应为起点风格的圆形色点'
 );
 assert(
-  /\.swatch\s*\{[^}]*var\(--font-size\)/.test(capturedHtml),
-  '主题色块应随阅读字号'
+  /\.sp-step-btn\s*\{[^}]*var\(--font-size\)/.test(capturedHtml),
+  '字号步进按钮应随阅读字号'
 );
 console.log('设置面板字号同步: 通过');
 
@@ -590,15 +593,15 @@ console.log('换书重建阅读面板(回归): 通过');
   assert(wheelHandler, '应注册 wheel 监听');
   let prevented = 0;
   wheelHandler({ ctrlKey: true, deltaY: -1, preventDefault() { prevented++; } });
-  assert(byId.fontSize.value === 17, 'Ctrl+滚轮上滚应放大字号');
+  assert(byId.fontSizeVal.textContent === '17', 'Ctrl+滚轮上滚应放大字号');
   assert(prevented > 0, 'Ctrl+滚轮应阻止默认缩放');
   wheelHandler({ ctrlKey: false, deltaY: -1, preventDefault() { prevented++; } });
-  assert(byId.fontSize.value === 17, '无 Ctrl 的滚轮不应改变字号');
+  assert(byId.fontSizeVal.textContent === '17', '无 Ctrl 的滚轮不应改变字号');
 
   // 回归: 字号改动必须与随后的其它设置改动合并提交, 不能被顶掉后回弹
   panelPosted.length = 0;
   wheelHandler({ ctrlKey: true, deltaY: -1, preventDefault() {} }); // 17 -> 18
-  assert(byId.fontSize.value === 18, '滚轮应立即放大字号');
+  assert(byId.fontSizeVal.textContent === '18', '滚轮应立即放大字号');
   fire('themeSwatches', 'click', { target: { closest: () => ({ dataset: { theme: 'dark' } }) } });
   flushTimers();
   const settingsUpdate = panelPosted.filter((m) => m.type === 'updateSettings').pop();
@@ -719,6 +722,14 @@ assert(chapterHtml.includes('elShelfCount.textContent'), '书架计数应写入 
     '视图 when 条件应与 viewMode 对应'
   );
   assert(viewIds.length === 3 && new Set(viewIds).size === 3, '视图 id 不能重复');
+  // 主题色同步起点: 白/米白/羊皮纸/护眼绿/浅蓝/黑夜(黑夜沿用原配色)
+  assert(
+    JSON.stringify(pkgJson.contributes.configuration.properties['novelReader.theme'].enum) ===
+      JSON.stringify(['white', 'beige', 'sepia', 'green', 'blue', 'dark']),
+    '主题枚举应与起点六色一致'
+  );
+  // 设置面板独立配色变量(浅色=白面板+起点红, 黑夜=沿用深色面板)
+  assert(capturedHtml.includes('--sp-bg:'), '设置面板应有独立配色变量');
   // when 必须用 view =~ /novelReader/ 匹配三个视图
   // (禁用 view == 旧 id: 只对单视图有效; 禁用 view in 字面量列表: 右侧必须是 context key, 两者都会让按钮全消失)
   for (const m of pkgJson.contributes.menus['view/title']) {

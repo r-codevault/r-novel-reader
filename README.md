@@ -113,7 +113,7 @@
 - 阅读设置实时生效：字号、字体族、行距、段距、阅读宽度、主题配色（面板为悬浮窗，**贴着工具栏弹出并自动夹在视口内**，不随正文滚动；面板字号跟随阅读字号）
 - 整书进度条位于**底部**状态栏，并显示书名/作者/字数、**本章字数**与「第 N 章 / 共 M 章」（翻页与目录都走右侧悬浮球工具栏）
 - **主题分层配色**：正文"纸面"与四周留白深浅分明（像起点阅读页），悬浮球、底部状态栏、设置/目录面板、进度条与当前章高亮**全部跟随主题**
-- 六套主题：米黄纸、护眼绿、纯净白、简约灰、暗夜、墨黑（每套含 纸面 / 留白 / 主色 完整配色）
+- 六套主题（同步起点）：纯净白、米白、羊皮纸、护眼绿、浅蓝、黑夜（黑夜沿用原配色；每套含 纸面 / 留白 / 主色）
 
 ---
 
@@ -210,7 +210,7 @@ npm run compile
 | `novelReader.lineHeight` | number | `1.8` | 1.2–2.8 |
 | `novelReader.paragraphSpacing` | number | `0.8` | 0–2（em） |
 | `novelReader.contentWidth` | number | `720` | 480–1200（像素） |
-| `novelReader.theme` | string | `sepia` | `sepia` / `green` / `white` / `gray` / `dark` / `ink` |
+| `novelReader.theme` | string | `sepia` | `white` / `beige` / `sepia` / `green` / `blue` / `dark` |
 | `novelReader.shortcutPrevChapter` | string | `alt+arrowleft` | 阅读页内「上一章」快捷键，如 `ctrl+shift+p`；留空禁用 |
 | `novelReader.shortcutNextChapter` | string | `alt+arrowright` | 阅读页内「下一章」快捷键；留空禁用 |
 

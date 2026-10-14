@@ -56,19 +56,15 @@ export interface FontDef {
     stack: string;
 }
 
+// 主题色同步起点中文网: 纯净白 / 米白 / 羊皮纸 / 护眼绿 / 浅蓝 / 黑夜
+// 黑夜按用户要求沿用原配色(深灰纸面 + 暖金主色)
 export const THEMES: ThemeDef[] = [
-    // 米黄纸: 暖米色纸面 + 更深的米色留白, 赭色主色
-    { id: 'sepia', name: '米黄纸', bg: '#f5ecd7', fg: '#4b3f2a', pageBg: '#e6d5ae', chromeBg: '#efe3c4', chromeBorder: '#d6c395', accent: '#a3652a', accentFg: '#fdf6e3' },
-    // 护眼绿: 淡绿纸面 + 深一档的绿留白
-    { id: 'green', name: '护眼绿', bg: '#c7edcc', fg: '#274b27', pageBg: '#a5d2ac', chromeBg: '#b8e2bf', chromeBorder: '#8cc094', accent: '#2e7d43', accentFg: '#f0fff2' },
-    // 纯净白: 白纸面 + 浅灰蓝留白
-    { id: 'white', name: '纯净白', bg: '#ffffff', fg: '#333333', pageBg: '#e8ecf1', chromeBg: '#f2f5f8', chromeBorder: '#d3dae2', accent: '#3567c4', accentFg: '#ffffff' },
-    // 简约灰: 灰纸面 + 更深的暖灰留白
-    { id: 'gray', name: '简约灰', bg: '#e4e2dc', fg: '#3c3a36', pageBg: '#c9c6be', chromeBg: '#d8d5ce', chromeBorder: '#b5b1a8', accent: '#5d594f', accentFg: '#f5f3ee' },
-    // 暗夜: 深灰纸面 + 近黑留白, 暖金主色
-    { id: 'dark', name: '暗夜', bg: '#232323', fg: '#bababa', pageBg: '#141414', chromeBg: '#1c1c1c', chromeBorder: '#333333', accent: '#c9963f', accentFg: '#191919' },
-    // 墨黑: 纯黑留白 + 近黑纸面
-    { id: 'ink', name: '墨黑', bg: '#0d0d0d', fg: '#9e9e9e', pageBg: '#000000', chromeBg: '#060606', chromeBorder: '#262626', accent: '#8a8a8a', accentFg: '#0d0d0d' },
+    { id: 'white', name: '纯净白', bg: '#ffffff', fg: '#262626', pageBg: '#f3f3f3', chromeBg: '#f7f7f7', chromeBorder: '#e4e4e4', accent: '#e64c42', accentFg: '#ffffff' },
+    { id: 'beige', name: '米白', bg: '#f8f4ea', fg: '#33302a', pageBg: '#efe9db', chromeBg: '#f4f0e5', chromeBorder: '#e0d9c6', accent: '#e64c42', accentFg: '#ffffff' },
+    { id: 'sepia', name: '羊皮纸', bg: '#f4e8cd', fg: '#4b3f2a', pageBg: '#eadbb4', chromeBg: '#f0e3c2', chromeBorder: '#dbc79c', accent: '#e64c42', accentFg: '#ffffff' },
+    { id: 'green', name: '护眼绿', bg: '#d5ecd0', fg: '#2c3f2c', pageBg: '#c3e0ba', chromeBg: '#cde6c6', chromeBorder: '#a8cfa0', accent: '#e64c42', accentFg: '#ffffff' },
+    { id: 'blue', name: '浅蓝', bg: '#e4eef5', fg: '#2c3944', pageBg: '#d3e2ec', chromeBg: '#dfeaf2', chromeBorder: '#c3d5e1', accent: '#e64c42', accentFg: '#ffffff' },
+    { id: 'dark', name: '黑夜', bg: '#232323', fg: '#bababa', pageBg: '#141414', chromeBg: '#1c1c1c', chromeBorder: '#333333', accent: '#c9963f', accentFg: '#191919' },
 ];
 
 export const FONTS: FontDef[] = [
@@ -90,7 +86,7 @@ export const FONTS: FontDef[] = [
 
 export const DEFAULT_SETTINGS: ReadingSettings = {
     fontSize: 16,
-    fontFamily: 'system',
+    fontFamily: 'heiti',
     lineHeight: 1.8,
     paragraphSpacing: 0.8,
     theme: 'sepia',
@@ -145,8 +141,13 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
     if (typeof s.fontSize === 'number') {
         out.fontSize = clamp(s.fontSize, 12, 32, DEFAULT_SETTINGS.fontSize);
     }
-    if (typeof s.fontFamily === 'string' && FONTS.some((f) => f.id === s.fontFamily)) {
-        out.fontFamily = s.fontFamily;
+    if (typeof s.fontFamily === 'string') {
+        // 旧字体值迁移: 设置面板已改为 黑体/宋体/楷体 三选项(起点风格)
+        const legacy: Record<string, string> = { system: 'heiti', yahei: 'heiti', fangsong: 'songti' };
+        const fid = legacy[s.fontFamily] ?? s.fontFamily;
+        if (FONTS.some((f) => f.id === fid)) {
+            out.fontFamily = fid;
+        }
     }
     if (typeof s.lineHeight === 'number') {
         out.lineHeight = clamp(s.lineHeight, 1.2, 2.8, DEFAULT_SETTINGS.lineHeight);
