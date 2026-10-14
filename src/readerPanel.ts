@@ -323,14 +323,7 @@ export class ReaderPanel {
     --input-bg: ${themeById(settings.theme).bg};
     --input-fg: ${themeById(settings.theme).fg};
     --input-border: ${themeById(settings.theme).chromeBorder};
-    /* 设置面板配色: 浅色主题=白面板+起点红; 黑夜=沿用深色面板(用户指定) */
-    --sp-bg: ${settings.theme === 'dark' ? themeById('dark').chromeBg : '#ffffff'};
-    --sp-fg: ${settings.theme === 'dark' ? themeById('dark').fg : '#333333'};
-    --sp-border: ${settings.theme === 'dark' ? themeById('dark').chromeBorder : '#e3e3e3'};
-    --sp-muted: ${settings.theme === 'dark' ? '#8a8a8a' : '#999999'};
-    --sp-hover: ${settings.theme === 'dark' ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.05)'};
-    --sp-accent: ${settings.theme === 'dark' ? themeById('dark').accent : '#e64c42'};
-    --sp-control-bg: ${settings.theme === 'dark' ? themeById('dark').bg : '#ffffff'};
+    /* 设置面板配色初值(实际值由 applySettings 按当前主题实时维护, 切主题立即跟随) */
     --font-size: ${settings.fontSize}px;
     --font-family: ${fontStackById(settings.fontFamily)};
     --line-height: ${settings.lineHeight};
@@ -1183,6 +1176,20 @@ export class ReaderPanel {
     root.style.setProperty('--input-bg', t.bg);
     root.style.setProperty('--input-fg', t.fg);
     root.style.setProperty('--input-border', t.chromeBorder);
+    // 设置面板配色: 浅色主题=白面板+起点红(#e64c42); 黑夜=沿用深色面板与暖金(用户指定)
+    // 必须在这里实时设置 -- 静态注入的初值只对应生成 HTML 时的主题, 切主题后不会自动变
+    var isDark = s.theme === 'dark';
+    var darkTheme = null;
+    for (var ti = 0; ti < THEMES.length; ti++) {
+      if (THEMES[ti].id === 'dark') { darkTheme = THEMES[ti]; }
+    }
+    root.style.setProperty('--sp-bg', isDark ? darkTheme.chromeBg : '#ffffff');
+    root.style.setProperty('--sp-fg', isDark ? darkTheme.fg : '#333333');
+    root.style.setProperty('--sp-border', isDark ? darkTheme.chromeBorder : '#e3e3e3');
+    root.style.setProperty('--sp-muted', isDark ? '#8a8a8a' : '#999999');
+    root.style.setProperty('--sp-hover', isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.05)');
+    root.style.setProperty('--sp-accent', isDark ? darkTheme.accent : '#e64c42');
+    root.style.setProperty('--sp-control-bg', isDark ? darkTheme.bg : '#ffffff');
     // 快捷键(可在 VS Code 设置里自定义 novelReader.shortcutPrevChapter / NextChapter)
     state.prevCombo = parseShortcut(s.shortcutPrev);
     state.nextCombo = parseShortcut(s.shortcutNext);

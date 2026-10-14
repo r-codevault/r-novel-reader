@@ -423,11 +423,16 @@ console.log('换书重建阅读面板(回归): 通过');
   const byId = {};
   const scrollCalls2 = [];
   const docListeners = {};
+  const styleVars = {};
   function el2() {
     const classes = new Set();
     const el = {
       children: [], textContent: '', value: '', title: '', dataset: {}, _ls: {},
-      style: { setProperty() {}, getPropertyValue() { return ''; }, removeProperty() {} },
+      style: {
+        setProperty(k, v) { styleVars[k] = v; },
+        getPropertyValue(k) { return styleVars[k] || ''; },
+        removeProperty(k) { delete styleVars[k]; },
+      },
       disabled: false, offsetHeight: 246, offsetWidth: 58,
       classList: {
         add(c) { classes.add(c); },
@@ -580,6 +585,27 @@ console.log('换书重建阅读面板(回归): 通过');
   }
   assert(panelPosted.length === 0, '设置面板输入控件聚焦时不应翻章');
 
+  // 回归: 切主题后设置面板配色必须实时跟随(--sp-* 由 applySettings 动态维护)
+  dispatch2({
+    type: 'settings',
+    payload: {
+      fontSize: 16, fontFamily: 'kaiti', lineHeight: 1.8,
+      paragraphSpacing: 0.8, theme: 'dark', contentWidth: 720,
+      shortcutPrev: 'alt+arrowleft', shortcutNext: 'alt+arrowright',
+    },
+  });
+  assert(styleVars['--sp-bg'] === '#1c1c1c', '黑夜主题下面板应用深色配色');
+  assert(styleVars['--sp-accent'] === '#c9963f', '黑夜主题下面板沿用暖金强调');
+  dispatch2({
+    type: 'settings',
+    payload: {
+      fontSize: 16, fontFamily: 'kaiti', lineHeight: 1.8,
+      paragraphSpacing: 0.8, theme: 'sepia', contentWidth: 720,
+      shortcutPrev: 'alt+arrowleft', shortcutNext: 'alt+arrowright',
+    },
+  });
+  assert(styleVars['--sp-bg'] === '#ffffff', '浅色主题下面板应用白面板(起点风格)');
+
   // Ctrl + 滚轮 缩放字号
   dispatch2({
     type: 'settings',
@@ -728,8 +754,12 @@ assert(chapterHtml.includes('elShelfCount.textContent'), '书架计数应写入 
       JSON.stringify(['white', 'beige', 'sepia', 'green', 'blue', 'dark']),
     '主题枚举应与起点六色一致'
   );
-  // 设置面板独立配色变量(浅色=白面板+起点红, 黑夜=沿用深色面板)
-  assert(capturedHtml.includes('--sp-bg:'), '设置面板应有独立配色变量');
+  // 设置面板独立配色(浅色=白面板+起点红, 黑夜=深色面板), 且由 applySettings 实时维护
+  assert(
+    capturedHtml.includes('background: var(--sp-bg)') &&
+      capturedHtml.includes("setProperty('--sp-bg'"),
+    '设置面板应有独立配色变量且随主题实时跟随'
+  );
   // when 必须用 view =~ /novelReader/ 匹配三个视图
   // (禁用 view == 旧 id: 只对单视图有效; 禁用 view in 字面量列表: 右侧必须是 context key, 两者都会让按钮全消失)
   for (const m of pkgJson.contributes.menus['view/title']) {
