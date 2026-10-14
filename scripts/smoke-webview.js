@@ -349,6 +349,20 @@ assert(capturedHtml.includes('state.prevCombo') && capturedHtml.includes('state.
 assert(/addEventListener\(\s*'wheel'/.test(capturedHtml), '应监听滚轮事件');
 assert(capturedHtml.includes('passive: false'), '滚轮监听需可阻止默认缩放');
 assert(capturedHtml.includes('shortcutLabel'), '设置面板应展示快捷键提示');
+// 设置面板定位: 贴着悬浮工具栏弹出 + 视口内夹取
+assert(capturedHtml.includes('function positionSettingsPanel'), '设置面板应有定位函数');
+assert(
+  /function positionSettingsPanel[\s\S]{0,1600}getBoundingClientRect/.test(capturedHtml),
+  '设置面板应参照悬浮工具栏位置'
+);
+assert(
+  /function positionSettingsPanel[\s\S]{0,2000}maxHeight/.test(capturedHtml),
+  '设置面板应限制高度避免超出视口'
+);
+assert(
+  /function openSettings\(\)[\s\S]{0,200}positionSettingsPanel\(\)/.test(capturedHtml),
+  '打开设置面板时应先定位'
+);
 console.log('快捷键自定义 + Ctrl+滚轮缩放: 通过');
 
 // --- 设置面板必须是固定悬浮窗(不随内容滚动) ---
@@ -427,7 +441,7 @@ console.log('换书重建阅读面板(回归): 通过');
       closest(){ return null; }, contains(){ return false; },
       scrollIntoView(o){ scrollCalls2.push(o || null); }, focus(){}, click(){}, appendChild(){},
       setAttribute(){}, getAttribute(){ return null; }, setPointerCapture(){},
-      getBoundingClientRect(){ return { left: 0, top: 0, width: 58, height: 246 }; },
+      getBoundingClientRect(){ return { left: 0, top: 0, right: 58, bottom: 246, width: 58, height: 246 }; },
     };
     Object.defineProperty(el, 'innerHTML', {
       configurable: true,
@@ -527,6 +541,12 @@ console.log('换书重建阅读面板(回归): 通过');
   // 侧边栏「打开阅读设置」按钮 -> openSettings 消息必须真的打开设置面板
   dispatch2({ type: 'openSettings' });
   assert(byId.settingsPanel.classList.contains('open'), 'openSettings 消息应打开设置面板');
+  // 设置面板应贴着悬浮工具栏弹出并被夹在视口内
+  const spLeft = parseFloat(byId.settingsPanel.style.left);
+  const spTop = parseFloat(byId.settingsPanel.style.top);
+  assert(isFinite(spLeft) && spLeft >= 12, '设置面板左边界应夹在视口内');
+  assert(isFinite(spTop) && spTop >= 12, '设置面板上边界应夹在视口内');
+  assert(!!byId.settingsPanel.style.maxHeight, '设置面板应限制最大高度避免超出');
 
   // 自定义快捷键: 默认 alt+arrowleft / alt+arrowright 应触发上/下一章
   function keyEvent(key, mods) {
@@ -638,11 +658,14 @@ console.log('当前阅读条 / 图标: 通过');
 const sideIds = [
   'paneShelf', 'shelfList', 'shelfEmpty', 'shelfFoot',
   'paneChapters', 'chapterList', 'currentCard', 'currentTitle',
-  'paneSettings', 'libValue', 'btnPickLib', 'btnOpenLib', 'btnClearLib', 'btnReaderSettings',
+  'paneSettings', 'libValue', 'btnPickLib', 'btnOpenLib', 'btnClearLib',
 ];
 for (const id of sideIds) {
   assert(chapterHtml.includes(`id="${id}"`), `侧边栏缺少元素 #${id}`);
 }
+// 侧边栏设置页的「打开阅读设置」按钮已移除(阅读页右侧工具栏里有)
+assert(!chapterHtml.includes('btnReaderSettings'), '侧边栏不应再有「打开阅读设置」按钮');
+assert(!chapterHtml.includes('openReaderSettings'), '侧边栏不应再发送 openReaderSettings 消息');
 assert(chapterHtml.includes('bk-del'), '书架条目应有移除按钮');
 assert(chapterHtml.includes('书架空空如也'), '书架应有空状态');
 console.log('书架 UI 元素: 通过');
@@ -668,7 +691,7 @@ function makeEl() {
     closest(){ return null; }, contains(){ return false; },
     scrollIntoView(opts) { scrollCalls.push(opts || null); }, focus(){}, click(){}, appendChild(){},
     setAttribute(){}, getAttribute(){ return null; },
-    getBoundingClientRect(){ return { left: 0, top: 0, width: 58, height: 100 }; },
+    getBoundingClientRect(){ return { left: 0, top: 0, right: 58, bottom: 100, width: 58, height: 100 }; },
   };
   // 极简 innerHTML 模拟: 赋值时按 <div 出现次数生成 children, 供 renderChapters 的
   // `Array.prototype.slice.call(el.children)` 遍历
@@ -823,7 +846,6 @@ msgHandler({ type: 'showChapters' });
 msgHandler({ type: 'pickLibrary' });
 msgHandler({ type: 'clearLibrary' });
 msgHandler({ type: 'openLibraryFolder' });
-msgHandler({ type: 'openReaderSettings' });
 const expected = [
   'novelReader.openBook',
   'novelReader.removeFromShelf',
@@ -835,7 +857,6 @@ const expected = [
   'novelReader.pickLibraryPath',
   'novelReader.clearLibraryPath',
   'novelReader.openLibraryFolder',
-  'novelReader.openSettings',
 ];
 for (const cmd of expected) {
   assert(executed.some((e) => e.cmd === cmd), `消息未分发到命令 ${cmd}`);

@@ -40,8 +40,7 @@ type WebviewMessage =
     | { type: 'showChapters' }
     | { type: 'pickLibrary' }
     | { type: 'clearLibrary' }
-    | { type: 'openLibraryFolder' }
-    | { type: 'openReaderSettings' };
+    | { type: 'openLibraryFolder' };
 
 /** 普通章节: 摊开的书本 */
 const ICON_BOOK = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M7.45 3.35C6.35 2.65 4.65 2.35 2.65 2.35a.6.6 0 0 0-.6.6v8.1c0 .35.3.62.65.6 1.75-.07 3.3.28 4.15 1.03.3.25.7-.03.7-.42V3.85c0-.2-.05-.36-.1-.5z"/><path d="M8.55 3.35c1.1-.7 2.8-1 4.8-1 .33 0 .6.27.6.6v8.1c0 .35-.3.62-.65.6-1.75-.07-3.3.28-4.15 1.03-.3.25-.7-.03-.7-.42V3.85c0-.2.05-.36.1-.5z"/></svg>`;
@@ -109,9 +108,6 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'openLibraryFolder':
                     void vscode.commands.executeCommand('novelReader.openLibraryFolder');
-                    break;
-                case 'openReaderSettings':
-                    void vscode.commands.executeCommand('novelReader.openSettings');
                     break;
             }
         });
@@ -376,10 +372,7 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
     <p class="set-tip">默认不设置：直接读取你选择的文件原路径。设置书库目录后，<b>导入时会把小说复制到该目录</b>并从副本读取，原文件之后可以自行移动或删除；同名文件会自动改名，不会覆盖。</p>
   </div>
   <div class="set-sec" style="border-bottom:none">
-    <div class="set-h">阅读</div>
-    <div class="set-actions" style="margin-top:0">
-      <button class="set-btn" id="btnReaderSettings">打开阅读设置（字号 / 字体 / 主题）</button>
-    </div>
+    <p class="set-tip">阅读设置（字号 / 字体 / 主题）在阅读页右侧工具栏的「阅读设置」按钮里调整。</p>
   </div>
 </div>
 
@@ -399,7 +392,6 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
   var elBtnPickLib = document.getElementById('btnPickLib');
   var elBtnOpenLib = document.getElementById('btnOpenLib');
   var elBtnClearLib = document.getElementById('btnClearLib');
-  var elBtnReaderSettings = document.getElementById('btnReaderSettings');
   var elShelfList = document.getElementById('shelfList');
   var elShelfEmpty = document.getElementById('shelfEmpty');
   var elShelfFoot = document.getElementById('shelfFoot');
@@ -452,7 +444,6 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
   elBtnPickLib.addEventListener('click', function () { vscode.postMessage({ type: 'pickLibrary' }); });
   elBtnOpenLib.addEventListener('click', function () { vscode.postMessage({ type: 'openLibraryFolder' }); });
   elBtnClearLib.addEventListener('click', function () { vscode.postMessage({ type: 'clearLibrary' }); });
-  elBtnReaderSettings.addEventListener('click', function () { vscode.postMessage({ type: 'openReaderSettings' }); });
 
   /* ---------------- 书架 ---------------- */
   function renderShelf(items) {

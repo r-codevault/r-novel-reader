@@ -461,10 +461,9 @@ export class ReaderPanel {
     display: none;
     position: fixed;
     top: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(760px, calc(100vw - 32px));
-    max-height: calc(100vh - 76px);
+    left: 12px;
+    width: min(760px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
     overflow-y: auto;
     z-index: 45;
     padding: 12px 18px 16px;
@@ -1081,8 +1080,48 @@ export class ReaderPanel {
     }
   });
 
+  /**
+   * 设置面板贴着悬浮工具栏弹出(工具栏在左半屏就放右侧, 反之放左侧),
+   * 并整体夹在视口内, 保证不超出边界。
+   */
+  function positionSettingsPanel() {
+    var panel = els.settingsPanel;
+    if (!panel) { return; }
+    var margin = 12;
+    var gap = 10;
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var maxH = Math.max(200, vh - margin * 2);
+    panel.style.maxHeight = maxH + 'px';
+    var pw = panel.offsetWidth || 520;
+    var ph = Math.min(panel.offsetHeight || 420, maxH);
+    var anchor = els.fabs.getBoundingClientRect();
+    var hasAnchor = !!(anchor && (anchor.width || anchor.height));
+    var left;
+    var top;
+    if (hasAnchor) {
+      left =
+        anchor.left + anchor.width / 2 > vw / 2
+          ? anchor.left - gap - pw // 工具栏在右半屏 -> 面板放左侧
+          : anchor.right + gap; // 工具栏在左半屏 -> 面板放右侧
+      top = anchor.top; // 与工具栏顶部对齐
+    } else {
+      left = (vw - pw) / 2;
+      top = margin;
+    }
+    if (left + pw > vw - margin) { left = vw - margin - pw; }
+    if (left < margin) { left = margin; }
+    if (!isFinite(left)) { left = margin; }
+    if (top + ph > vh - margin) { top = vh - margin - ph; }
+    if (top < margin) { top = margin; }
+    if (!isFinite(top)) { top = margin; }
+    panel.style.left = Math.round(left) + 'px';
+    panel.style.top = Math.round(top) + 'px';
+  }
+
   function openSettings() {
     els.settingsPanel.classList.add('open');
+    positionSettingsPanel();
   }
   function closeSettings() {
     els.settingsPanel.classList.remove('open');
@@ -1285,6 +1324,10 @@ export class ReaderPanel {
    * 未拖动的: 直接按新的阅读区域重算。
    */
   function syncFabOnResize() {
+    // 尺寸变化后设置面板也要重新贴合工具栏并夹回视口内
+    if (settingsOpen()) {
+      positionSettingsPanel();
+    }
     if (!fabDragged) {
       syncFabAnchor();
       return;
