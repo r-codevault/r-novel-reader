@@ -440,10 +440,16 @@ export function activate(context: vscode.ExtensionContext): void {
                 vscode.window.showInformationMessage('请先打开一本小说后再调整阅读设置。');
                 return;
             }
+            // 复用当前阅读位置: 传 0 会让正文回到章首(阅读面板已被打开时尤其明显)
+            const entry = shelf.get(novel.filePath);
+            const chapterIndex =
+                ReaderPanel.current?.chapterIndex ??
+                (entry && entry.chapterIndex >= 0 ? entry.chapterIndex : 0);
+            const scrollRatio = ReaderPanel.current?.scrollRatio ?? (entry ? entry.scrollRatio : 0);
             ReaderPanel.createOrShow(
                 novel,
-                ReaderPanel.current?.chapterIndex ?? 0,
-                0,
+                chapterIndex,
+                scrollRatio,
                 store,
                 vscode.ViewColumn.One,
                 true

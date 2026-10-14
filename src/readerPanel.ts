@@ -113,12 +113,19 @@ export class ReaderPanel {
                 cur._panel.title = `${novel.bookTitle} - 小说阅读`;
             }
             if (sameFile && cur._ready) {
-                cur._postChapter();
-                // 同书重开时只补发章节, 但"打开阅读设置"必须显式通知 webview,
-                // 否则侧边栏的"打开阅读设置"按钮点了没有任何反应
-                if (cur._openSettingsOnLoad) {
+                const sameChapter = cur._chapterIndex === chapterIndex;
+                if (openSettings && sameChapter) {
+                    // 只是要打开设置面板: 不重发章节, 避免正文重新渲染并跳回章首
                     cur._openSettingsOnLoad = false;
                     void cur._panel.webview.postMessage({ type: 'openSettings' });
+                } else {
+                    cur._postChapter();
+                    // 同书重开时章节照发, 但"打开阅读设置"必须额外显式通知 webview,
+                    // 否则侧边栏的"打开阅读设置"按钮点了没有任何反应
+                    if (openSettings) {
+                        cur._openSettingsOnLoad = false;
+                        void cur._panel.webview.postMessage({ type: 'openSettings' });
+                    }
                 }
             } else {
                 // 同书重开或换书: 重新下发 init 整体重建阅读页
@@ -181,6 +188,11 @@ export class ReaderPanel {
     /** 当前阅读章节序号 */
     get chapterIndex(): number {
         return this._chapterIndex;
+    }
+
+    /** 当前章内滚动位置(0~1), 供"打开阅读设置""回到当前章"等复用当前位置 */
+    get scrollRatio(): number {
+        return this._scrollRatio;
     }
 
     dispose(): void {
@@ -1223,11 +1235,17 @@ export class ReaderPanel {
 
   /* ---------------- 设置变更(防抖保存) ---------------- */
   var saveTimer = null;
+  var pendingPatch = {};
   function persistSettings(patch) {
     applySettings(Object.assign({}, state.settings, patch));
+    // 累积待发送的改动: 不能被后一次调用覆盖(否则滚轮改字号会被随后的
+    // 悬浮球位置写回等操作顶掉, 扩展回推旧设置时字号就"自动还原"了)
+    pendingPatch = Object.assign(pendingPatch, patch);
     if (saveTimer) { clearTimeout(saveTimer); }
     saveTimer = setTimeout(function () {
-      vscode.postMessage({ type: 'updateSettings', patch: patch });
+      var sending = pendingPatch;
+      pendingPatch = {};
+      vscode.postMessage({ type: 'updateSettings', patch: sending });
     }, 250);
   }
 
@@ -1308,6 +1326,7 @@ export class ReaderPanel {
   });
 
   // Ctrl(或 macOS 的 Cmd) + 滚轮: 放大 / 缩小字号
+  // capture: true 让本监听尽早拿到事件并阻止浏览器页面缩放
   document.addEventListener(
     'wheel',
     function (e) {
@@ -1319,7 +1338,7 @@ export class ReaderPanel {
         persistSettings({ fontSize: next });
       }
     },
-    { passive: false }
+    { passive: false, capture: true }
   );
 
   /* ---------------- 消息 ---------------- */

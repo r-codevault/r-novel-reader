@@ -409,7 +409,7 @@ console.log('换书重建阅读面板(回归): 通过');
   function el2() {
     const classes = new Set();
     const el = {
-      children: [], textContent: '', value: '', title: '', dataset: {},
+      children: [], textContent: '', value: '', title: '', dataset: {}, _ls: {},
       style: { setProperty() {}, getPropertyValue() { return ''; }, removeProperty() {} },
       disabled: false, offsetHeight: 246, offsetWidth: 58,
       classList: {
@@ -422,7 +422,7 @@ console.log('换书重建阅读面板(回归): 通过');
         },
         contains(c) { return classes.has(c); },
       },
-      addEventListener() {}, removeEventListener() {},
+      addEventListener(type, fn) { (el._ls[type] ||= []).push(fn); }, removeEventListener() {},
       querySelector(){ return el2(); }, querySelectorAll(){ return []; },
       closest(){ return null; }, contains(){ return false; },
       scrollIntoView(o){ scrollCalls2.push(o || null); }, focus(){}, click(){}, appendChild(){},
@@ -468,9 +468,22 @@ console.log('换书重建阅读面板(回归): 通过');
     getComputedStyle() { return { getPropertyValue() { return '720px'; } }; },
     requestAnimationFrame(fn) { fn(); },
     ResizeObserver: class { observe() {} disconnect() {} },
-    console, setTimeout, clearTimeout,
+    console,
+    setTimeout(fn) { timers.push(fn); return timers.length; },
+    clearTimeout(id) { if (id > 0) { timers[id - 1] = null; } },
     location: { href: '' }, navigator: { userAgent: 'node' },
   };
+  // 定时器改成可控队列, 便于验证防抖提交的内容
+  const timers = [];
+  function flushTimers() {
+    for (let i = 0; i < timers.length; i++) { const fn = timers[i]; if (fn) { fn(); } }
+    timers.length = 0;
+  }
+  function fire(key, type, ev) {
+    const el = byId[key];
+    const list = (el && el._ls && el._ls[type]) || [];
+    for (const fn of list) { fn(ev); }
+  }
   vm.createContext(sandbox2);
   vm.runInContext(panelScript, sandbox2, { filename: 'readerPanel-webview.js' });
   assert(panelMsgHandlers.length > 0, '阅读面板脚本应注册 message 监听');
@@ -561,6 +574,18 @@ console.log('换书重建阅读面板(回归): 通过');
   assert(prevented > 0, 'Ctrl+滚轮应阻止默认缩放');
   wheelHandler({ ctrlKey: false, deltaY: -1, preventDefault() { prevented++; } });
   assert(byId.fontSize.value === 17, '无 Ctrl 的滚轮不应改变字号');
+
+  // 回归: 字号改动必须与随后的其它设置改动合并提交, 不能被顶掉后回弹
+  panelPosted.length = 0;
+  wheelHandler({ ctrlKey: true, deltaY: -1, preventDefault() {} }); // 17 -> 18
+  assert(byId.fontSize.value === 18, '滚轮应立即放大字号');
+  fire('themeSwatches', 'click', { target: { closest: () => ({ dataset: { theme: 'dark' } }) } });
+  flushTimers();
+  const settingsUpdate = panelPosted.filter((m) => m.type === 'updateSettings').pop();
+  assert(
+    settingsUpdate && settingsUpdate.patch.fontSize === 18 && settingsUpdate.patch.theme === 'dark',
+    '字号与主题改动应合并提交(否则字号会被扩展回推的旧值还原)'
+  );
 
   console.log('阅读面板脚本运行时(正文/字数/设置面板/快捷键/缩放): 通过');
 }
