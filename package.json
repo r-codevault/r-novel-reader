@@ -2,7 +2,7 @@
   "name": "r-novel-reader",
   "displayName": "小说阅读器",
   "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面：悬浮球 + 起点风格目录面板、我的书架、书库目录、字体/主题个性化设置，自动延续上次阅读状态。",
-  "version": "1.8.5",
+  "version": "1.8.6",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -42,7 +42,8 @@
     "onCommand:novelReader.refresh",
     "onCommand:novelReader.openSettings",
     "onCommand:novelReader.prevChapter",
-    "onCommand:novelReader.nextChapter"
+    "onCommand:novelReader.nextChapter",
+    "onCommand:novelReader.backFromSettings"
   ],
   "contributes": {
     "viewsContainers": {
@@ -114,6 +115,11 @@
         "enablement": "novelReader.hasNovel"
       },
       {
+        "command": "novelReader.backFromSettings",
+        "title": "返回",
+        "icon": "$(arrow-left)"
+      },
+      {
         "command": "novelReader.resumeCurrent",
         "title": "回到当前阅读章节"
       },
@@ -143,18 +149,23 @@
     "menus": {
       "view/title": [
         {
+          "command": "novelReader.backFromSettings",
+          "when": "view == novelReaderChapters && novelReader.viewMode == settings",
+          "group": "navigation@1"
+        },
+        {
           "command": "novelReader.showBookshelf",
           "when": "view == novelReaderChapters && novelReader.viewMode == chapters",
           "group": "navigation@1"
         },
         {
           "command": "novelReader.showChapters",
-          "when": "view == novelReaderChapters && (novelReader.viewMode == shelf || novelReader.viewMode == settings)",
+          "when": "view == novelReaderChapters && novelReader.viewMode == shelf",
           "group": "navigation@1"
         },
         {
           "command": "novelReader.addBook",
-          "when": "view == novelReaderChapters",
+          "when": "view == novelReaderChapters && novelReader.viewMode != settings",
           "group": "navigation@2"
         },
         {

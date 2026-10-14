@@ -347,6 +347,15 @@ export function activate(context: vscode.ExtensionContext): void {
             focusChapterView();
         }),
 
+        // 设置页「返回」: 回到进入设置前的模式(书架或目录)
+        vscode.commands.registerCommand('novelReader.backFromSettings', () => {
+            const back =
+                chapterView.previousMode === 'shelf'
+                    ? 'novelReader.showBookshelf'
+                    : 'novelReader.showChapters';
+            void vscode.commands.executeCommand(back);
+        }),
+
         // 选择书库目录(导入时复制到这里)
         vscode.commands.registerCommand('novelReader.pickLibraryPath', async () => {
             const current = getLibraryPath();

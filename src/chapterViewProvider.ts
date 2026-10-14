@@ -59,6 +59,8 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
 
     private _view?: vscode.WebviewView;
     private _mode: ViewMode = 'chapters';
+    /** 最近一次非设置模式(设置页「返回」按钮回到这里) */
+    private _prevMode: Exclude<ViewMode, 'settings'> = 'chapters';
     private _shelf: ShelfItemView[] = [];
     /** 书库目录(空 = 未设置, 读原路径) */
     private _libraryPath = '';
@@ -128,8 +130,17 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
         return this._mode;
     }
 
+    /** 进入设置页之前的模式(设置页「返回」按钮用) */
+    get previousMode(): Exclude<ViewMode, 'settings'> {
+        return this._prevMode;
+    }
+
     /** 切换 书架 / 目录 模式 */
     setMode(mode: ViewMode): void {
+        // 记住最近一次非设置模式, 供设置页「返回」按钮回到原处
+        if (mode !== 'settings') {
+            this._prevMode = mode;
+        }
         this._mode = mode;
         this._post({ type: 'mode', mode });
     }

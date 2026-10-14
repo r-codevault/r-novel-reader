@@ -689,6 +689,28 @@ assert(chapterHtml.includes('elShelfCount.textContent'), '书架计数应写入 
     (pkgJson.activationEvents || []).includes('onCommand:novelReader.addBook'),
     '新命令需登记激活事件'
   );
+  // 设置页标题栏: 只出现「返回」(分栏/添加书籍/刷新/设置 都要隐藏)
+  const backCmd = cmds.find((c) => c.command === 'novelReader.backFromSettings');
+  assert(backCmd && backCmd.title === '返回', '应有「返回」命令');
+  assert(
+    (pkgJson.activationEvents || []).includes('onCommand:novelReader.backFromSettings'),
+    '「返回」需登记激活事件'
+  );
+  const titleMenus = pkgJson.contributes.menus['view/title'];
+  const backMenu = titleMenus.find((m) => m.command === 'novelReader.backFromSettings');
+  assert(backMenu && /viewMode == settings/.test(backMenu.when), '设置页应显示「返回」');
+  for (const [cmd, label] of [
+    ['novelReader.addBook', '添加书籍'],
+    ['novelReader.refresh', '刷新目录'],
+    ['novelReader.showSettings', '设置'],
+    ['novelReader.showChapters', '目录切换'],
+  ]) {
+    const menu = titleMenus.find((m) => m.command === cmd);
+    // 设置模式下隐藏: when 要么显式排除 settings, 要么只匹配 chapters/shelf
+    const hiddenInSettings =
+      menu && (/viewMode != settings/.test(menu.when) || /viewMode == (chapters|shelf)/.test(menu.when));
+    assert(hiddenInSettings, `设置页不应显示「${label}」`);
+  }
 }
 assert(chapterHtml.includes('bk-del'), '书架条目应有移除按钮');
 assert(chapterHtml.includes('书架空空如也'), '书架应有空状态');
@@ -845,6 +867,9 @@ provider.setMode('shelf');
 assert(received.some((m) => m.type === 'mode' && m.mode === 'shelf'), 'setMode 应推送 mode 消息');
 provider.setMode('settings');
 assert(received.some((m) => m.type === 'mode' && m.mode === 'settings'), '应支持设置模式');
+provider.setMode('shelf');
+provider.setMode('settings');
+assert(provider.previousMode === 'shelf', '进入设置前的模式应被记住(供「返回」按钮使用)');
 
 received.length = 0;
 provider.setLibrary('D:/我的书库');
