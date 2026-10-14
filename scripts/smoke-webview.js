@@ -705,6 +705,15 @@ assert(chapterHtml.includes('elShelfCount.textContent'), '书架计数应写入 
     '视图 when 条件应与 viewMode 对应'
   );
   assert(viewIds.length === 3 && new Set(viewIds).size === 3, '视图 id 不能重复');
+  // 兜底: 上下文键未设置时也要有可见视图, 否则活动栏图标会整个消失
+  assert(
+    views.some((v) => /!novelReader\.viewMode/.test(v.when || '')),
+    '三视图全依赖上下文键会让活动栏图标消失, 必须留兜底视图'
+  );
+  assert(
+    pkgJson.activationEvents.includes('onStartupFinished'),
+    '需在启动后激活以设置 viewMode 上下文(同时支撑启动自动恢复)'
+  );
   // 设置页标题栏: 只出现「返回」(分栏/刷新/设置 都要隐藏)
   const backCmd = cmds.find((c) => c.command === 'novelReader.backFromSettings');
   assert(backCmd && backCmd.title === '返回', '应有「返回」命令');
