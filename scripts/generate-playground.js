@@ -106,7 +106,7 @@ const html = `<!DOCTYPE html>
   .sp-head b { font-size: 15px; }
   .sp-head span { cursor: pointer; color: var(--sp-muted); font-size: 14px; }
   .sp-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-  .sp-label { width: 48px; font-size: 12px; color: var(--sp-muted); }
+  .sp-label { width: 68px; white-space: nowrap; font-size: 12px; color: var(--sp-muted); }
   .sp-themes { display: flex; gap: 8px; flex: 1; }
   .sp-dot {
     width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--sp-border);
@@ -178,8 +178,8 @@ const html = `<!DOCTYPE html>
 
 <script>
 const THEMES = JSON.parse(document.getElementById('themes-data').textContent);
-const FIELDS = ['bg','fg','pageBg','chromeBg','chromeBorder','accent','accentFg'];
-const FIELD_NAMES = { bg:'正文纸面 bg', fg:'正文文字 fg', pageBg:'两侧留白 pageBg', chromeBg:'面板底 chromeBg', chromeBorder:'面板描边 chromeBorder', accent:'强调色 accent', accentFg:'强调色文字 accentFg' };
+const FIELDS = ['bg','fg','pageBg','chromeBg','chromeBorder','accent','accentFg','muted','panelAccent','panelHover'];
+const FIELD_NAMES = { bg:'正文纸面 bg', fg:'正文文字 fg', pageBg:'两侧留白 pageBg', chromeBg:'面板底 chromeBg', chromeBorder:'面板描边 chromeBorder', accent:'强调色 accent', accentFg:'强调色文字 accentFg', muted:'次要文字 muted', panelAccent:'面板强调 panelAccent', panelHover:'面板悬停 panelHover' };
 const LS_KEY = 'rnovel-theme-playground';
 let current = THEMES[0].id;
 let working = load();
@@ -197,7 +197,6 @@ function t() { return working.find(x => x.id === current); }
 function applyTheme() {
   const d = t();
   const root = document.documentElement.style;
-  const isDark = d.id === 'dark';
   root.setProperty('--bg', d.bg);
   root.setProperty('--fg', d.fg);
   root.setProperty('--page-bg', d.pageBg);
@@ -206,17 +205,18 @@ function applyTheme() {
   root.setProperty('--chrome-border', d.chromeBorder);
   root.setProperty('--accent', d.accent);
   root.setProperty('--accent-fg', d.accentFg);
-  // 设置面板配色(与 readerPanel applySettings 同规则)
-  root.setProperty('--sp-bg', isDark ? '#1c1c1c' : d.chromeBg);
-  root.setProperty('--sp-fg', isDark ? '#bababa' : d.fg);
-  root.setProperty('--sp-border', isDark ? '#333333' : d.chromeBorder);
-  root.setProperty('--sp-muted', isDark ? '#8a8a8a' : d.fg + '99');
-  root.setProperty('--sp-control-bg', isDark ? '#232323' : d.bg);
-  root.setProperty('--sp-accent', isDark ? '#c9963f' : '#f56c6c');
+  // 设置面板配色: 全部来自 THEMES 主题字段(与 readerPanel 同规则)
+  root.setProperty('--sp-bg', d.chromeBg);
+  root.setProperty('--sp-fg', d.fg);
+  root.setProperty('--sp-border', d.chromeBorder);
+  root.setProperty('--sp-muted', d.muted);
+  root.setProperty('--sp-hover', d.panelHover);
+  root.setProperty('--sp-control-bg', d.bg);
+  root.setProperty('--sp-accent', d.panelAccent);
   // 悬浮球(与 readerPanel 同规则: 面板同色底 + 主题色图标/描边)
-  root.setProperty('--fab-bg', isDark ? '#1c1c1c' : d.chromeBg);
-  root.setProperty('--fab-fg', isDark ? '#c9963f' : d.accent);
-  root.setProperty('--fab-border', isDark ? '#333333' : d.chromeBorder);
+  root.setProperty('--fab-bg', d.chromeBg);
+  root.setProperty('--fab-fg', d.accent);
+  root.setProperty('--fab-border', d.chromeBorder);
 
   document.getElementById('preview').style.background = 'var(--page-bg)';
   document.getElementById('statusbar').style.background = 'var(--chrome-bg)';
@@ -276,7 +276,8 @@ document.getElementById('exportBtn').onclick = () => {
   const lines = working.map(d =>
     "    { id: '" + d.id + "', name: '" + d.name + "', bg: '" + d.bg + "', fg: '" + d.fg +
     "', pageBg: '" + d.pageBg + "', chromeBg: '" + d.chromeBg + "', chromeBorder: '" + d.chromeBorder +
-    "', accent: '" + d.accent + "', accentFg: '" + d.accentFg + "' },"
+    "', accent: '" + d.accent + "', accentFg: '" + d.accentFg + "', muted: '" + d.muted +
+    "', panelAccent: '" + d.panelAccent + "', panelHover: '" + d.panelHover + "' },"
   ).join('\\n');
   document.getElementById('exportOut').value = 'export const THEMES: ThemeDef[] = [\\n' + lines + '\\n];';
   document.getElementById('exportOut').select();

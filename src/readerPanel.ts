@@ -317,10 +317,10 @@ export class ReaderPanel {
     --chrome-border: ${themeById(settings.theme).chromeBorder};
     --accent: ${themeById(settings.theme).accent};
     --accent-fg: ${themeById(settings.theme).accentFg};
-    /* 悬浮球(起点风格): 面板同色底 + 主题色图标/描边; 黑夜=深底 + 暖金图标 */
-    --fab-bg: ${settings.theme === 'dark' ? '#1c1c1c' : themeById(settings.theme).chromeBg};
-    --fab-fg: ${settings.theme === 'dark' ? '#c9963f' : themeById(settings.theme).accent};
-    --fab-border: ${settings.theme === 'dark' ? '#333333' : themeById(settings.theme).chromeBorder};
+    /* 悬浮球(起点风格): 面板同色底 + 主题色图标/描边(来自 THEMES 变量) */
+    --fab-bg: ${themeById(settings.theme).chromeBg};
+    --fab-fg: ${themeById(settings.theme).accent};
+    --fab-border: ${themeById(settings.theme).chromeBorder};
     --btn-hover: ${themeById(settings.theme).accent};
     --input-bg: ${themeById(settings.theme).bg};
     --input-fg: ${themeById(settings.theme).fg};
@@ -465,7 +465,7 @@ export class ReaderPanel {
     position: fixed;
     top: 12px;
     left: 12px;
-    width: 340px;
+    width: 360px;
     max-width: calc(100vw - 24px);
     max-height: calc(100vh - 24px);
     overflow-y: auto;
@@ -488,7 +488,7 @@ export class ReaderPanel {
   .sp-close:hover { color: var(--sp-fg); background: var(--sp-hover); }
   .sp-row { display: flex; align-items: center; gap: 10px; margin: 0 0 13px; }
   .sp-label {
-    flex: none; width: 60px;
+    flex: none; width: 68px; white-space: nowrap;
     font-size: clamp(12px, calc(var(--font-size) * 0.8), 16px); color: var(--sp-muted);
   }
   .sp-themes { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -1183,18 +1183,18 @@ export class ReaderPanel {
       if (THEMES[ti].id === s.theme) { curTheme = THEMES[ti]; }
     }
     if (!curTheme) { curTheme = THEMES[0]; }
-    var isDark = curTheme.id === 'dark';
-    root.style.setProperty('--sp-bg', isDark ? '#1c1c1c' : curTheme.chromeBg);
-    root.style.setProperty('--sp-fg', isDark ? '#bababa' : curTheme.fg);
-    root.style.setProperty('--sp-border', isDark ? '#333333' : curTheme.chromeBorder);
-    root.style.setProperty('--sp-muted', isDark ? '#8a8a8a' : curTheme.fg + '99');
-    root.style.setProperty('--sp-hover', isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.05)');
-    root.style.setProperty('--sp-accent', isDark ? '#c9963f' : '#f56c6c');
-    root.style.setProperty('--sp-control-bg', isDark ? '#232323' : curTheme.bg);
-    // 悬浮球: 面板同色底 + 主题色图标/描边(黑夜深底 + 暖金图标), 跟随设置面板背景
-    root.style.setProperty('--fab-bg', isDark ? '#1c1c1c' : curTheme.chromeBg);
-    root.style.setProperty('--fab-fg', isDark ? '#c9963f' : curTheme.accent);
-    root.style.setProperty('--fab-border', isDark ? '#333333' : curTheme.chromeBorder);
+    // 设置面板配色: 全部来自 THEMES 主题变量(调试时改 settings.ts 即可)
+    root.style.setProperty('--sp-bg', curTheme.chromeBg);
+    root.style.setProperty('--sp-fg', curTheme.fg);
+    root.style.setProperty('--sp-border', curTheme.chromeBorder);
+    root.style.setProperty('--sp-muted', curTheme.muted);
+    root.style.setProperty('--sp-hover', curTheme.panelHover);
+    root.style.setProperty('--sp-accent', curTheme.panelAccent);
+    root.style.setProperty('--sp-control-bg', curTheme.bg);
+    // 悬浮球: 面板同色底 + 主题色图标/描边, 跟随设置面板背景
+    root.style.setProperty('--fab-bg', curTheme.chromeBg);
+    root.style.setProperty('--fab-fg', curTheme.accent);
+    root.style.setProperty('--fab-border', curTheme.chromeBorder);
     // 快捷键(可在 VS Code 设置里自定义 novelReader.shortcutPrevChapter / NextChapter)
     state.prevCombo = parseShortcut(s.shortcutPrev);
     state.nextCombo = parseShortcut(s.shortcutNext);
