@@ -335,7 +335,7 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
   <div class="list" id="shelfList"></div>
   <div id="shelfEmpty" class="empty" style="display:none">
     <p>书架空空如也。</p>
-    <button id="btnOpenFromShelf">打开小说文件</button>
+    <button id="btnOpenFromShelf">添加书籍</button>
   </div>
   <div class="shelf-foot" id="shelfFoot" style="display:none"></div>
 </div>
@@ -352,7 +352,7 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
   <div class="list" id="chapterList" role="listbox" aria-label="章节目录"></div>
   <div id="chapterEmpty" class="empty" style="display:none">
     <p>尚未打开小说。</p>
-    <button id="btnOpenFile">打开小说文件</button>
+    <button id="btnOpenFile">添加书籍</button>
     <button id="btnGoShelf">查看我的书架</button>
   </div>
 </div>

@@ -204,25 +204,31 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ---------------------------------------------------------------- 命令
 
+    // 打开/添加小说文件的共用实现(openFile 与标题栏「添加书籍」按钮同一行为)
+    async function openNovelFile(arg?: vscode.Uri): Promise<void> {
+        // 资源管理器右键 .txt 文件时直接打开该文件
+        if (arg && arg.fsPath) {
+            await loadNovel(arg.fsPath, { openPanel: true });
+            setViewMode('chapters');
+            return;
+        }
+        const picked = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectMany: false,
+            title: '选择小说文件',
+            filters: { '小说文本 (*.txt)': ['txt'], '所有文件': ['*'] },
+        });
+        if (picked && picked[0]) {
+            await loadNovel(picked[0].fsPath, { openPanel: true });
+            setViewMode('chapters');
+        }
+    }
+
     context.subscriptions.push(
-        vscode.commands.registerCommand('novelReader.openFile', async (arg?: vscode.Uri) => {
-            // 资源管理器右键 .txt 文件时直接打开该文件
-            if (arg && arg.fsPath) {
-                await loadNovel(arg.fsPath, { openPanel: true });
-                setViewMode('chapters');
-                return;
-            }
-            const picked = await vscode.window.showOpenDialog({
-                canSelectFiles: true,
-                canSelectMany: false,
-                title: '选择小说文件',
-                filters: { '小说文本 (*.txt)': ['txt'], '所有文件': ['*'] },
-            });
-            if (picked && picked[0]) {
-                await loadNovel(picked[0].fsPath, { openPanel: true });
-                setViewMode('chapters');
-            }
-        }),
+        vscode.commands.registerCommand('novelReader.openFile', openNovelFile),
+
+        // 标题栏「添加书籍」按钮(短标签, 命令面板仍用描述性的"打开小说文件")
+        vscode.commands.registerCommand('novelReader.addBook', () => openNovelFile()),
 
         // 书架: 打开某本书(自动延续该书上次的阅读进度)
         vscode.commands.registerCommand('novelReader.openBook', async (filePath: string) => {
@@ -305,9 +311,9 @@ export function activate(context: vscode.ExtensionContext): void {
             if (!novel) {
                 const picked = await vscode.window.showInformationMessage(
                     '书架里还没有小说，先添加一本吧。',
-                    '打开小说文件'
+                    '添加书籍'
                 );
-                if (picked === '打开小说文件') {
+                if (picked === '添加书籍') {
                     await vscode.commands.executeCommand('novelReader.openFile');
                 }
                 return;
@@ -405,9 +411,9 @@ export function activate(context: vscode.ExtensionContext): void {
             if (!novel) {
                 const picked = await vscode.window.showInformationMessage(
                     '请先打开一本小说（书架里还没有）。',
-                    '打开小说文件'
+                    '添加书籍'
                 );
-                if (picked === '打开小说文件') {
+                if (picked === '添加书籍') {
                     await vscode.commands.executeCommand('novelReader.openFile');
                 }
                 return;

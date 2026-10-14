@@ -666,6 +666,23 @@ for (const id of sideIds) {
 // 侧边栏设置页的「打开阅读设置」按钮已移除(阅读页右侧工具栏里有)
 assert(!chapterHtml.includes('btnReaderSettings'), '侧边栏不应再有「打开阅读设置」按钮');
 assert(!chapterHtml.includes('openReaderSettings'), '侧边栏不应再发送 openReaderSettings 消息');
+// 按钮文案统一为「添加书籍」, 不再出现别扭的"打开小说文件"
+assert(chapterHtml.includes('>添加书籍</button>'), '侧边栏按钮文案应为「添加书籍」');
+assert(!chapterHtml.includes('打开小说文件'), '侧边栏不应再出现「打开小说文件」');
+// 标题栏命令: 新增 addBook(短标签), 并占位在 view/title
+{
+  const pkgJson = require('../package.json');
+  const cmds = pkgJson.contributes.commands;
+  const addBook = cmds.find((c) => c.command === 'novelReader.addBook');
+  assert(addBook && addBook.title === '添加书籍', '应有「添加书籍」命令');
+  const titleItems = (pkgJson.contributes.menus['view/title'] || []).map((m) => m.command);
+  assert(titleItems.includes('novelReader.addBook'), '标题栏应显示「添加书籍」');
+  assert(!titleItems.includes('novelReader.openFile'), '标题栏不应再挂「打开小说文件」');
+  assert(
+    (pkgJson.activationEvents || []).includes('onCommand:novelReader.addBook'),
+    '新命令需登记激活事件'
+  );
+}
 assert(chapterHtml.includes('bk-del'), '书架条目应有移除按钮');
 assert(chapterHtml.includes('书架空空如也'), '书架应有空状态');
 console.log('书架 UI 元素: 通过');

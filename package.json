@@ -2,7 +2,7 @@
   "name": "r-novel-reader",
   "displayName": "小说阅读器",
   "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面：悬浮球 + 起点风格目录面板、我的书架、书库目录、字体/主题个性化设置，自动延续上次阅读状态。",
-  "version": "1.8.3",
+  "version": "1.8.4",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -27,6 +27,7 @@
   "main": "./dist/extension.js",
   "activationEvents": [
     "onView:novelReaderChapters",
+    "onCommand:novelReader.addBook",
     "onCommand:novelReader.openFile",
     "onCommand:novelReader.openBook",
     "onCommand:novelReader.removeFromShelf",
@@ -96,6 +97,11 @@
         "icon": "$(add)"
       },
       {
+        "command": "novelReader.addBook",
+        "title": "添加书籍",
+        "icon": "$(add)"
+      },
+      {
         "command": "novelReader.refresh",
         "title": "刷新目录",
         "icon": "$(refresh)",
@@ -147,7 +153,7 @@
           "group": "navigation@1"
         },
         {
-          "command": "novelReader.openFile",
+          "command": "novelReader.addBook",
           "when": "view == novelReaderChapters",
           "group": "navigation@2"
         },
