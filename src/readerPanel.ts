@@ -1448,7 +1448,8 @@ export class ReaderPanel {
   }
 
   /* ---------------- 正文宽度拖拽(左右边缘) ---------------- */
-  var WIDTH_MIN = 400; // 允许的最小正文宽度(px)
+  var WIDTH_MIN = 480; // 与 settings.ts 的 contentWidth 下限一致
+  var WIDTH_MAX = 1200; // 与 settings.ts 的 contentWidth 上限一致
   var widthDrag = null; // { handle, startX, startW, side }
   var readerEl = document.getElementById('reader');
 
@@ -1488,9 +1489,8 @@ export class ReaderPanel {
     var delta = e.clientX - widthDrag.startX;
     // 左缘向右拖 → 变窄(减宽); 右缘向右拖 → 变宽(加宽)
     var factor = widthDrag.side === 'left' ? -1 : 1;
-    var vw = window.innerWidth;
-    var maxW = Math.max(WIDTH_MIN, vw - 40); // #reader 左右各 20px padding
-    var next = Math.min(maxW, Math.max(WIDTH_MIN, Math.round(widthDrag.startW + factor * delta)));
+    // 上限 1200 与 settings.ts 一致, 拖拽过程即实时回弹, 不等待扩展回推
+    var next = Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, Math.round(widthDrag.startW + factor * delta)));
     // 实时更新 CSS 变量, 让正文立即跟随
     document.documentElement.style.setProperty('--content-width', next + 'px');
     positionWidthHandles();
