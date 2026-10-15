@@ -38,7 +38,7 @@ export default defineConfig({
     emptyOutDir: true,
     target: 'es2020',
     lib: {
-      entry: path.join(__dirname, 'webview/reader/main.js'),
+      entry: path.join(__dirname, 'webview/reader/main.ts'),
       name: 'NovelReaderPanel',
       formats: ['iife'],
       fileName: () => 'reader.js',

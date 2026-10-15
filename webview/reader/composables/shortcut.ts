@@ -1,9 +1,16 @@
 /**
- * webview/reader/composables/shortcut.js — 快捷键解析与匹配
- * (从旧内嵌脚本平移; 不用正则 split 解析, 避免 bundler 下转义歧义)
+ * webview/reader/composables/shortcut.ts — 快捷键解析与匹配
  */
 
-export function normalizeKey(k) {
+export interface ShortcutCombo {
+  ctrl: boolean;
+  alt: boolean;
+  shift: boolean;
+  meta: boolean;
+  key: string;
+}
+
+export function normalizeKey(k: string): string {
   if (k === 'left') { return 'arrowleft'; }
   if (k === 'right') { return 'arrowright'; }
   if (k === 'up') { return 'arrowup'; }
@@ -14,17 +21,16 @@ export function normalizeKey(k) {
 }
 
 /** 快捷键字符串 -> {ctrl,alt,shift,meta,key}; 空/非法返回 null(表示禁用) */
-export function parseShortcut(str) {
+export function parseShortcut(str: string | undefined): ShortcutCombo | null {
   if (!str || typeof str !== 'string') { return null; }
-  var raw = str.toLowerCase().split('+');
-  var parts = [];
-  for (var i = 0; i < raw.length; i++) {
-    var trimmed = raw[i].split(' ').join('');
+  const raw = str.toLowerCase().split('+');
+  const parts: string[] = [];
+  for (const item of raw) {
+    const trimmed = item.split(' ').join('');
     if (trimmed) { parts.push(trimmed); }
   }
-  var combo = { ctrl: false, alt: false, shift: false, meta: false, key: '' };
-  for (var j = 0; j < parts.length; j++) {
-    var p = parts[j];
+  const combo: ShortcutCombo = { ctrl: false, alt: false, shift: false, meta: false, key: '' };
+  for (const p of parts) {
     if (p === 'ctrl' || p === 'control') { combo.ctrl = true; }
     else if (p === 'alt' || p === 'option') { combo.alt = true; }
     else if (p === 'shift') { combo.shift = true; }
@@ -34,9 +40,9 @@ export function parseShortcut(str) {
   return combo.key ? combo : null;
 }
 
-export function matchShortcut(combo, e) {
+export function matchShortcut(combo: ShortcutCombo | null, e: KeyboardEvent): boolean {
   if (!combo) { return false; }
-  var key = (e.key || '').toLowerCase();
+  let key = (e.key || '').toLowerCase();
   if (key === 'esc') { key = 'escape'; }
   return (
     !!combo.ctrl === !!e.ctrlKey &&
@@ -48,15 +54,15 @@ export function matchShortcut(combo, e) {
 }
 
 /** 快捷键展示文本(设置面板提示用) */
-export function shortcutLabel(str) {
-  var combo = parseShortcut(str);
+export function shortcutLabel(str: string | undefined): string {
+  const combo = parseShortcut(str);
   if (!combo) { return '未设置'; }
-  var parts = [];
+  const parts: string[] = [];
   if (combo.ctrl) { parts.push('Ctrl'); }
   if (combo.alt) { parts.push('Alt'); }
   if (combo.shift) { parts.push('Shift'); }
   if (combo.meta) { parts.push('Cmd/Win'); }
-  var key = combo.key === ' ' ? 'Space' : combo.key.replace('arrow', '');
+  let key = combo.key === ' ' ? 'Space' : combo.key.replace('arrow', '');
   key = key.charAt(0).toUpperCase() + key.slice(1);
   parts.push(key);
   return parts.join('+');

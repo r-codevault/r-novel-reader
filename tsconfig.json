@@ -12,5 +12,6 @@
     "sourceMap": true,
     "forceConsistentCasingInFileNames": true
   },
-  "exclude": ["node_modules", "dist", "scripts", ".vscode"]
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "dist-webview", "webview", "scripts", ".vscode"]
 }
