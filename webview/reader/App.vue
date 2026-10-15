@@ -75,7 +75,14 @@ function positionSettingsPanel(): void {
 
 // 面板打开时机统一在这里定位(悬浮球切换/消息打开都走 state.settingsOpen)
 watch(function () { return state.settingsOpen; }, function (open) {
+  // 目录与设置面板互斥: 同一时刻只显示一个
+  if (open && state.catalogOpen) { state.catalogOpen = false; }
   if (open) { nextTick(positionSettingsPanel); }
+});
+
+// 打开目录时同理关掉设置面板
+watch(function () { return state.catalogOpen; }, function (open) {
+  if (open && state.settingsOpen) { state.settingsOpen = false; }
 });
 
 /** 章节变化: 恢复滚动位置 + 对齐手柄 + 立即上报进度 */

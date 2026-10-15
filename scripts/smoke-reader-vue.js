@@ -252,6 +252,25 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!$('#catalogPanel').classList.contains('open'), '跳转后目录面板应关闭');
   console.log('目录面板(打开/条目/高亮/跳转): 通过');
 
+  // 目录与设置面板互斥: 打开一个应关闭另一个
+  dispatch('openSettings');
+  await sleep(20);
+  assert($('#settingsPanel').classList.contains('open'), '应能再次打开设置面板');
+  // 注意: 悬浮球 350ms 内的两次点击视为双击(复位位置), 这里要与上一次点击拉开间隔
+  await sleep(400);
+  $('#fabCatalog').dispatchEvent(new win.MouseEvent('pointerdown', { bubbles: true }));
+  $('#fabCatalog').dispatchEvent(new win.MouseEvent('pointerup', { bubbles: true }));
+  await sleep(20);
+  assert($('#catalogPanel').classList.contains('open'), '点目录应打开目录面板');
+  assert(!$('#settingsPanel').classList.contains('open'), '打开目录应自动关闭设置面板(两者互斥)');
+  await sleep(400);
+  $('#fabSettings').dispatchEvent(new win.MouseEvent('pointerdown', { bubbles: true }));
+  $('#fabSettings').dispatchEvent(new win.MouseEvent('pointerup', { bubbles: true }));
+  await sleep(20);
+  assert($('#settingsPanel').classList.contains('open'), '点设置应打开设置面板');
+  assert(!$('#catalogPanel').classList.contains('open'), '打开设置应自动关闭目录面板(两者互斥)');
+  console.log('目录/设置面板互斥: 通过');
+
   // 上一章悬浮球
   dispatch('chapter', { index: 1, title: '第2章 标题2', paragraphs: ['a'], totalChapters: 5, chapterWords: 1, scrollRatio: 0 });
   await sleep(20);
