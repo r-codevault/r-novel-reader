@@ -82,4 +82,8 @@ export function applySidebarTheme(themeId: string): void {
   root.style.setProperty('--vscode-toolbar-hoverBackground', t.panelHover);
   root.style.setProperty('--vscode-charts-green', t.accent);
   root.style.setProperty('--vscode-focusBorder', t.accent);
+  // 滚动条跟随主题(VS Code 注入的滚动条样式用这几个变量)
+  root.style.setProperty('--vscode-scrollbarSlider-background', t.chromeBorder);
+  root.style.setProperty('--vscode-scrollbarSlider-hoverBackground', t.accent);
+  root.style.setProperty('--vscode-scrollbarSlider-activeBackground', t.accent);
 }

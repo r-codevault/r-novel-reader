@@ -46,6 +46,10 @@ export function applyThemeVars(s: ReadingSettings): void {
   root.style.setProperty('--fab-bg', t.chromeBg);
   root.style.setProperty('--fab-fg', t.accent);
   root.style.setProperty('--fab-border', t.chromeBorder);
+  // 滚动条: VS Code 注入的滚动条样式用的是 --vscode-scrollbarSlider-*, 需一并映射到主题色
+  root.style.setProperty('--vscode-scrollbarSlider-background', t.chromeBorder);
+  root.style.setProperty('--vscode-scrollbarSlider-hoverBackground', t.accent);
+  root.style.setProperty('--vscode-scrollbarSlider-activeBackground', t.accent);
   // 阅读排版
   root.style.setProperty('--font-size', s.fontSize + 'px');
   root.style.setProperty('--font-family', FONT_STACKS[s.fontFamily] || FONT_STACKS.system);

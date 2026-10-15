@@ -98,6 +98,14 @@ console.log('HTML 长度:', capturedHtml.length);
 assert(capturedHtml.includes('Content-Security-Policy'), '应包含 CSP');
 assert(capturedHtml.includes('id="app"'), 'Vue 挂载点 #app 应存在');
 assert(capturedHtml.includes('--content-width'), '静态主题变量初值应注入(防首帧闪白)');
+assert(
+  /::-webkit-scrollbar-thumb/.test(capturedHtml),
+  '滚动条应主题化(默认 Chromium 深色滚动条与浅色主题不符)'
+);
+assert(
+  /scrollbarSlider-background/.test(capturedHtml),
+  '应映射 --vscode-scrollbarSlider-*(VS Code 注入的滚动条样式用这几个变量)'
+);
 assert(capturedHtml.includes('reader.js') === false || true, ''); // 内联, 无外部引用
 assert(!/src="https?:/.test(capturedHtml), '不允许外部脚本引用(CSP)');
 // 产物内容确实内联进来了

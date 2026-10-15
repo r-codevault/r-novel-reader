@@ -135,3 +135,18 @@ html, body { height: 100%; }
     font-family: inherit; font-size: inherit;
   }
   .empty button:hover { text-decoration: underline; }
+
+/* ---------- 滚动条: 跟随阅读主题 ---------- */
+.list {
+  scrollbar-width: thin;
+  scrollbar-color: var(--vscode-widget-border) transparent;
+}
+.list::-webkit-scrollbar { width: 10px; height: 10px; }
+.list::-webkit-scrollbar-track { background: transparent; }
+.list::-webkit-scrollbar-thumb {
+  background: var(--vscode-widget-border);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.list::-webkit-scrollbar-thumb:hover { background: var(--vscode-focusBorder); background-clip: content-box; }
