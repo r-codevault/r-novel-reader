@@ -24,7 +24,8 @@ html, body { height: 100%; }
   #currentWrap {
     display: none;
     position: sticky; top: 0; z-index: 3; flex: none;
-    padding: 6px 8px 7px;
+    /* 上间距与下间距对齐(下 = padding 7 + .list 的 3px) */
+    padding: 10px 8px 7px;
     background: var(--vscode-sideBar-background, var(--vscode-editor-background));
     border-bottom: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.35));
   }
@@ -56,7 +57,12 @@ html, body { height: 100%; }
   .ch .ico { opacity: .5; }
   .ch .tt { overflow: hidden; text-overflow: ellipsis; }
   .ch:hover { background: var(--vscode-list-hoverBackground); }
-  .ch.cur { background: var(--vscode-list-inactiveSelectionBackground, rgba(127,127,127,.15)); }
+  /* 当前阅读章: 主题色描边(inset 不引起布局跳动), 与「当前阅读」指示条同款 */
+  .ch.cur {
+    background: var(--vscode-list-inactiveSelectionBackground, rgba(127,127,127,.15));
+    border-radius: 4px;
+    box-shadow: inset 0 0 0 1px var(--vscode-focusBorder, var(--vscode-charts-green, rgba(128,128,128,.6)));
+  }
   .ch.cur .tt { font-weight: 500; }
   .ch.cur .ico { opacity: 1; }
 
