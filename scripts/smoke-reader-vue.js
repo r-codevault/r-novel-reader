@@ -128,11 +128,14 @@ const posted = [];
 let themeOverride = null;
 const sandboxWindow = win;
 sandboxWindow.acquireVsCodeApi = function () {
-  return {
+  // 模拟真实 webview 行为: 只允许调用一次, 调用后全局函数即被删除
+  const api = {
     postMessage: (m) => { posted.push(m); return Promise.resolve(true); },
     getState: () => undefined,
     setState: () => undefined,
   };
+  delete sandboxWindow.acquireVsCodeApi;
+  return api;
 };
 sandboxWindow.scrollTo = () => {};
 sandboxWindow.Element.prototype.scrollIntoView = function () {};

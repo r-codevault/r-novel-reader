@@ -5,7 +5,7 @@
  *  - 跨组件协调: 扩展消息 / 全局快捷键 / 设置面板定位 / 尺寸变化重排
  */
 import { onMounted, nextTick, ref, watch } from 'vue';
-import { state, gotoChapter, type ChapterPayload } from './composables/vscode';
+import { state, vscode, gotoChapter, type ChapterPayload } from './composables/vscode';
 import { applyThemeVars, DEFAULT_SETTINGS, persistSettings, sendProgress, type ReadingSettings } from './store';
 import { parseShortcut, matchShortcut } from './composables/shortcut';
 import CatalogPanel from './components/CatalogPanel.vue';
@@ -211,7 +211,8 @@ onMounted(function () {
   }
   applySettings(state.settings || DEFAULT_SETTINGS);
   // 通知扩展: webview 就绪(扩展会回推 init)
-  window.acquireVsCodeApi().postMessage({ type: 'ready' });
+  // 注意: acquireVsCodeApi 全局只能调用一次, 必须复用 composables/vscode 里已获取的实例
+  vscode.postMessage({ type: 'ready' });
 });
 </script>
 
