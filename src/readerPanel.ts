@@ -227,6 +227,12 @@ export class ReaderPanel {
                 break;
             }
             case 'updateSettings':
+                // 乐观同步: 先用合并后的设置通知外部(侧边栏主题等), 不等磁盘写入完成,
+                // 否则切主题时侧边栏会有可见延迟
+                ReaderPanel.onDidChangeSettings?.({
+                    ...this._settings,
+                    ...msg.patch,
+                });
                 void this._store.update(msg.patch).then((next) => {
                     this._settings = next;
                     this._panel.webview.postMessage({ type: 'settings', payload: next });

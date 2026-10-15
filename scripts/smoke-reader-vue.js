@@ -210,14 +210,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // 主题圆点数量
   const dots = document.querySelectorAll('#settingsPanel .sp-dot');
   assert(dots.length === 6, '应有 6 个主题圆点(实际 ' + dots.length + ')');
-  // 切主题: 点黑夜
+  // 切主题: 点黑夜 -> 应立即发出 updateSettings(不吃 250ms 防抖, 侧边栏要即时跟随)
   const darkDot = Array.from(dots).find((d) => d.dataset.theme === 'dark');
   darkDot.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(20);
-  // 点了 dark 后应发出 updateSettings(累积防抖 250ms)
-  await sleep(300);
+  await sleep(30);
   const themeUpdate = posted.find((m) => m.type === 'updateSettings' && m.patch && m.patch.theme === 'dark');
-  assert(themeUpdate, '切黑夜主题应发出 updateSettings(patch.theme=dark)');
+  assert(themeUpdate, '切主题应立即发出 updateSettings(patch.theme=dark), 不等防抖');
   assert(
     document.documentElement.style.getPropertyValue('--fab-bg') === '#1c1c1c',
     '切黑夜后 --fab-bg 应变为深底'

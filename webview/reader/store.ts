@@ -60,6 +60,7 @@ let pendingPatch: Partial<ReadingSettings> = {};
 /**
  * 设置变更(乐观应用 + 250ms 累积防抖保存)。
  * 累积合并: 后一次 patch 不能覆盖前一次(否则滚轮改字号会被顶掉)。
+ * 例外: 主题变更立即提交(侧边栏跟随主题, 需要无延迟)。
  */
 export function persistSettings(patch: Partial<ReadingSettings>): void {
   state.settings = Object.assign({}, state.settings, patch) as ReadingSettings;
@@ -67,7 +68,15 @@ export function persistSettings(patch: Partial<ReadingSettings>): void {
   state.prevCombo = parseShortcut(state.settings.shortcutPrev);
   state.nextCombo = parseShortcut(state.settings.shortcutNext);
   pendingPatch = Object.assign(pendingPatch, patch);
-  if (saveTimer) { clearTimeout(saveTimer); }
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  // 主题切换是离散操作且要即时同步侧边栏 -> 立即提交, 不吃防抖延迟
+  const immediate = Object.prototype.hasOwnProperty.call(patch, 'theme');
+  if (immediate) {
+    const sending = pendingPatch;
+    pendingPatch = {};
+    send({ type: 'updateSettings', patch: sending });
+    return;
+  }
   saveTimer = setTimeout(function () {
     const sending = pendingPatch;
     pendingPatch = {};
