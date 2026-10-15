@@ -251,6 +251,8 @@
     position: fixed; left: 0; right: 0; bottom: 0;
     display: flex; flex-direction: column;
     font-size: 12px;
+    /* 状态栏属 chrome 层: 用 VS Code UI 字体, 与正文阅读字体解耦(否则会跟着宋体/黑体变) */
+    font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
     background: var(--chrome-bg); color: var(--chrome-fg);
     border-top: 1px solid var(--chrome-border);
     font-variant-numeric: tabular-nums;
@@ -294,5 +296,4 @@
   .statusbar .status-title {
     flex: 0 1 auto; min-width: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    opacity: .85;
   }

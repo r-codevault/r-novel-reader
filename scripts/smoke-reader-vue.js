@@ -106,6 +106,15 @@ assert(
   /scrollbarSlider-background/.test(capturedHtml),
   '应映射 --vscode-scrollbarSlider-*(VS Code 注入的滚动条样式用这几个变量)'
 );
+// 状态栏: chrome 层字体(不跟随正文字体) + 标题不发淡
+assert(
+  /\.statusbar\s*\{[^}]*font-family:\s*var\(--vscode-font-family/.test(capturedHtml),
+  '状态栏应使用 VS Code UI 字体(与正文阅读字体解耦)'
+);
+assert(
+  !/\.status-title\s*\{[^}]*opacity/.test(capturedHtml),
+  '状态栏章节标题不应带透明度(会显得发淡)'
+);
 assert(capturedHtml.includes('reader.js') === false || true, ''); // 内联, 无外部引用
 assert(!/src="https?:/.test(capturedHtml), '不允许外部脚本引用(CSP)');
 // 产物内容确实内联进来了
