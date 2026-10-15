@@ -42,7 +42,6 @@ const progressPct = computed(function () {
       <span id="bookInfo">{{ bookInfoText }}</span>
       <span class="spacer"></span>
       <span id="chapterTitle" class="status-title" :title="chapterTitleText">{{ chapterTitleText }}</span>
-      <span class="spacer"></span>
       <span id="chapterWords">{{ chapterWordsText }}</span>
       <span id="chapterInfo">{{ chapterInfoText }}</span>
     </div>

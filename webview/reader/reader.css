@@ -290,10 +290,9 @@
     background-clip: content-box;
   }
   body::-webkit-scrollbar-thumb:hover { background: var(--accent); background-clip: content-box; }
-  /* 状态栏中间的当前章节标题(两侧 spacer 撑开 -> 居中, 过长省略) */
+  /* 状态栏右侧的当前章节标题(靠右, 过长省略) */
   .statusbar .status-title {
     flex: 0 1 auto; min-width: 0;
-    text-align: center;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     opacity: .85;
   }
