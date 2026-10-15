@@ -39,7 +39,7 @@ const shortcutHintText = computed(function () {
         <span v-for="t in THEMES" :key="t.id" class="sp-dot" :data-theme="t.id" :title="t.name"
           :style="{ background: t.id === 'dark' ? '#1c1c1c' : t.bg, color: t.fg, '--sp-check': t.fg }"
           :class="{ active: settings && settings.theme === t.id }"
-          @click="persistSettings({ theme: t.id })">✓</span>
+          @click="persistSettings({ theme: t.id })"></span>
       </div>
     </div>
     <div class="sp-row">
