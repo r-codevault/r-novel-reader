@@ -11,7 +11,9 @@ html, body { height: 100%; }
     font-family: var(--vscode-font-family);
     font-size: var(--vscode-font-size, 13px);
     color: var(--vscode-foreground);
-    background: transparent;
+    /* 由主题变量上色(--vscode-sideBar-background 已映射为阅读主题面板色);
+       不能再透明, 否则会透出 VS Code 宿主深色底, 列表区域与主题不一致 */
+    background: var(--vscode-sideBar-background, transparent);
     overflow: hidden;
   }
   .ico { display: inline-flex; align-items: center; justify-content: center; flex: none; }

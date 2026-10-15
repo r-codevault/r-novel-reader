@@ -74,6 +74,11 @@ console.log('[侧边栏·外壳]');
 console.log('HTML 长度:', chapterHtml.length);
 assert(chapterHtml.includes('Content-Security-Policy'), '应包含 CSP');
 assert(chapterHtml.includes('id="app"'), 'Vue 挂载点 #app 应存在');
+assert(
+  /body\s*\{[^}]*background:\s*var\(--vscode-sideBar-background/.test(chapterHtml),
+  '侧边栏底色必须由主题变量上色(透明会透出宿主深色底)'
+);
+assert(/#app\s*\{[^}]*height:\s*100%/.test(chapterHtml), '#app 需撑满高度(否则列表无法滚动)');
 const nonceMatch = chapterHtml.match(/script-src 'nonce-([0-9a-f]+)'/);
 assert(nonceMatch && chapterHtml.includes('nonce="' + nonceMatch[1] + '"'), 'script 应带同款 nonce');
 console.log('外壳(CSP/挂载点/nonce): 通过');
