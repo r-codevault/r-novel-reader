@@ -241,6 +241,26 @@ function dispatch(type, payloadOrExtra) {
   assert(!$('#currentWrap').classList.contains('visible'), '空状态应隐藏当前阅读条');
   console.log('空状态: 通过');
 
+  // 主题同步: theme 消息应把阅读主题色映射到 --vscode-* 变量
+  dispatch('theme', { themeId: 'sepia' });
+  await sleep(20);
+  const rootStyle = document.documentElement.style;
+  assert(
+    rootStyle.getPropertyValue('--vscode-sideBar-background') === '#f0e3c2',
+    '侧边栏背景应跟随羊皮纸主题面板色'
+  );
+  assert(
+    rootStyle.getPropertyValue('--vscode-foreground') === '#4b3f2a',
+    '侧边栏文字色应跟随主题'
+  );
+  dispatch('theme', { themeId: 'dark' });
+  await sleep(20);
+  assert(
+    rootStyle.getPropertyValue('--vscode-sideBar-background') === '#1c1c1c',
+    '黑夜主题侧边栏应为深底'
+  );
+  console.log('主题同步(--vscode-* 映射): 通过');
+
   console.log('\n侧边栏 Vue 冒烟测试全部通过 ✔');
   process.exit(0);
 })().catch((err) => {

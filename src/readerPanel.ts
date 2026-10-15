@@ -56,6 +56,8 @@ export class ReaderPanel {
     public static current: ReaderPanel | undefined;
     /** 章节变化回调(供侧边栏「当前阅读」条与目录同步) */
     public static onDidChangeChapter?: (index: number) => void;
+    /** 设置变化(面板内改设置/重置后); 扩展用它把主题同步给侧边栏 */
+    public static onDidChangeSettings?: (settings: ReadingSettings) => void;
     /** 阅读进度回调(由插件入口写入书架) */
     public static onProgress?: (chapterIndex: number, scrollRatio: number) => void;
 
@@ -228,12 +230,14 @@ export class ReaderPanel {
                 void this._store.update(msg.patch).then((next) => {
                     this._settings = next;
                     this._panel.webview.postMessage({ type: 'settings', payload: next });
+                    ReaderPanel.onDidChangeSettings?.(next);
                 });
                 break;
             case 'resetSettings':
                 void this._store.reset().then((next) => {
                     this._settings = next;
                     this._panel.webview.postMessage({ type: 'settings', payload: next });
+                    ReaderPanel.onDidChangeSettings?.(next);
                 });
                 break;
             case 'saveProgress':

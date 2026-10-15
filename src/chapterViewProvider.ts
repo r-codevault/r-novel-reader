@@ -79,6 +79,8 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
     private _bookTitle = '';
     private _chapters: { index: number; title: string }[] = [];
     private _currentIndex = -1;
+    /** 侧边栏跟随的阅读主题 id(由扩展在启动/设置变化时推送) */
+    private _themeId = 'white';
     /** 视图就绪前的居中请求 */
     private _pendingCenter: number | null = null;
 
@@ -180,6 +182,12 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
         this._post({ type: 'library', path: this._libraryPath });
     }
 
+    /** 侧边栏跟随的阅读主题(与阅读面板同步) */
+    setTheme(themeId: string): void {
+        this._themeId = themeId || 'white';
+        this._post({ type: 'theme', themeId: this._themeId });
+    }
+
     /** 加载/切换小说 */
     setNovel(novel: Novel | null): void {
         if (!novel) {
@@ -230,6 +238,7 @@ export class ChapterViewProvider implements vscode.WebviewViewProvider {
         send({ type: 'mode', mode: this._mode });
         send({ type: 'shelf', items: this._shelf });
         send({ type: 'library', path: this._libraryPath });
+        send({ type: 'theme', themeId: this._themeId });
         send({
             type: 'novel',
             payload: {

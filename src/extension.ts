@@ -51,6 +51,8 @@ export function activate(context: vscode.ExtensionContext): void {
     const store = new SettingsStore(context.globalState);
     const shelf = new ShelfStore(context.globalState);
     const chapterView = new ChapterViewProvider();
+    // 侧边栏跟随阅读主题(阅读面板改设置也会同步)
+    chapterView.setTheme(store.get().theme);
     // 书架 / 目录 / 设置 三个互斥视图(视图名即标题栏文字, 靠 viewMode 上下文切换)
     for (const mode of Object.keys(ChapterViewProvider.viewIds) as ViewMode[]) {
         context.subscriptions.push(
@@ -502,6 +504,11 @@ export function activate(context: vscode.ExtensionContext): void {
         syncCurrentChapter(index);
     };
 
+    // 阅读面板设置变化 -> 侧边栏主题同步
+    ReaderPanel.onDidChangeSettings = (next) => {
+        chapterView.setTheme(next.theme);
+    };
+
     // ---------------------------------------------------------------- VS Code 设置页 -> 同步阅读偏好
 
     context.subscriptions.push(
@@ -515,6 +522,7 @@ export function activate(context: vscode.ExtensionContext): void {
             const next: ReadingSettings | null = await store.applyConfigurationChange(e);
             if (next) {
                 ReaderPanel.updateSettings(next);
+                chapterView.setTheme(next.theme);
             }
         })
     );

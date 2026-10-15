@@ -7,7 +7,7 @@
  *  - 换书后重定位, 避免沿用上一本书的滚动位置
  */
 import { computed, nextTick, ref, watch } from 'vue';
-import { state, send, novelKey, type NovelPayload, type ShelfItemView, type ViewMode } from './store';
+import { state, send, novelKey, applySidebarTheme, type NovelPayload, type ShelfItemView, type ViewMode } from './store';
 import { ICON_BOOK, ICON_PLAY, ICON_SHELF_BOOK, ICON_CLOSE } from './icons';
 import './sidebar.css';
 
@@ -85,6 +85,9 @@ function handleExtensionMessage(msg: { type?: string } & Record<string, unknown>
       break;
     case 'library':
       state.libraryPath = (msg.path as string) || '';
+      break;
+    case 'theme':
+      applySidebarTheme(msg.themeId as string);
       break;
     case 'novel': {
       const p = msg.payload as NovelPayload;
