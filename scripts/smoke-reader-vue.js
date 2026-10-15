@@ -209,6 +209,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert($('#bookInfo').textContent.includes('测试之书'), '书名应显示');
   assert($('#chapterInfo').textContent.includes('第 3 章'), '当前章应显示');
   assert($('#chapterWords').textContent.includes('6'), '本章字数应显示');
+  assert(
+    $('#chapterTitle') && $('#chapterTitle').textContent.includes('标题3'),
+    '状态栏中间应显示当前章节标题'
+  );
   console.log('状态栏(书名/章/字数): 通过');
 
   // 设置面板: openSettings 消息

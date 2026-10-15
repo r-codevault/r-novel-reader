@@ -24,6 +24,10 @@ const chapterInfoText = computed(function () {
   return total > 0 ? '第 ' + idx + ' 章 / 共 ' + total + ' 章' : '';
 });
 
+const chapterTitleText = computed(function () {
+  return state.chapter ? state.chapter.title : '';
+});
+
 const progressPct = computed(function () {
   const total = state.novel ? state.novel.totalChapters : 0;
   const idx = (state.chapter ? state.chapter.index : 0) + 1;
@@ -36,6 +40,8 @@ const progressPct = computed(function () {
     <div class="progress-track"><div class="progress-fill" :style="{ width: progressPct + '%' }"></div></div>
     <div class="status-row">
       <span id="bookInfo">{{ bookInfoText }}</span>
+      <span class="spacer"></span>
+      <span id="chapterTitle" class="status-title" :title="chapterTitleText">{{ chapterTitleText }}</span>
       <span class="spacer"></span>
       <span id="chapterWords">{{ chapterWordsText }}</span>
       <span id="chapterInfo">{{ chapterInfoText }}</span>
