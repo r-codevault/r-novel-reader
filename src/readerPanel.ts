@@ -10,20 +10,9 @@
 
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
-import * as fs from 'fs';
-import * as path from 'path';
 import { Novel } from './novelParser';
+import { readWebviewAsset } from './webviewAssets';
 import { ReadingSettings, SettingsStore, THEMES, fontStackById, themeById } from './settings';
-
-/** 读取 Vue 打包产物(dist-webview/*), 带缓存 */
-const webviewAssetCache: Record<string, string> = {};
-function readWebviewAsset(name: string): string {
-    if (!webviewAssetCache[name]) {
-        const file = path.join(__dirname, '..', 'dist-webview', name);
-        webviewAssetCache[name] = fs.readFileSync(file, 'utf8');
-    }
-    return webviewAssetCache[name];
-}
 
 interface InitPayload {
     filePath: string;
