@@ -73,8 +73,9 @@ function toggle(item: MenuItem): void {
   <nav class="menu" :class="{ expanded: state.menuExpanded }">
     <button class="menu-toggle" :title="state.menuExpanded ? '收起菜单' : '展开菜单'"
       @click="state.menuExpanded = !state.menuExpanded">
-      <!-- 品牌 logo(用户提供, 颜色保持原样不随主题变化) -->
-      <svg viewBox="0 0 1024 1024" aria-hidden="true">
+      <!-- 品牌 logo(用户提供, 颜色保持原样不随主题变化)
+           viewBox 收紧到图形实际边界(原 SVG 四周有 ~14% 空白, 会显得小且视觉偏左) -->
+      <svg viewBox="158 184 686 720" aria-hidden="true">
         <path d="M430.602 443.728H172.941v409.721h257.661l9.723 22.763h123.159l12.965-22.763h251.179V437.225z" fill="#ED8F27" />
         <path d="M563.484 888.712H440.325l-11.495-7.59-6.48-15.173H172.94l-12.5-12.5v-409.72l12.5-12.5H430.5l396.923-6.502 12.705 12.498V853.45l-12.5 12.5H583.714l-9.367 16.449-10.863 6.313z m-114.906-25h107.641l9.367-16.449 10.862-6.313h238.68V449.931l-384.525 6.298H185.44V840.95h245.162l11.495 7.59 6.481 15.172z" fill="#300604" />
         <path d="M772.531 386.823s-221.458-42.273-266.298 50.402l-22.982 384.568h52.685l4.862-31.937h231.733V386.823z" fill="#FCE3C3" />

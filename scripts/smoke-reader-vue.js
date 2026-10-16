@@ -503,23 +503,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!/currentColor/.test(logoSvg.innerHTML), 'logo 不应被改成 currentColor(用户要求颜色不改)');
   assert(
     /\.menu-toggle svg\s*\{[^}]*width:\s*46px/.test(capturedHtml),
-    '折叠按钮 logo 应放大到 46px(贴近 48px 栏宽)'
+    '展开态 logo 应为 46px'
   );
   assert(
-    /\.menu-toggle\s*\{[^}]*padding:\s*0\s+0\s+0\s+17px/.test(capturedHtml),
-    'logo 左边距应为 17px(与菜单项图标左缘对齐)'
+    /\.menu-toggle\s*\{[^}]*padding:\s*2px\s+0\s+2px\s+17px/.test(capturedHtml),
+    'logo 左边距应为 17px(与菜单项图标左缘对齐), 且有 2px 上下留白'
   );
   assert(
-    /\.menu-toggle\s*\{[^}]*transition:\s*padding-left/.test(capturedHtml),
-    'padding-left 应可过渡(避免收起动画期间 logo 先右后回)'
+    /\.menu:not\(\.expanded\) \.menu-toggle svg\s*\{[^}]*width:\s*28px/.test(capturedHtml),
+    '收起态 logo 应缩到 28px 并与图标列同左缘对齐'
   );
   assert(
-    /\.menu:not\(\.expanded\) \.menu-toggle\s*\{[^}]*padding-left:\s*0/.test(capturedHtml),
-    '收起态应把左内边距归零, 使 logo 填满栏宽'
+    !/\.menu:not\(\.expanded\) \.menu-toggle\s*\{[^}]*padding-left/.test(capturedHtml),
+    '收起态不应改 padding-left(会让左缘在两态间跳变)'
   );
   assert(
-    !/\.menu:not\(\.expanded\) \.menu-toggle\s*\{[^}]*justify-content:\s*center/.test(capturedHtml),
-    '收起态不应改用 justify-content:center(会在宽度动画中把 logo 甩到右侧)'
+    /viewBox="158 184 686 720"/.test(capturedHtml) || /viewBox="158 184 686 720"/.test(fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'components', 'SideMenu.vue'), 'utf8')),
+    'logo viewBox 应收紧到图形实际边界(去掉 SVG 自带空白, 避免显得小/偏)'
   );
   assert(!document.querySelector('.dw-lines-right, .dw-lines-left'), '不应再有旧的双状态条纹路径');
   assert(document.querySelector('.menu-toggle').getAttribute('title'), '切换按钮应保留 hover 提示(title)');
