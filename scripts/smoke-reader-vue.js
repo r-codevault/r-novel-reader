@@ -412,7 +412,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   );
   assert(document.querySelectorAll('.menu-item[data-menu]').length === 5, '菜单共 5 项(含状态栏开关)');
   assert(document.querySelector('.menu-item[data-menu="statusbar"]'), '菜单应有「状态栏」显隐开关');
-  assert(document.querySelector('.menu-divider'), '开关与弹窗项之间应有分隔线');
+  // 顺序: 书架 → 目录 → 状态栏 → 阅读设置 → 存储位置, 分割线在最下方
+  const order = Array.from(document.querySelector('.menu').children).map((el) =>
+    el.classList.contains('menu-divider') ? 'divider' : el.getAttribute('data-menu'));
+  assert(
+    JSON.stringify(order) === JSON.stringify([null, 'shelf', 'catalog', 'statusbar', 'settings', 'storage', 'divider']),
+    '菜单顺序应为 书架/目录/状态栏/阅读设置/存储位置 + 末尾分割线, 实际: ' + JSON.stringify(order)
+  );
+  assert(
+    document.querySelector('.menu').lastElementChild.classList.contains('menu-divider'),
+    '分割线应在菜单最下方'
+  );
+  // 图标尺寸统一(原来菜单项 18px 比 toggle 20px 偏小)
+  // happy-dom 无布局, 用 CSS 规则断言图标尺寸(原来菜单项 18px 比 toggle 偏小)
+  // 状态栏开关改用「底栏」矩形图标(不再用眼睛, 避免与护眼模式混淆)
+  const sbIconSvg = document.querySelector('.menu-item[data-menu="statusbar"] svg').outerHTML;
+  assert(/<rect/.test(sbIconSvg), '状态栏开关应使用矩形(底栏)图标');
+  assert(!/circle/.test(sbIconSvg), '状态栏开关不应再使用眼睛图标(含 circle)');
   document.querySelector('.menu-toggle').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   // 状态栏显隐: 默认显示, 点开关隐藏/再点恢复

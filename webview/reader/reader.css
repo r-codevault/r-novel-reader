@@ -322,11 +322,11 @@
     background: var(--sp-control-bg);
     font-weight: 600;
   }
-  .menu svg { width: 18px; height: 18px; flex: none; }
+  .menu svg { width: 20px; height: 20px; flex: none; }
   .menu-ico { display: inline-flex; align-items: center; justify-content: center; flex: none; }
   .menu-label { opacity: 0; transition: opacity .12s ease; }
   /* 切换按钮: 双状态图标(展开=右侧条纹, 收起=左侧条纹) */
-  .menu-toggle svg { width: 20px; height: 20px; }
+  .menu-toggle svg { width: 21px; height: 21px; }
   .menu .dw-lines-left { display: none; }
   .menu.expanded .dw-lines-right { display: block; }
   .menu.expanded .dw-lines-left { display: none; }
@@ -475,7 +475,7 @@
 
   /* 菜单分隔线(状态栏开关与弹窗入口分组) */
   .menu-divider {
-    height: 1px; margin: 6px 12px;
+    height: 1px; margin: 8px 12px 4px;
     background: var(--sp-border);
     flex: none;
   }

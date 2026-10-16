@@ -80,31 +80,41 @@ function toggle(item: MenuItem): void {
         <path class="dw-lines-left" d="M205.824 356.352h96.768v55.296H205.824v-55.296z m0 145.408h96.768v55.296H205.824v-55.296z m0 145.408h96.768v55.296H205.824v-55.296z m0 0" />
       </svg>
     </button>
-    <button v-for="it in items" :key="it.id" class="menu-item"
-      :class="{ active: state[it.key] }" :data-menu="it.id" :title="it.name" @click="toggle(it)">
+    <button v-for="it in items.filter(function (x) { return x.id === 'shelf' || x.id === 'catalog'; })"
+      :key="it.id" class="menu-item" :class="{ active: state[it.key] }" :data-menu="it.id"
+      :title="it.name" @click="toggle(it)">
       <span class="menu-ico" v-html="it.svg"></span>
       <span class="menu-label">{{ it.name }}</span>
     </button>
 
-    <!-- 状态栏显示/隐藏开关(默认显示; 图标: 眼睛=显示中, 眼睛带斜线=已隐藏) -->
-    <div class="menu-divider"></div>
+    <!-- 状态栏显示/隐藏开关(默认显示; 放在「目录」下方)
+         图标: 底栏样式(矩形+底部实心条), 避免用眼睛被误认为护眼模式 -->
     <button class="menu-item menu-toggle-statusbar" :class="{ active: statusBarVisible() }"
       :data-menu="'statusbar'" :title="statusBarVisible() ? '隐藏状态栏' : '显示状态栏'"
       @click="toggleStatusBar">
       <span class="menu-ico">
-        <svg v-if="statusBarVisible()" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" />
-          <circle cx="12" cy="12" r="2.6" />
-        </svg>
-        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" />
-          <circle cx="12" cy="12" r="2.6" />
-          <path d="M4 20L20 4" />
+          <rect x="3" y="4" width="18" height="16" rx="2.5" />
+          <!-- 底部条: 显示中为实心块, 隐藏时为空心细线 -->
+          <rect v-if="statusBarVisible()" x="6.5" y="15" width="11" height="2.4" rx="1"
+            fill="currentColor" stroke="none" />
+          <path v-else d="M6.5 16.2h11" />
+          <!-- 隐藏时加斜线, 与"已关闭"语义一致 -->
+          <path v-if="!statusBarVisible()" d="M4 20L20 4" />
         </svg>
       </span>
       <span class="menu-label">状态栏</span>
     </button>
+
+    <button v-for="it in items.filter(function (x) { return x.id !== 'shelf' && x.id !== 'catalog'; })"
+      :key="it.id" class="menu-item" :class="{ active: state[it.key] }" :data-menu="it.id"
+      :title="it.name" @click="toggle(it)">
+      <span class="menu-ico" v-html="it.svg"></span>
+      <span class="menu-label">{{ it.name }}</span>
+    </button>
+
+    <!-- 菜单分隔线(放在菜单最下方) -->
+    <div class="menu-divider"></div>
   </nav>
 </template>
