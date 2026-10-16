@@ -23,9 +23,7 @@ function onBookClick(b: ShelfItemView, ev: MouseEvent): void {
   const target = ev.target as HTMLElement;
   if (target.closest && target.closest('.bp-del')) {
     ev.stopPropagation();
-    // 乐观移除: 立即从本地列表删掉该行(即时反馈);
-    // 扩展侧确认后(二次确认框)会推送权威列表, 失败则会自动"弹回"
-    state.shelf = state.shelf.filter(function (x) { return x.filePath !== b.filePath; });
+    // 不做乐观移除: 等扩展侧二次确认(可能还要移入回收站)通过后再由权威列表刷新
     send({ type: 'removeBook', filePath: b.filePath });
     return;
   }
@@ -36,6 +34,11 @@ function onBookClick(b: ShelfItemView, ev: MouseEvent): void {
 function addBook(): void {
   send({ type: 'openFile' });
   state.shelfOpen = false;
+}
+
+/** 按书库目录重新扫描(仅设置书库目录后可用) */
+function refreshFromLibrary(): void {
+  send({ type: 'refreshLibrary' });
 }
 </script>
 
@@ -60,6 +63,8 @@ function addBook(): void {
     </div>
     <div class="popup-foot">
       <button class="popup-primary" title="添加本地 txt 小说" @click="addBook">＋ 添加书籍</button>
+      <button class="popup-secondary" v-show="state.libraryPath" title="按书库目录重新扫描书籍"
+        @click="refreshFromLibrary">↻ 刷新书架</button>
     </div>
   </section>
 </template>

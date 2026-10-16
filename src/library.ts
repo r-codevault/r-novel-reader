@@ -69,3 +69,16 @@ export async function ensureInLibrary(srcPath: string, libraryPath: string): Pro
     await fs.promises.copyFile(srcPath, target);
     return { path: target, copied: true, reason: renamed ? 'renamed' : 'copied' };
 }
+
+/**
+ * 判断文件是否位于指定目录内(用于"仅删除书库内文件"的安全判断)。
+ * 目录为空 / 路径不在目录内 均返回 false。
+ */
+export function isInsideDir(filePath: string, dir: string): boolean {
+    const d = (dir || '').trim();
+    if (!d) {
+        return false;
+    }
+    const rel = path.relative(path.resolve(d), path.resolve(filePath));
+    return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+}

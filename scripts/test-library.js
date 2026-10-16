@@ -9,7 +9,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { ensureInLibrary } = require('../dist/library');
+const { ensureInLibrary, isInsideDir } = require('../dist/library');
 
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'novel-lib-test-'));
 const srcDir = path.join(tmpRoot, 'src');
@@ -73,6 +73,14 @@ function write(p, content) {
   console.log('自动创建书库目录: 通过');
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
+  // ---- isInsideDir: 删除前的安全判断 ----
+  assert(isInsideDir(path.join(tmpRoot, 'lib', 'a.txt'), path.join(tmpRoot, 'lib')), '书库内文件应判定为 inside');
+  assert(!isInsideDir(path.join(tmpRoot, 'other', 'a.txt'), path.join(tmpRoot, 'lib')), '书库外文件应判定为 outside');
+  assert(!isInsideDir(path.join(tmpRoot, 'lib'), path.join(tmpRoot, 'lib')), '目录本身不算 inside');
+  assert(!isInsideDir(path.join(tmpRoot, 'lib', 'a.txt'), ''), '未设置书库目录时应为 false');
+  assert(isInsideDir(path.join(tmpRoot, 'lib', 'sub', 'a.txt'), path.join(tmpRoot, 'lib')), '子目录文件应判定为 inside');
+  console.log('isInsideDir(删除安全判断): 通过');
+
   console.log('\n书库拷贝测试全部通过 ✔');
 })().catch((err) => {
   console.error(err);

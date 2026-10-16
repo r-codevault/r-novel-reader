@@ -441,10 +441,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   document.querySelector('#shelfPopup .bp-del').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   assert(posted.some((m) => m.type === 'removeBook'), '点移除应发 removeBook');
-  assert(document.querySelectorAll('#shelfPopup .bk').length === 1, '乐观移除: 点 ✕ 后该行应立即消失');
+  assert(
+    document.querySelectorAll('#shelfPopup .bk').length === 2,
+    '未确认前不应从列表移除(等扩展二次确认后刷新)'
+  );
+  // 扩展确认后推送权威列表 -> 行消失
+  sendMsg({ type: 'shelf', items: [{ filePath: 'D:/b.txt', title: '另一本书', author: '', chapterIndex: -1, totalChapters: 8, current: false }] });
+  await sleep(30);
+  assert(document.querySelectorAll('#shelfPopup .bk').length === 1, '扩展推送后列表应更新为 1 本');
   document.querySelector('#shelfPopup .popup-primary').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   assert(posted.some((m) => m.type === 'openFile'), '点「添加书籍」应发 openFile');
+  posted.length = 0;
+  const refreshBtn = document.querySelector('#shelfPopup .popup-secondary');
+  assert(refreshBtn, '设置书库目录后应显示「刷新书架」按钮');
+  refreshBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(posted.some((m) => m.type === 'refreshLibrary'), '点「刷新书架」应发 refreshLibrary');
   console.log('书架弹窗(渲染/打开/移除/添加): 通过');
 
   // 目录弹窗(菜单打开) + 章节跳转
@@ -499,6 +512,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   assert(document.querySelectorAll('#shelfPopup .bk').length === 1, 'shelf 消息应刷新书架');
   assert(document.querySelector('#storagePopup .popup-val').textContent.includes('未设置'), 'library 空值应显示未设置');
+  const refreshHidden = document.querySelector('#shelfPopup .popup-secondary');
+  assert(
+    !refreshHidden || refreshHidden.style.display === 'none',
+    '未设置书库目录时应隐藏「刷新书架」按钮(v-show -> display:none)'
+  );
   console.log('弹窗·消息协议(openDrawer/shelf/library): 通过');
 
   // ---------------- webview 消息 -> 扩展命令 分发 ----------------
@@ -510,6 +528,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   sendFromWebview({ type: 'pickLibrary' });
   sendFromWebview({ type: 'clearLibrary' });
   sendFromWebview({ type: 'openLibraryFolder' });
+  sendFromWebview({ type: 'refreshLibrary' });
   sendFromWebview({ type: 'openFile' });
   await sleep(20);
   for (const [cmd, arg] of [
@@ -518,6 +537,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ['novelReader.pickLibraryPath', undefined],
     ['novelReader.clearLibraryPath', undefined],
     ['novelReader.openLibraryFolder', undefined],
+    ['novelReader.refreshShelfFromLibrary', undefined],
     ['novelReader.openFile', undefined],
   ]) {
     assert(
@@ -536,6 +556,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     assert(!(c.menus['view/title'] || []).length, '不应有 view/title 菜单');
     const cmds = c.commands.map((x) => x.command);
     assert(!cmds.includes('novelReader.backFromSettings'), '「返回」命令应已移除');
+    assert(cmds.includes('novelReader.refreshShelfFromLibrary'), '应有「刷新书架」命令');
     for (const need of ['novelReader.showBookshelf', 'novelReader.showChapters', 'novelReader.showSettings']) {
       assert(cmds.includes(need), '弹窗入口命令应保留: ' + need);
     }

@@ -15,7 +15,8 @@ import * as vscode from 'vscode';
 import { parseNovel, Novel } from './novelParser';
 import { ReaderPanel, ShelfItemView, DrawerTab } from './readerPanel';
 import { ShelfStore } from './shelf';
-import { ensureInLibrary } from './library';
+import { ensureInLibrary, isInsideDir } from './library';
+import { moveToTrash } from './trash';
 import { ReadingSettings, SettingsStore } from './settings';
 
 /** 读取文件字节并识别编码(站点下载的 txt 常为 GB18030) */
@@ -307,23 +308,98 @@ export function activate(context: vscode.ExtensionContext): void {
         }),
 
         // 书架: 移除某本书(二次确认)
+        //  - 设置了书库目录且文件就在书库内 -> 确认后把文件移入系统回收站
+        //  - 其它情况(未设置书库目录 / 文件在书库外) -> 只移除书架记录, 不动文件
         vscode.commands.registerCommand('novelReader.removeFromShelf', async (filePath: string) => {
             if (!filePath) {
                 return;
             }
             const book = shelf.get(filePath);
             const name = book?.title || path.basename(filePath);
-            const picked = await vscode.window.showWarningMessage(
-                `从书架移除「${name}」？阅读进度记录也会一并删除（不会删除文件）。`,
-                { modal: true },
-                '移除'
-            );
+            const libPath = getLibraryPath();
+            const willTrash = !!libPath && isInsideDir(filePath, libPath) && fs.existsSync(filePath);
+            const confirmText = willTrash
+                ? `从书架移除「${name}」并把文件移入回收站？\n（文件：${filePath}）`
+                : `从书架移除「${name}」？阅读进度记录也会一并删除（不会删除文件）。`;
+            const picked = await vscode.window.showWarningMessage(confirmText, { modal: true }, '移除', '取消');
             if (picked !== '移除') {
                 return;
             }
+            if (willTrash) {
+                try {
+                    await moveToTrash(filePath);
+                } catch (err) {
+                    // 移入回收站失败: 中止操作(不删记录, 不丢文件)
+                    vscode.window.showErrorMessage(
+                        `移入回收站失败，已取消删除: ${err instanceof Error ? err.message : String(err)}`
+                    );
+                    return;
+                }
+            }
             await shelf.remove(filePath);
             refreshShelfView();
-            vscode.window.setStatusBarMessage(`已从书架移除「${name}」`, 3000);
+            vscode.window.setStatusBarMessage(
+                willTrash ? `已移除「${name}」并移入回收站` : `已从书架移除「${name}」`,
+                3000
+            );
+        }),
+
+        // 书架: 按书库目录重新扫描(新增缺失的 txt, 清理书库内已不存在的记录)
+        vscode.commands.registerCommand('novelReader.refreshShelfFromLibrary', async () => {
+            const dir = getLibraryPath();
+            if (!dir) {
+                void vscode.window.showInformationMessage('未设置书库目录：请先在「存储位置」里选择书库目录。');
+                return;
+            }
+            if (!fs.existsSync(dir)) {
+                void vscode.window.showWarningMessage(`书库目录不存在：${dir}`);
+                return;
+            }
+            let names: string[] = [];
+            try {
+                names = (await fs.promises.readdir(dir, { withFileTypes: true }))
+                    .filter((d) => d.isFile() && d.name.toLowerCase().endsWith('.txt'))
+                    .map((d) => path.join(dir, d.name));
+            } catch (err) {
+                void vscode.window.showErrorMessage(
+                    `读取书库目录失败: ${err instanceof Error ? err.message : String(err)}`
+                );
+                return;
+            }
+            const known = new Set(shelf.list().map((b) => b.filePath.toLowerCase()));
+            let added = 0;
+            for (const file of names) {
+                if (known.has(file.toLowerCase())) {
+                    continue;
+                }
+                try {
+                    const buf = await fs.promises.readFile(file);
+                    const { text, encoding } = decodeBuffer(buf);
+                    const novel = parseNovel(text, file, encoding);
+                    await shelf.upsert({
+                        filePath: file,
+                        title: novel.bookTitle,
+                        author: novel.author,
+                        totalChapters: novel.chapters.length,
+                    });
+                    added += 1;
+                } catch {
+                    // 单个文件解析失败: 跳过, 不影响其余
+                }
+            }
+            // 清理: 书库内已不存在的文件, 其书架记录一并移除
+            let pruned = 0;
+            for (const b of shelf.list()) {
+                if (isInsideDir(b.filePath, dir) && !fs.existsSync(b.filePath)) {
+                    await shelf.remove(b.filePath);
+                    pruned += 1;
+                }
+            }
+            refreshShelfView();
+            void vscode.window.showInformationMessage(
+                `书架已刷新：新增 ${added} 本` + (pruned ? `，清理 ${pruned} 条失效记录` : '') +
+                `（书库内共 ${names.length} 个 txt）`
+            );
         }),
 
         // 回到当前阅读的章节(阅读面板已关闭时会重新打开)

@@ -59,7 +59,8 @@ type WebviewMessage =
     | { type: 'removeBook'; filePath: string }
     | { type: 'pickLibrary' }
     | { type: 'clearLibrary' }
-    | { type: 'openLibraryFolder' };
+    | { type: 'openLibraryFolder' }
+    | { type: 'refreshLibrary' };
 
 /** 书架条目(抽屉「书架」页渲染用) */
 export interface ShelfItemView {
@@ -338,6 +339,16 @@ export class ReaderPanel {
                 break;
             case 'openLibraryFolder':
                 void vscode.commands.executeCommand('novelReader.openLibraryFolder');
+                break;
+            case 'refreshLibrary':
+                // 按书库目录重新扫描书架(新增缺失 txt / 清理失效记录)
+                void vscode.commands
+                    .executeCommand('novelReader.refreshShelfFromLibrary')
+                    .then(undefined, (err: unknown) => {
+                        void vscode.window.showErrorMessage(
+                            `刷新书架失败: ${err instanceof Error ? err.message : String(err)}`
+                        );
+                    });
                 break;
         }
     }

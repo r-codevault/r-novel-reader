@@ -460,3 +460,15 @@
   #catalogPanel .cat-btn { background: var(--page-bg); color: var(--fg); }
   #catalogPanel .cat-btn:hover { border-color: var(--accent); color: var(--accent); }
   #catalogPanel .cat-head, #catalogPanel .cat-foot { color: var(--fg); }
+
+  /* 次级按钮(如「刷新书架」): 与主按钮并排时等宽 */
+  .popup-foot { display: flex; gap: 8px; }
+  .popup-secondary {
+    flex: none; padding: 7px 14px; cursor: pointer;
+    font-family: inherit; font-size: var(--ui-font);
+    color: var(--fg); background: var(--page-bg);
+    border: 1px solid var(--input-border); border-radius: 6px;
+  }
+  .popup-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  /* 底部并排时: 主按钮占满剩余宽度 */
+  .popup-foot .popup-primary { flex: 1 1 auto; width: auto; }
