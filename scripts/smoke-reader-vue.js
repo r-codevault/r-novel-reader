@@ -452,6 +452,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   document.querySelector('#shelfPopup .popup-primary').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   assert(posted.some((m) => m.type === 'openFile'), '点「添加书籍」应发 openFile');
+  assert(document.querySelector('#shelfPopup').classList.contains('open'), '点「添加书籍」不应关闭弹窗');
   posted.length = 0;
   const refreshBtn = document.querySelector('#shelfPopup .popup-secondary');
   assert(refreshBtn, '设置书库目录后应显示「刷新书架」按钮');

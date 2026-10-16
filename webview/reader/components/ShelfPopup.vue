@@ -32,8 +32,8 @@ function onBookClick(b: ShelfItemView, ev: MouseEvent): void {
 }
 
 function addBook(): void {
+  // 不关闭弹窗: 添加完成后新书会实时出现在列表里, 方便连续添加/查看
   send({ type: 'openFile' });
-  state.shelfOpen = false;
 }
 
 /** 按书库目录重新扫描(仅设置书库目录后可用) */
