@@ -2,6 +2,7 @@
 src/**
 scripts/**
 docs/**
+webview/**
 node_modules/**
 out/**
 **/*.map

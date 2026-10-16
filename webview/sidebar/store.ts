@@ -50,8 +50,9 @@ interface ThemeDef {
   muted: string; panelAccent: string; panelHover: string;
 }
 
-/** 构建期由 vite define 注入(单一来源 src/settings.ts) */
-export const THEMES: ThemeDef[] = __THEMES__;
+/** 由构建期注入的常量(虚拟模块, 见 vite.config.mjs; 单一来源 src/settings.ts) */
+import { THEMES } from 'virtual:novel-constants';
+export { THEMES };
 
 function themeOf(id: string): ThemeDef {
   for (const t of THEMES) { if (t.id === id) { return t; } }

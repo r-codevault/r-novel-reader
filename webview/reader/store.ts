@@ -6,10 +6,9 @@ import type { ReadingSettings, ThemeDef } from '../../src/settings';
 import { state, send, type ChapterPayload } from './composables/vscode';
 import { parseShortcut } from './composables/shortcut';
 
-/** 构建期由 vite define 注入(单一来源 src/settings.ts) */
-export const THEMES: ThemeDef[] = __THEMES__;
-export const FONT_STACKS: Record<string, string> = __FONT_STACKS__;
-export const DEFAULT_SETTINGS: ReadingSettings = __DEFAULT_SETTINGS__;
+/** 由构建期注入的常量(虚拟模块, 见 vite.config.mjs; 单一来源 src/settings.ts) */
+import { THEMES, FONT_STACKS, DEFAULT_SETTINGS } from 'virtual:novel-constants';
+export { THEMES, FONT_STACKS, DEFAULT_SETTINGS };
 
 export { state };
 

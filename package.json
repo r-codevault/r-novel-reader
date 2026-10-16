@@ -2,7 +2,7 @@
   "name": "r-novel-reader",
   "displayName": "小说阅读器",
   "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面：悬浮球 + 起点风格目录面板、我的书架、书库目录、字体/主题个性化设置，自动延续上次阅读状态。",
-  "version": "1.13.11",
+  "version": "1.14.0",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -336,7 +336,9 @@
     "package": "vsce package --baseContentUrl https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader/blob/master --baseImagesUrl https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader/raw/master",
     "test": "node scripts/test-shelf.js && node scripts/test-library.js && node scripts/test-parser.js && node scripts/smoke-reader-vue.js && node scripts/smoke-sidebar-vue.js && node scripts/smoke-webview.js",
     "build:webview": "vite build && vite build --mode sidebar",
-    "pretest": "npm run compile && npm run build:webview"
+    "pretest": "npm run compile && npm run build:webview",
+    "dev:reader": "vite --open /webview/reader/dev.html",
+    "dev:sidebar": "vite --open /webview/sidebar/dev.html"
   },
   "devDependencies": {
     "@types/node": "^18.19.0",
