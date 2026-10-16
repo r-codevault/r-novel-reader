@@ -565,6 +565,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     assert(/modal: true \}, '移除'\)/.test(extSrc), '删除确认框应只传「移除」按钮');
     assert(/whyNotTrash/.test(extSrc), '不移除文件时应说明原因(未设置书库/不在书库内/文件不存在)');
     assert(/planDuplicateRemoval/.test(extSrc), '刷新书架应做同书去重');
+    assert(/deriveTitleAuthor/.test(extSrc), '刷新书架应按文件名同步书名(纠偏)');
     for (const need of ['novelReader.showBookshelf', 'novelReader.showChapters', 'novelReader.showSettings']) {
       assert(cmds.includes(need), '弹窗入口命令应保留: ' + need);
     }

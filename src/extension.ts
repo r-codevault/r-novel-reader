@@ -12,7 +12,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { parseNovel, Novel } from './novelParser';
+import { parseNovel, deriveTitleAuthor, Novel } from './novelParser';
 import { ReaderPanel, ShelfItemView, DrawerTab } from './readerPanel';
 import { ShelfStore } from './shelf';
 import { ensureInLibrary, isInsideDir } from './library';
@@ -409,6 +409,28 @@ export function activate(context: vscode.ExtensionContext): void {
                     // 单个文件解析失败: 跳过, 不影响其余
                 }
             }
+            // 书名纠偏: 按文件名重新推导标题/作者(仅当文件名含《书名》时才改写)
+            let retitled = 0;
+            for (const b of shelf.list()) {
+                if (!isInsideDir(b.filePath, dir) || !fs.existsSync(b.filePath)) {
+                    continue;
+                }
+                const fnTitle = b.filePath.replace(/^.*[\\/]/, '').match(/《([^》]{1,60})》/);
+                if (!fnTitle) {
+                    continue;
+                }
+                const { bookTitle, author } = deriveTitleAuthor(b.filePath, '');
+                if (bookTitle !== b.title || author !== b.author) {
+                    await shelf.upsert({
+                        filePath: b.filePath,
+                        title: bookTitle,
+                        author,
+                        totalChapters: b.totalChapters,
+                    });
+                    retitled += 1;
+                }
+            }
+
             // 合并同书重复记录(同书名+作者+章节数): 只保留一条, 只删记录不动文件
             let merged = 0;
             const dupPlans = planDuplicateRemoval(
@@ -436,6 +458,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 `书架已刷新：新增 ${added} 本` +
                 (skippedDup ? `，跳过重复副本 ${skippedDup} 个` : '') +
                 (merged ? `，合并重复记录 ${merged} 条` : '') +
+                (retitled ? `，修正书名 ${retitled} 条` : '') +
                 (pruned ? `，清理失效记录 ${pruned} 条` : '') +
                 `（书库内共 ${names.length} 个 txt）`
             );

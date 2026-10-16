@@ -137,6 +137,36 @@ interface RawChapter {
  * @param filePath  来源文件路径(用于兜底书名)
  * @param encoding  检测到的编码(仅作记录)
  */
+/**
+ * 解析书名 / 作者(纯函数, 便于单测)。
+ *
+ * 优先级: **文件名 > 正文前言 > 文件名兜底**
+ * 原因: 下载站的正文前言常含"内容简介/其他作品推荐", 里面的《...》往往是别的书
+ * (例: 一通《一念永恒》的文件前言先提到《仙逆》, 曾被误判成"仙逆")
+ */
+export function deriveTitleAuthor(
+    filePath: string,
+    prefaceText: string
+): { bookTitle: string; author: string } {
+    const base = filePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '');
+    const fnTitle = base.match(/《([^》]{1,60})》/);
+    const fnAuthor = base.match(/作者\s*[:：]?\s*([^\s,，。;；|·）)】\]]{1,20})/);
+    const metaTitle = prefaceText.match(/《([^》]{1,60})》/);
+    const metaAuthor = prefaceText.match(/作者\s*[:：]?\s*([^\s,，。;；|]{1,20})/);
+
+    const bookTitle = fnTitle
+        ? fnTitle[1].trim()
+        : metaTitle
+          ? metaTitle[1].trim()
+          : base.trim();
+    const author = fnAuthor
+        ? fnAuthor[1].trim()
+        : metaAuthor
+          ? metaAuthor[1].trim()
+          : '';
+    return { bookTitle, author };
+}
+
 export function parseNovel(text: string, filePath: string, encoding = 'utf-8'): Novel {
     const lines = text.replace(/\r\n?/g, '\n').split('\n');
 
@@ -216,16 +246,12 @@ export function parseNovel(text: string, filePath: string, encoding = 'utf-8'): 
     }
 
     const meta = prefaceLines.join('\n');
-    const bookMatch = meta.match(/《([^》]{1,60})》/);
-    const authorMatch = meta.match(/作者\s*[:：]?\s*([^\s,，。;；|]{1,20})/);
-    const bookTitle = bookMatch
-        ? bookMatch[1]
-        : filePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '');
+    const { bookTitle, author } = deriveTitleAuthor(filePath, meta);
 
     return {
         filePath,
         bookTitle,
-        author: authorMatch ? authorMatch[1] : '',
+        author,
         chapters,
         preface: meta.trim(),
         encoding,
