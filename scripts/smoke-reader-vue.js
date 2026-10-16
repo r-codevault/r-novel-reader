@@ -469,6 +469,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   console.log('状态栏显隐开关(默认显示/隐藏/恢复/独立): 通过');
 
+  // Esc 应清掉焦点残留(按钮被点过再按 Esc, 浏览器会画出 focus-visible 边框)
+  const focusTarget = document.querySelector('.menu-item[data-menu="catalog"]');
+  focusTarget.focus();
+  assert(document.activeElement === focusTarget, '前置: 按钮应能获得焦点');
+  document.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await sleep(30);
+  assert(document.activeElement !== focusTarget, 'Esc 后应清掉焦点(避免残留焦点框)');
+
   console.log('侧边菜单(占位布局/展开收起/4 功能项): 通过');
 
   // 切换按钮: 双状态图标(展开=右侧条纹, 收起=左侧条纹) + 无「菜单」文字

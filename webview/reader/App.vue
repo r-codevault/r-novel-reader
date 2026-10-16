@@ -161,22 +161,47 @@ function onDocMouseDown(e: MouseEvent): void {
   if (!inside) { closeAllPopups(); }
 }
 
+/**
+ * 清掉当前焦点(仅用于 Esc 等键盘收尾动作)。
+ * 原因: 鼠标点过的按钮仍持有焦点, 此时按任意键会让 Chromium 判定为
+ *      "键盘导航" 并画出 :focus-visible 焦点框(视觉上像"莫名其妙多了个边框");
+ *      主动 blur 可避免该残留, 同时不影响真正的 Tab 键盘导航。
+ */
+function blurActiveElement(): void {
+  const el = document.activeElement as HTMLElement | null;
+  if (el && typeof el.blur === 'function' && el !== document.body) {
+    el.blur();
+  }
+}
+
 function onKeyDown(e: KeyboardEvent): void {
   if (e.key === 'Escape') {
-    // Esc: 有弹窗先关弹窗; 否则收起菜单
-    if (anyPopupOpen()) { e.preventDefault(); closeAllPopups(); return; }
-    if (state.menuExpanded) { e.preventDefault(); state.menuExpanded = false; return; }
+    // Esc: 有弹窗先关弹窗; 否则收起菜单; 两种情况都清掉焦点残留
+    if (anyPopupOpen()) {
+      e.preventDefault();
+      closeAllPopups();
+      blurActiveElement();
+      return;
+    }
+    if (state.menuExpanded) {
+      e.preventDefault();
+      state.menuExpanded = false;
+      blurActiveElement();
+      return;
+    }
   }
   const tag = e.target && (e.target as HTMLElement).tagName
     ? String((e.target as HTMLElement).tagName).toLowerCase() : '';
   if (tag === 'input' || tag === 'select' || tag === 'textarea') { return; }
   if (matchShortcut(state.prevCombo, e)) {
     e.preventDefault();
+    blurActiveElement();
     if (state.chapter) { gotoChapter(state.chapter.index - 1); }
     return;
   }
   if (matchShortcut(state.nextCombo, e)) {
     e.preventDefault();
+    blurActiveElement();
     if (state.chapter) { gotoChapter(state.chapter.index + 1); }
   }
 }
