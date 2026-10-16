@@ -327,11 +327,18 @@
   .menu-label { opacity: 0; transition: opacity .12s ease; }
   /* 切换按钮: 双状态图标(展开=右侧条纹, 收起=左侧条纹) */
   /* 折叠按钮: 品牌 logo(自带配色, 不随主题变化)
-     logo 贴边填满: 去掉内边距/左边框, 尺寸贴近 48px 栏宽 */
-  .menu-toggle { padding: 0; border-left: none; }
+     对齐: 展开态左内边距 17px(= 菜单项 3px 边框 + 14px 内边距), logo 与图标左缘对齐;
+           收起态 0, logo 46px 填满 47px 可用栏宽。
+     注意: 必须保持 justify-content 左对齐 —— 若收起时改成 center, 宽度动画进行中会先把
+           logo 居中到右侧再缩回(视觉上"跑到右边又回来"); 用 padding-left 过渡替代。 */
+  .menu-toggle {
+    border-left: none;
+    padding: 0 0 0 17px;
+    justify-content: flex-start;
+    transition: padding-left .18s ease;
+  }
   .menu-toggle svg { width: 46px; height: 46px; }
-  /* 收起态(48px 栏): 居中放置, 使 logo 填满整栏宽度 */
-  .menu:not(.expanded) .menu-toggle { justify-content: center; }
+  .menu:not(.expanded) .menu-toggle { padding-left: 0; }
   .menu.expanded .menu-label { opacity: 1; }
 
   /* ---------- 统一弹窗(书架 / 存储; 目录与设置沿用各自样式, 同样居中于阅读区) ---------- */

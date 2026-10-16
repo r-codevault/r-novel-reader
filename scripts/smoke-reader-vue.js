@@ -506,12 +506,20 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '折叠按钮 logo 应放大到 46px(贴近 48px 栏宽)'
   );
   assert(
-    /\.menu-toggle\s*\{[^}]*padding:\s*0[^}]*border-left:\s*none/.test(capturedHtml),
-    'logo 应去掉内边距与左边框(贴边填满)'
+    /\.menu-toggle\s*\{[^}]*padding:\s*0\s+0\s+0\s+17px/.test(capturedHtml),
+    'logo 左边距应为 17px(与菜单项图标左缘对齐)'
   );
   assert(
-    /\.menu:not\(\.expanded\) \.menu-toggle\s*\{[^}]*justify-content:\s*center/.test(capturedHtml),
-    '收起态应居中, 使 logo 填满整栏'
+    /\.menu-toggle\s*\{[^}]*transition:\s*padding-left/.test(capturedHtml),
+    'padding-left 应可过渡(避免收起动画期间 logo 先右后回)'
+  );
+  assert(
+    /\.menu:not\(\.expanded\) \.menu-toggle\s*\{[^}]*padding-left:\s*0/.test(capturedHtml),
+    '收起态应把左内边距归零, 使 logo 填满栏宽'
+  );
+  assert(
+    !/\.menu:not\(\.expanded\) \.menu-toggle\s*\{[^}]*justify-content:\s*center/.test(capturedHtml),
+    '收起态不应改用 justify-content:center(会在宽度动画中把 logo 甩到右侧)'
   );
   assert(!document.querySelector('.dw-lines-right, .dw-lines-left'), '不应再有旧的双状态条纹路径');
   assert(document.querySelector('.menu-toggle').getAttribute('title'), '切换按钮应保留 hover 提示(title)');
