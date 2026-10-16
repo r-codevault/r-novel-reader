@@ -14,6 +14,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { parseNovel, Novel } from './novelParser';
 import { ReaderPanel, ShelfItemView, DrawerTab } from './readerPanel';
+import { LauncherViewProvider } from './launcherViewProvider';
 import { ShelfStore } from './shelf';
 import { ensureInLibrary } from './library';
 import { ReadingSettings, SettingsStore } from './settings';
@@ -53,6 +54,14 @@ export function activate(context: vscode.ExtensionContext): void {
     ReaderPanel.getShelf = () => shelfItems();
     ReaderPanel.getLibrary = () => getLibraryPath();
 
+    // 活动栏入口视图(极简启动页: 当前在读 + 直达按钮; 列表 UI 在阅读面板左抽屉)
+    const launcher = new LauncherViewProvider();
+    context.subscriptions.push(
+        vscode.window.registerWebviewViewProvider(LauncherViewProvider.viewType, launcher, {
+            webviewOptions: { retainContextWhenHidden: true },
+        })
+    );
+
     // 状态栏入口(活动栏侧边栏移除后的常驻入口)
     const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     statusItem.text = '$(book) 小说阅读';
@@ -78,6 +87,21 @@ export function activate(context: vscode.ExtensionContext): void {
 
     function refreshShelfView(): void {
         ReaderPanel.setShelf(shelfItems());
+        syncLauncher();
+    }
+
+    /** 活动栏入口视图: 当前在读的书 */
+    function syncLauncher(): void {
+        const entry = currentNovel ? shelf.get(currentNovel.filePath) : undefined;
+        launcher.setCurrent(
+            currentNovel
+                ? {
+                      title: currentNovel.bookTitle,
+                      chapterIndex: entry && entry.chapterIndex >= 0 ? entry.chapterIndex : -1,
+                      totalChapters: currentNovel.chapters.length,
+                  }
+                : null
+        );
     }
 
     /** 书库目录(空 = 未设置, 直接读取原路径); 由 SettingsStore 统一读写 */

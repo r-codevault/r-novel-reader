@@ -449,22 +449,37 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   }
   console.log('抽屉动作 -> 扩展命令分发: 通过');
 
-  // ---------------- 扩展清单(活动栏侧边栏已移除) ----------------
+  // ---------------- 扩展清单(活动栏仅一个入口视图, UI 主体在抽屉) ----------------
   {
     const pkgJson = require('../package.json');
     const c = pkgJson.contributes;
-    assert(!c.viewsContainers, '活动栏容器应已移除(改用面板内抽屉)');
-    assert(!c.views, '侧边栏三视图应已移除');
-    assert(!(c.menus['view/title'] || []).length, 'view/title 菜单应已移除');
+    assert(
+      c.viewsContainers && c.viewsContainers.activitybar && c.viewsContainers.activitybar.some((v) => v.id === 'r-novel-reader'),
+      '活动栏图标应存在(单一入口视图)'
+    );
+    const views = c.views['r-novel-reader'];
+    assert(views && views.length === 1 && views[0].id === 'novelReaderHome', '活动栏应只有一个入口视图');
+    assert(views[0].type === 'webview', '入口视图应为 webview');
+    assert(!(c.menus['view/title'] || []).length, '不应再有 view/title 菜单(旧三视图遗留)');
     const cmds = c.commands.map((x) => x.command);
     assert(!cmds.includes('novelReader.backFromSettings'), '「返回」命令应已移除');
     for (const need of ['novelReader.showBookshelf', 'novelReader.showChapters', 'novelReader.showSettings']) {
-      assert(cmds.includes(need), `抽屉入口命令应保留: ${need}`);
+      assert(cmds.includes(need), '抽屉入口命令应保留: ' + need);
     }
     assert(pkgJson.activationEvents.includes('onStartupFinished'), '启动自动恢复需 onStartupFinished');
+
+    // 入口视图(launcher)协议与按钮
+    const launcherSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'launcherViewProvider.ts'), 'utf8');
+    for (const t of ['continue', 'bookshelf', 'catalog', 'storage', 'openFile']) {
+      assert(launcherSrc.includes("'" + t + "'") || launcherSrc.includes('type: ' + "'" + t + "'"), '入口视图应支持动作: ' + t);
+    }
+    assert(/novelReaderHome/.test(launcherSrc), '入口视图 id 应为 novelReaderHome');
+    assert(/btnContinue|btnShelf|btnCatalog|btnStorage|btnAdd/.test(launcherSrc), '入口视图应有直达按钮');
+
     const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
-    assert(/createStatusBarItem/.test(src), '应有状态栏入口(活动栏移除后的常驻入口)');
-    console.log('扩展清单(无活动栏视图/命令齐备/状态栏入口): 通过');
+    assert(/createStatusBarItem/.test(src), '应有状态栏入口');
+    assert(/registerWebviewViewProvider/.test(src), '应注册入口视图');
+    console.log('扩展清单(单一入口视图/命令齐备/状态栏入口): 通过');
   }
 
   console.log('\n阅读面板 Vue 冒烟测试全部通过 ✔');
