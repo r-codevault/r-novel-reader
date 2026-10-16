@@ -3,6 +3,7 @@ src/**
 scripts/**
 docs/**
 webview/**
+.dev-*
 node_modules/**
 out/**
 **/*.map
