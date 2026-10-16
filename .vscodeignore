@@ -9,5 +9,6 @@ node_modules/**
 out/**
 **/*.map
 .gitignore
+vite.config.mjs
 tsconfig.json
 README.md
