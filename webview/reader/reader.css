@@ -475,7 +475,7 @@
 
   /* 菜单分隔线(状态栏开关与弹窗入口分组) */
   .menu-divider {
-    height: 1px; margin: 8px 12px 4px;
+    height: 1px; margin: 0 12px; /* 只留左右缩进, 去掉上下外边距(避免突兀)
     background: var(--sp-border);
     flex: none;
   }

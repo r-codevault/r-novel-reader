@@ -419,6 +419,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     JSON.stringify(order) === JSON.stringify([null, 'divider', 'shelf', 'catalog', 'statusbar', 'settings', 'storage']),
     '菜单顺序应为 折叠按钮 + 分割线 + 书架/目录/状态栏/阅读设置/存储位置, 实际: ' + JSON.stringify(order)
   );
+  assert(/\.menu-divider\s*\{[^}]*margin:\s*0\s+12px/.test(capturedHtml), '分隔线应无上下外边距(仅左右缩进)');
   assert(
     document.querySelector('.menu').children[1].classList.contains('menu-divider'),
     '分割线应在折叠按钮之后(菜单项之前)'
