@@ -257,11 +257,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   );
   console.log('设置面板(打开/主题点/切主题变量): 通过');
 
-  // 目录: 点 fabCatalog 打开
-  $('#fabCatalog').dispatchEvent(new win.MouseEvent('pointerdown', { bubbles: true }));
-  $('#fabCatalog').dispatchEvent(new win.MouseEvent('pointerup', { bubbles: true }));
+  // 目录: 点侧边菜单「目录」打开弹窗
+  document.querySelector('.menu-item[data-menu="catalog"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
-  assert($('#catalogPanel').classList.contains('open'), '点目录悬浮球应打开目录面板');
+  assert($('#catalogPanel').classList.contains('open'), '点菜单「目录」应打开目录弹窗');
   const catItems = document.querySelectorAll('#catalogPanel .cat-item');
   assert(catItems.length === 5, '目录应列出 5 章(实际 ' + catItems.length + ')');
   const cur = document.querySelector('#catalogPanel .cat-item.cur');
@@ -275,24 +274,28 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!$('#catalogPanel').classList.contains('open'), '跳转后目录面板应关闭');
   console.log('目录面板(打开/条目/高亮/跳转): 通过');
 
-  // 目录与设置面板互斥: 打开一个应关闭另一个
+  // 弹窗互斥: 任意时刻最多一个(目录/阅读设置/书架/存储)
+  const menuItem = (id) => document.querySelector('.menu-item[data-menu="' + id + '"]');
   dispatch('openSettings');
   await sleep(20);
-  assert($('#settingsPanel').classList.contains('open'), '应能再次打开设置面板');
-  // 注意: 悬浮球 350ms 内的两次点击视为双击(复位位置), 这里要与上一次点击拉开间隔
-  await sleep(400);
-  $('#fabCatalog').dispatchEvent(new win.MouseEvent('pointerdown', { bubbles: true }));
-  $('#fabCatalog').dispatchEvent(new win.MouseEvent('pointerup', { bubbles: true }));
+  assert($('#settingsPanel').classList.contains('open'), '应能再次打开设置弹窗');
+  menuItem('catalog').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
-  assert($('#catalogPanel').classList.contains('open'), '点目录应打开目录面板');
-  assert(!$('#settingsPanel').classList.contains('open'), '打开目录应自动关闭设置面板(两者互斥)');
-  await sleep(400);
-  $('#fabSettings').dispatchEvent(new win.MouseEvent('pointerdown', { bubbles: true }));
-  $('#fabSettings').dispatchEvent(new win.MouseEvent('pointerup', { bubbles: true }));
+  assert($('#catalogPanel').classList.contains('open'), '点菜单「目录」应打开目录弹窗');
+  assert(!$('#settingsPanel').classList.contains('open'), '打开目录应自动关闭阅读设置(互斥)');
+  menuItem('shelf').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
-  assert($('#settingsPanel').classList.contains('open'), '点设置应打开设置面板');
-  assert(!$('#catalogPanel').classList.contains('open'), '打开设置应自动关闭目录面板(两者互斥)');
-  console.log('目录/设置面板互斥: 通过');
+  assert($('#shelfPopup').classList.contains('open'), '点菜单「书架」应打开书架弹窗');
+  assert(!$('#catalogPanel').classList.contains('open'), '打开书架应自动关闭目录(互斥)');
+  menuItem('storage').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert($('#storagePopup').classList.contains('open'), '点菜单「存储位置」应打开存储弹窗');
+  assert(!$('#shelfPopup').classList.contains('open'), '打开存储应自动关闭书架(互斥)');
+  // 再点同一个菜单项 -> 关闭(切换语义)
+  menuItem('storage').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(!$('#storagePopup').classList.contains('open'), '再点同一菜单项应收起弹窗');
+  console.log('弹窗互斥(目录/设置/书架/存储): 通过');
 
   // 上一章悬浮球
   dispatch('chapter', { index: 1, title: '第2章 标题2', paragraphs: ['a'], totalChapters: 5, chapterWords: 1, scrollRatio: 0 });
@@ -338,90 +341,96 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(progress, '章节渲染后应立即上报进度');
   console.log('进度上报(saveProgress): 通过');
 
-  // ---------------- 左侧抽屉(书架 / 目录 / 存储) ----------------
-  // 切换按钮展开
-  const toggle = document.querySelector('.dw-toggle');
-  assert(toggle, '应有左侧抽屉展开/收起按钮');
-  toggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  // ---------------- 侧边菜单(占位式布局 + 折叠) ----------------
+  const menuEl = document.querySelector('.menu');
+  assert(menuEl, '应有侧边菜单');
+  assert(document.querySelector('.shell .menu') && document.querySelector('.shell .main'), '布局应为 shell[menu|main](占位式, 非浮层)');
+  assert(menuEl.classList.contains('expanded'), '默认应展开菜单');
+  assert(document.documentElement.style.getPropertyValue('--menu-w') === '176px', '展开时 --menu-w 应为 176px(状态栏让位)');
+  document.querySelector('.menu-toggle').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
-  assert($('#drawer').classList.contains('open'), '点按钮应展开抽屉');
-  assert(toggle.textContent.includes('收起'), '展开后按钮文案应变为「收起」');
-  assert(!$('#settingsPanel').classList.contains('open'), '抽屉展开时设置面板应关闭(互斥)');
-  assert(!$('#catalogPanel').classList.contains('open'), '抽屉展开时目录浮层应关闭(互斥)');
+  assert(!menuEl.classList.contains('expanded'), '点菜单按钮应收起');
+  assert(document.documentElement.style.getPropertyValue('--menu-w') === '48px', '收起时 --menu-w 应为 48px');
+  assert(document.querySelectorAll('.menu-item').length === 4, '菜单应有 4 个功能项');
+  document.querySelector('.menu-toggle').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  console.log('侧边菜单(占位布局/展开收起/4 功能项): 通过');
 
-  // 书架页
-  const bks = document.querySelectorAll('#drawer .bk');
-  assert(bks.length === 2, '抽屉书架应渲染 2 本(实际 ' + bks.length + ')');
+  // 书架弹窗
+  menuItem('shelf').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  const bks = document.querySelectorAll('#shelfPopup .bk');
+  assert(bks.length === 2, '书架弹窗应渲染 2 本(实际 ' + bks.length + ')');
   assert(bks[0].classList.contains('cur'), '当前书应标记');
-  assert(document.querySelector('#drawer .dw-count').textContent.includes('共 2 本'), '应显示册数统计');
+  assert(document.querySelector('#shelfPopup .popup-sub').textContent.includes('共 2 本'), '应显示册数');
   posted.length = 0;
   bks[1].dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
-  assert(
-    posted.some((m) => m.type === 'openBook' && m.filePath === 'D:/b.txt'),
-    '点书架条目应发 openBook'
-  );
-  assert(!$('#drawer').classList.contains('open'), '打开书后抽屉应收起');
+  assert(posted.some((m) => m.type === 'openBook' && m.filePath === 'D:/b.txt'), '点书架条目应发 openBook');
+  assert(!$('#shelfPopup').classList.contains('open'), '打开书后书架弹窗应收起');
+  menuItem('shelf').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
   posted.length = 0;
-  toggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(480);
-  const del = document.querySelector('#drawer .dw-del');
-  del.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  document.querySelector('#shelfPopup .bp-del').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   assert(posted.some((m) => m.type === 'removeBook'), '点移除应发 removeBook');
-  posted.length = 0;
-  document.querySelector('#drawer .dw-add').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  document.querySelector('#shelfPopup .popup-primary').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   assert(posted.some((m) => m.type === 'openFile'), '点「添加书籍」应发 openFile');
-  console.log('抽屉·书架(渲染/打开/移除/添加): 通过');
+  console.log('书架弹窗(渲染/打开/移除/添加): 通过');
 
-  // 目录页
-  const tabs = Array.from(document.querySelectorAll('#drawer .dw-tab'));
-  assert(tabs.length === 3, '抽屉应有 3 个页签');
-  tabs.find((t) => t.textContent.includes('目录')).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  // 目录弹窗(菜单打开) + 章节跳转
+  menuItem('catalog').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
-  const dwChs = document.querySelectorAll('#drawer .cat-item');
-  assert(dwChs.length === 5, '抽屉目录应列出 5 章(实际 ' + dwChs.length + ')');
-  assert(document.querySelector('#drawer .cat-item.cur'), '抽屉目录应高亮当前章');
+  const dwChs = document.querySelectorAll('#catalogPanel .cat-item');
+  assert(dwChs.length === 5, '目录弹窗应列出 5 章');
+  assert(document.querySelector('#catalogPanel .cat-item.cur'), '目录弹窗应高亮当前章');
   posted.length = 0;
   Array.from(dwChs).find((el) => el.dataset.i === '0').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
-  assert(posted.some((m) => m.type === 'getChapter' && m.index === 0), '点抽屉章节应发 getChapter');
-  console.log('抽屉·目录(页签/渲染/高亮/跳转): 通过');
+  assert(posted.some((m) => m.type === 'getChapter' && m.index === 0), '点章节应发 getChapter');
+  console.log('目录弹窗(渲染/高亮/跳转): 通过');
 
-  // 存储页
-  toggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(480);
-  tabs.find((t) => t.textContent.includes('存储')).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  // 存储弹窗
+  menuItem('storage').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
-  assert(document.querySelector('#drawer .dw-val').textContent.includes('D:/我的书库'), '存储页应显示书库目录');
+  assert(document.querySelector('#storagePopup .popup-val').textContent.includes('D:/我的书库'), '存储弹窗应显示书库目录');
   posted.length = 0;
-  const dwBtns = Array.from(document.querySelectorAll('#drawer .dw-btn'));
-  dwBtns.find((b) => b.textContent.includes('选择书库目录')).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  dwBtns.find((b) => b.textContent.includes('打开')).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  dwBtns.find((b) => b.textContent.includes('原路径')).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  const spBtns = Array.from(document.querySelectorAll('#storagePopup .popup-btn'));
+  spBtns.find((b) => b.textContent.includes('选择书库目录')).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  spBtns.find((b) => b.textContent.includes('打开')).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  spBtns.find((b) => b.textContent.includes('原路径')).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   assert(posted.some((m) => m.type === 'pickLibrary'), '应发 pickLibrary');
   assert(posted.some((m) => m.type === 'openLibraryFolder'), '应发 openLibraryFolder');
   assert(posted.some((m) => m.type === 'clearLibrary'), '应发 clearLibrary');
-  console.log('抽屉·存储(目录展示/按钮): 通过');
+  console.log('存储弹窗(目录展示/按钮): 通过');
 
-  // 扩展消息 openDrawer 可直接打开指定页签
+  // 底部章节导航(跟随页面滚动的正文尾部按钮)
+  const chNavs = Array.from(document.querySelectorAll('#content .ch-nav-btn'));
+  assert(chNavs.length === 2, '正文底部应有上一章/下一章两个按钮(实际 ' + chNavs.length + ')');
+  posted.length = 0;
+  chNavs[0].dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'getChapter'), '点正文底部「上一章」应发 getChapter');
+  console.log('正文底部章节导航: 通过');
+
+  // 扩展消息 openDrawer 兼容(命令 [书架/目录/存储] 打开对应弹窗)
   sendMsg({ type: 'openDrawer', tab: 'catalog' });
   await sleep(30);
-  assert($('#drawer').classList.contains('open'), 'openDrawer 消息应展开抽屉');
-  assert(
-    document.querySelector('#drawer .dw-tab.active').textContent.includes('目录'),
-    'openDrawer 应切到指定页签'
-  );
+  assert($('#catalogPanel').classList.contains('open'), 'openDrawer(catalog) 应打开目录弹窗');
+  assert(!$('#storagePopup').classList.contains('open'), '同时只应有一个弹窗');
+  sendMsg({ type: 'openDrawer', tab: 'storage' });
+  await sleep(30);
+  assert($('#storagePopup').classList.contains('open') && !$('#catalogPanel').classList.contains('open'), 'openDrawer(storage) 应切到存储弹窗');
 
   // shelf / library 消息实时刷新
   sendMsg({ type: 'shelf', items: [{ filePath: 'D:/c.txt', title: 'C书', author: '', chapterIndex: 0, totalChapters: 3, current: true }] });
   sendMsg({ type: 'library', path: '' });
   await sleep(30);
-  assert(document.querySelectorAll('#drawer .bk').length === 1, 'shelf 消息应刷新书架');
-  assert(document.querySelector('#drawer .dw-val').textContent.includes('未设置'), 'library 空值应显示未设置');
-  console.log('抽屉·消息协议(openDrawer/shelf/library): 通过');
+  assert(document.querySelectorAll('#shelfPopup .bk').length === 1, 'shelf 消息应刷新书架');
+  assert(document.querySelector('#storagePopup .popup-val').textContent.includes('未设置'), 'library 空值应显示未设置');
+  console.log('弹窗·消息协议(openDrawer/shelf/library): 通过');
 
   // ---------------- webview 消息 -> 扩展命令 分发 ----------------
   assert(typeof panelMsgHandler === 'function', '面板应注册消息处理');

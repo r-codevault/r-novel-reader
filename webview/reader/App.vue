@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * App.vue — 根组件: 只做"装配 + 协调"
- *  - 各区块拆分在 components/ 下(Catalog/Settings/Reader/Fab/Status)
- *  - 跨组件协调: 扩展消息 / 全局快捷键 / 设置面板定位 / 尺寸变化重排
+ * App.vue — 根组件: 装配 + 协调
+ * 布局: .shell = [ SideMenu(占位式, 展开把正文推右) | .main(正文/弹窗/状态栏) ]
+ * 弹窗互斥: 任何时刻最多一个弹窗(目录/阅读设置/书架/存储)
  */
 import { onMounted, nextTick, ref, watch } from 'vue';
 import { state, vscode, gotoChapter, type ChapterPayload, type DrawerTab, type ShelfItemView } from './composables/vscode';
@@ -11,99 +11,73 @@ import { parseShortcut, matchShortcut } from './composables/shortcut';
 import CatalogPanel from './components/CatalogPanel.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
 import ReaderArea from './components/ReaderArea.vue';
-import FabToolbar from './components/FabToolbar.vue';
 import StatusBar from './components/StatusBar.vue';
-import DrawerPanel from './components/DrawerPanel.vue';
+import SideMenu from './components/SideMenu.vue';
+import ShelfPopup from './components/ShelfPopup.vue';
+import StoragePopup from './components/StoragePopup.vue';
 import './reader.css';
 
 const catalogRef = ref<InstanceType<typeof CatalogPanel> | null>(null);
 const settingsRef = ref<InstanceType<typeof SettingsPanel> | null>(null);
+const shelfRef = ref<InstanceType<typeof ShelfPopup> | null>(null);
+const storageRef = ref<InstanceType<typeof StoragePopup> | null>(null);
 const readerRef = ref<InstanceType<typeof ReaderArea> | null>(null);
-const fabRef = ref<InstanceType<typeof FabToolbar> | null>(null);
 
-// ---------------------------------------------------------------- 设置应用
+// ---------------------------------------------------------------- 设置应用 / 菜单宽度
 function applySettings(s: ReadingSettings): void {
   state.settings = s;
   applyThemeVars(s);
   state.prevCombo = parseShortcut(s.shortcutPrev);
   state.nextCombo = parseShortcut(s.shortcutNext);
-  const fabDragged =
-    typeof s.fabLeft === 'number' && s.fabLeft >= 0 &&
-    typeof s.fabTop === 'number' && s.fabTop >= 0;
-  nextTick(function () {
-    if (fabDragged) {
-      fabRef.value?.applyFabPosition({ left: s.fabLeft as number, top: s.fabTop as number });
-    } else {
-      fabRef.value?.syncFabAnchor();
-    }
-    readerRef.value?.positionHandles();
-  });
+  nextTick(function () { readerRef.value?.positionHandles(); });
 }
 
-// ---------------------------------------------------------------- 设置面板定位(贴合悬浮球, 夹回视口)
-function positionSettingsPanel(): void {
-  const panel = settingsRef.value?.el;
-  const fabEl = fabRef.value?.el;
-  if (!panel) { return; }
-  const margin = 12;
-  const gap = 10;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const maxH = Math.max(200, vh - margin * 2);
-  panel.style.maxHeight = maxH + 'px';
-  const pw = panel.offsetWidth || 520;
-  const ph = Math.min(panel.offsetHeight || 420, maxH);
-  const anchor = fabEl ? fabEl.getBoundingClientRect() : null;
-  const hasAnchor = !!(anchor && (anchor.width || anchor.height));
-  let left: number;
-  let top: number;
-  if (hasAnchor && anchor) {
-    left = anchor.left + anchor.width / 2 > vw / 2 ? anchor.left - gap - pw : anchor.right + gap;
-    top = anchor.top;
-  } else {
-    left = (vw - pw) / 2;
-    top = margin;
+// 菜单宽度写入 CSS 变量(状态栏需要让出左侧空间, 与菜单同步过渡)
+watch(function () { return state.menuExpanded; }, function (expanded) {
+  document.documentElement.style.setProperty('--menu-w', expanded ? '176px' : '48px');
+}, { immediate: true });
+
+// ---------------------------------------------------------------- 弹窗互斥(同一时刻只允许一个)
+const popupKeys = ['catalogOpen', 'settingsOpen', 'shelfOpen', 'storageOpen'] as const;
+
+function anyPopupOpen(): boolean {
+  return state.catalogOpen || state.settingsOpen || state.shelfOpen || state.storageOpen;
+}
+
+function closeAllPopups(): void {
+  state.catalogOpen = false;
+  state.settingsOpen = false;
+  state.shelfOpen = false;
+  state.storageOpen = false;
+}
+
+function openOnly(key: typeof popupKeys[number]): void {
+  closeAllPopups();
+  state[key] = true;
+}
+
+// 双保险: 任何途径(组件内直接赋值)导致的"多弹窗"都会收敛为最后打开的那个
+watch(function () {
+  return popupKeys.map(function (k) { return state[k] ? '1' : '0'; }).join('');
+}, function (sig, oldSig) {
+  const opens = popupKeys.filter(function (k) { return state[k]; });
+  if (opens.length <= 1) { return; }
+  // 保留本次新打开的那个(oldSig 中为 '0' 的), 其余关闭
+  let keep: typeof popupKeys[number] | null = null;
+  for (let i = 0; i < popupKeys.length; i++) {
+    if (sig[i] === '1' && oldSig[i] === '0') { keep = popupKeys[i]; }
   }
-  if (left + pw > vw - margin) { left = vw - margin - pw; }
-  if (left < margin) { left = margin; }
-  if (!isFinite(left)) { left = margin; }
-  if (top + ph > vh - margin) { top = vh - margin - ph; }
-  if (top < margin) { top = margin; }
-  if (!isFinite(top)) { top = margin; }
-  panel.style.left = Math.round(left) + 'px';
-  panel.style.top = Math.round(top) + 'px';
+  if (!keep) { keep = opens[0]; }
+  for (const k of popupKeys) { if (k !== keep) { state[k] = false; } }
+});
+
+/** openDrawer 兼容协议: tab -> 对应弹窗 */
+function openTab(tab: DrawerTab | undefined): void {
+  if (tab === 'shelf') { openOnly('shelfOpen'); }
+  else if (tab === 'catalog') { openOnly('catalogOpen'); }
+  else if (tab === 'storage') { openOnly('storageOpen'); }
+  else { openOnly('shelfOpen'); }
 }
-
-// 面板打开时机统一在这里定位(悬浮球切换/消息打开都走 state.settingsOpen)
-watch(function () { return state.settingsOpen; }, function (open) {
-  // 同一时刻只显示一个浮层: 设置面板 / 目录浮层 / 左抽屉
-  if (open && state.catalogOpen) { state.catalogOpen = false; }
-  if (open && state.drawerOpen) { state.drawerOpen = false; }
-  if (open) { nextTick(positionSettingsPanel); }
-});
-
-// 打开目录浮层时同理关掉其它两个
-watch(function () { return state.catalogOpen; }, function (open) {
-  if (open && state.settingsOpen) { state.settingsOpen = false; }
-  if (open && state.drawerOpen) { state.drawerOpen = false; }
-});
-
-// 展开左抽屉时收起两个浮层
-watch(function () { return state.drawerOpen; }, function (open) {
-  if (open && state.catalogOpen) { state.catalogOpen = false; }
-  if (open && state.settingsOpen) { state.settingsOpen = false; }
-});
-
-/** 章节变化: 恢复滚动位置 + 对齐手柄 + 立即上报进度 */
-watch(function () { return state.chapter; }, function (ch) {
-  if (!ch) { return; }
-  nextTick(function () {
-    const max = document.body.scrollHeight - window.innerHeight;
-    window.scrollTo(0, max > 0 ? (ch.scrollRatio || 0) * max : 0);
-    readerRef.value?.positionHandles();
-  });
-  sendProgress(true);
-});
 
 // ---------------------------------------------------------------- 扩展消息
 function handleExtensionMessage(msg: { type?: string; payload?: Record<string, unknown> }): void {
@@ -130,8 +104,7 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
         chapterWords: (p.chapterWords as number) || 0,
         scrollRatio: (p.scrollRatio as number) || 0,
       };
-      if (p.openSettings) { state.settingsOpen = true; }
-      // 初始书架/书库数据(抽屉)
+      if (p.openSettings) { closeAllPopups(); state.settingsOpen = true; }
       state.shelf = (p.shelf as ShelfItemView[]) || [];
       state.libraryPath = (p.libraryPath as string) || '';
       break;
@@ -143,9 +116,8 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       applySettings(msg.payload as unknown as ReadingSettings);
       break;
     case 'openSettings':
-      state.settingsOpen = true;
+      openOnly('settingsOpen');
       break;
-    // 抽屉数据/打开请求
     case 'shelf':
       state.shelf = (msg as { items?: ShelfItemView[] }).items || [];
       break;
@@ -153,30 +125,41 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.libraryPath = ((msg as { path?: string }).path) || '';
       break;
     case 'openDrawer':
-      state.drawerTab = (((msg as { tab?: DrawerTab }).tab) || 'shelf');
-      state.drawerOpen = true;
+      openTab((msg as { tab?: DrawerTab }).tab);
       break;
   }
 }
 
+/** 章节变化: 恢复滚动位置 + 对齐手柄 + 立即上报进度 */
+watch(function () { return state.chapter; }, function (ch) {
+  if (!ch) { return; }
+  nextTick(function () {
+    const max = document.body.scrollHeight - window.innerHeight;
+    window.scrollTo(0, max > 0 ? (ch.scrollRatio || 0) * max : 0);
+    readerRef.value?.positionHandles();
+  });
+  sendProgress(true);
+});
+
 // ---------------------------------------------------------------- 全局事件
 function onDocMouseDown(e: MouseEvent): void {
-  // 点击面板外部关闭(用 mousedown: 拖动滑块时鼠标可能在面板外松开, 不应误关)
-  const settingsEl = settingsRef.value?.el;
-  const fabEl = fabRef.value?.el;
-  const catalogEl = catalogRef.value?.el;
-  const inSettings = settingsEl && settingsEl.contains(e.target as Node);
-  const inFabs = fabEl && fabEl.contains(e.target as Node);
-  if (state.settingsOpen && !inSettings && !inFabs) { state.settingsOpen = false; }
-  if (state.catalogOpen && catalogEl && !catalogEl.contains(e.target as Node) && !inFabs) {
-    state.catalogOpen = false;
-  }
+  if (!anyPopupOpen()) { return; }
+  const target = e.target as Node;
+  const el = e.target as HTMLElement;
+  const inside =
+    (catalogRef.value?.el && catalogRef.value.el.contains(target)) ||
+    (settingsRef.value?.el && settingsRef.value.el.contains(target)) ||
+    (shelfRef.value?.el && shelfRef.value.el.contains(target)) ||
+    (storageRef.value?.el && storageRef.value.el.contains(target)) ||
+    (el.closest ? !!el.closest('.menu') : false);
+  if (!inside) { closeAllPopups(); }
 }
 
 function onKeyDown(e: KeyboardEvent): void {
   if (e.key === 'Escape') {
-    if (state.catalogOpen) { e.preventDefault(); state.catalogOpen = false; return; }
-    if (state.settingsOpen) { e.preventDefault(); state.settingsOpen = false; return; }
+    // Esc: 有弹窗先关弹窗; 否则收起菜单
+    if (anyPopupOpen()) { e.preventDefault(); closeAllPopups(); return; }
+    if (state.menuExpanded) { e.preventDefault(); state.menuExpanded = false; return; }
   }
   const tag = e.target && (e.target as HTMLElement).tagName
     ? String((e.target as HTMLElement).tagName).toLowerCase() : '';
@@ -192,33 +175,13 @@ function onKeyDown(e: KeyboardEvent): void {
   }
 }
 
-// Ctrl(或 Cmd) + 滚轮: 放大 / 缩小字号(capture 尽早拦截, 阻止页面缩放)
+// Ctrl(或 Cmd) + 滚轮: 放大 / 缩小字号
 function onWheel(e: WheelEvent): void {
   if (!e.ctrlKey && !e.metaKey) { return; }
   e.preventDefault();
   const cur = (state.settings ? state.settings.fontSize : 0) || DEFAULT_SETTINGS.fontSize;
   const next = Math.min(32, Math.max(12, cur + (e.deltaY < 0 ? 1 : -1)));
   if (next !== cur) { persistSettings({ fontSize: next }); }
-}
-
-// 尺寸变化(窗口缩放、侧边栏展开/收起)后重排悬浮球/面板/手柄
-function syncFabOnResize(): void {
-  if (state.settingsOpen) { positionSettingsPanel(); }
-  const fab = fabRef.value;
-  if (!fab) { return; }
-  if (!fab.isFabDragged()) {
-    fab.syncFabAnchor();
-    return;
-  }
-  const el = fab.el;
-  const left = parseFloat(el.style.left);
-  const top = parseFloat(el.style.top);
-  if (isNaN(left) || isNaN(top)) { return; }
-  const mid = left + (el.offsetWidth || 58) / 2;
-  const side: 'left' | 'right' = mid < window.innerWidth / 2 ? 'left' : 'right';
-  const pos = fab.snapFabPosition(side, top);
-  fab.applyFabPosition(pos);
-  persistSettings({ fabLeft: pos.left, fabTop: pos.top });
 }
 
 // ---------------------------------------------------------------- 生命周期
@@ -230,27 +193,27 @@ onMounted(function () {
   document.addEventListener('keydown', onKeyDown);
   document.addEventListener('wheel', onWheel, { passive: false, capture: true });
   window.addEventListener('resize', function () {
-    syncFabOnResize();
     readerRef.value?.positionHandles();
   });
   if (typeof ResizeObserver !== 'undefined') {
-    new ResizeObserver(function () {
-      syncFabOnResize();
-      readerRef.value?.positionHandles();
-    }).observe(document.body);
+    new ResizeObserver(function () { readerRef.value?.positionHandles(); }).observe(document.body);
   }
   applySettings(state.settings || DEFAULT_SETTINGS);
-  // 通知扩展: webview 就绪(扩展会回推 init)
-  // 注意: acquireVsCodeApi 全局只能调用一次, 必须复用 composables/vscode 里已获取的实例
+  // 通知扩展: webview 就绪(acquireVsCodeApi 全局只能调用一次, 复用 composables 里的实例)
   vscode.postMessage({ type: 'ready' });
 });
 </script>
 
 <template>
-  <DrawerPanel />
-  <CatalogPanel ref="catalogRef" />
-  <SettingsPanel ref="settingsRef" />
-  <ReaderArea ref="readerRef" />
-  <FabToolbar ref="fabRef" />
-  <StatusBar />
+  <div class="shell">
+    <SideMenu />
+    <div class="main">
+      <CatalogPanel ref="catalogRef" />
+      <SettingsPanel ref="settingsRef" />
+      <ShelfPopup ref="shelfRef" />
+      <StoragePopup ref="storageRef" />
+      <ReaderArea ref="readerRef" />
+      <StatusBar />
+    </div>
+  </div>
 </template>

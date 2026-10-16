@@ -121,6 +121,11 @@ export function mockReaderInit(): { type: string; payload: Record<string, unknow
       scrollRatio: 0,
       chapterWords: 3200,
       settings: DEFAULT_SETTINGS,
+      shelf: [
+        { filePath: 'D:/mock/debug.txt', title: '调试示例小说', author: '示例作者', chapterIndex: 2, totalChapters: 30, current: true },
+        { filePath: 'D:/mock/other.txt', title: '另一本示例书', author: '', chapterIndex: -1, totalChapters: 12, current: false },
+      ],
+      libraryPath: 'D:/示例书库',
     },
   };
 }

@@ -50,13 +50,12 @@ export const state = reactive({
   catCollapsed: [] as string[],
   prevCombo: null as ShortcutCombo | null,
   nextCombo: null as ShortcutCombo | null,
-  // UI 状态
+  // UI 状态: 侧边菜单(占位式) + 互斥弹窗
+  menuExpanded: true,
   catalogOpen: false,
   settingsOpen: false,
-  drawerOpen: false,
-  drawerTab: 'shelf' as DrawerTab,
-  fabAwake: false,
-  fabDragging: false,
+  shelfOpen: false,
+  storageOpen: false,
 });
 
 /** 发消息给扩展(自由格式, 字段与协议一一对应) */

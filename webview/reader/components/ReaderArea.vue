@@ -4,7 +4,7 @@
  * 宽度拖拽与手柄定位自包含; resize 对齐由 App 调用 positionHandles()
  */
 import { computed, onMounted, reactive, ref } from 'vue';
-import { state } from '../composables/vscode';
+import { state, gotoChapter } from '../composables/vscode';
 import { persistSettings } from '../store';
 
 // 与 settings.ts 的 contentWidth clamp 范围一致
@@ -21,6 +21,18 @@ const resizingWidth = ref(false);
 
 const chapter = computed(() => state.chapter);
 const paras = computed(() => (state.chapter && state.chapter.paragraphs) || []);
+
+const isFirst = computed(() => !state.chapter || state.chapter.index <= 0);
+const isLast = computed(() =>
+  !state.chapter || !state.novel || state.chapter.index >= state.novel.totalChapters - 1
+);
+
+function prevChapter(): void {
+  if (state.chapter && !isFirst.value) { gotoChapter(state.chapter.index - 1); }
+}
+function nextChapter(): void {
+  if (state.chapter && !isLast.value) { gotoChapter(state.chapter.index + 1); }
+}
 
 function positionHandles(): void {
   if (!contentRef.value) { return; }
@@ -94,6 +106,12 @@ defineExpose({ positionHandles });
       <h2 class="chapter-title">{{ chapter ? chapter.title : '' }}</h2>
       <p v-if="paras.length === 0" class="empty-tip">(本章无内容)</p>
       <p v-for="(p, i) in paras" :key="i">{{ p }}</p>
+
+      <!-- 章节底部导航(跟随页面滚动) -->
+      <div class="ch-nav" v-if="chapter">
+        <button class="ch-nav-btn" :disabled="isFirst" @click="prevChapter">← 上一章</button>
+        <button class="ch-nav-btn" :disabled="isLast" @click="nextChapter">下一章 →</button>
+      </div>
     </article>
     <div ref="handleLeftRef" class="width-handle" :style="handleLeftStyle" aria-hidden="true"
       @pointerdown="beginWidthDrag('left', $event)"></div>
