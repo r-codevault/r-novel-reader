@@ -556,7 +556,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     assert(!(c.menus['view/title'] || []).length, '不应有 view/title 菜单');
     const cmds = c.commands.map((x) => x.command);
     assert(!cmds.includes('novelReader.backFromSettings'), '「返回」命令应已移除');
-    assert(cmds.includes('novelReader.refreshShelfFromLibrary'), '应有「刷新书架」命令');
+    assert(cmds.includes('novelReader.refreshShelfFromLibrary'), '应有「刷新书架」命令');    const extSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
+    assert(
+      !/modal: true \}, '移除', '取消'/.test(extSrc),
+      '删除确认框不应手动传「取消」(VS Code 模态框自带, 会渲染出两个取消)'
+    );
+    assert(/modal: true \}, '移除'\)/.test(extSrc), '删除确认框应只传「移除」按钮');
+    assert(/whyNotTrash/.test(extSrc), '不移除文件时应说明原因(未设置书库/不在书库内/文件不存在)');
+    assert(/planDuplicateRemoval/.test(extSrc), '刷新书架应做同书去重');
     for (const need of ['novelReader.showBookshelf', 'novelReader.showChapters', 'novelReader.showSettings']) {
       assert(cmds.includes(need), '弹窗入口命令应保留: ' + need);
     }

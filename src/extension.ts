@@ -16,6 +16,7 @@ import { parseNovel, Novel } from './novelParser';
 import { ReaderPanel, ShelfItemView, DrawerTab } from './readerPanel';
 import { ShelfStore } from './shelf';
 import { ensureInLibrary, isInsideDir } from './library';
+import { shelfBookKey, planDuplicateRemoval } from './shelfMaintenance';
 import { moveToTrash } from './trash';
 import { ReadingSettings, SettingsStore } from './settings';
 
@@ -317,11 +318,20 @@ export function activate(context: vscode.ExtensionContext): void {
             const book = shelf.get(filePath);
             const name = book?.title || path.basename(filePath);
             const libPath = getLibraryPath();
-            const willTrash = !!libPath && isInsideDir(filePath, libPath) && fs.existsSync(filePath);
+            const inLibrary = !!libPath && isInsideDir(filePath, libPath);
+            const fileExists = fs.existsSync(filePath);
+            const willTrash = inLibrary && fileExists;
+            // 未删除文件时说明原因, 避免"设了书库目录却提示不删文件"的困惑
+            const whyNotTrash = !libPath
+                ? '未设置书库目录'
+                : !inLibrary
+                  ? '该书文件不在书库目录内'
+                  : '文件不存在';
             const confirmText = willTrash
-                ? `从书架移除「${name}」并把文件移入回收站？\n（文件：${filePath}）`
-                : `从书架移除「${name}」？阅读进度记录也会一并删除（不会删除文件）。`;
-            const picked = await vscode.window.showWarningMessage(confirmText, { modal: true }, '移除', '取消');
+                ? `从书架移除「${name}」并把文件移入回收站？\n文件：${filePath}`
+                : `从书架移除「${name}」？仅移除书架记录，不删除文件。\n原因：${whyNotTrash}\n文件：${filePath}`;
+            // 注意: modal 对话框会自动带「取消」, 这里只传确认按钮, 否则出现两个取消
+            const picked = await vscode.window.showWarningMessage(confirmText, { modal: true }, '移除');
             if (picked !== '移除') {
                 return;
             }
@@ -367,7 +377,12 @@ export function activate(context: vscode.ExtensionContext): void {
                 return;
             }
             const known = new Set(shelf.list().map((b) => b.filePath.toLowerCase()));
+            // 已有书籍键(书名+作者+章节数): 同书的多份副本/老路径记录不重复补录
+            const knownKeys = new Set(
+                shelf.list().map((b) => shelfBookKey(b.title, b.author, b.totalChapters))
+            );
             let added = 0;
+            let skippedDup = 0;
             for (const file of names) {
                 if (known.has(file.toLowerCase())) {
                     continue;
@@ -376,15 +391,36 @@ export function activate(context: vscode.ExtensionContext): void {
                     const buf = await fs.promises.readFile(file);
                     const { text, encoding } = decodeBuffer(buf);
                     const novel = parseNovel(text, file, encoding);
+                    const key = shelfBookKey(novel.bookTitle, novel.author, novel.chapters.length);
+                    if (knownKeys.has(key)) {
+                        // 同一本书已经在书架里(哪怕文件路径不同): 跳过, 避免重复出现
+                        skippedDup += 1;
+                        continue;
+                    }
                     await shelf.upsert({
                         filePath: file,
                         title: novel.bookTitle,
                         author: novel.author,
                         totalChapters: novel.chapters.length,
                     });
+                    knownKeys.add(key);
                     added += 1;
                 } catch {
                     // 单个文件解析失败: 跳过, 不影响其余
+                }
+            }
+            // 合并同书重复记录(同书名+作者+章节数): 只保留一条, 只删记录不动文件
+            let merged = 0;
+            const dupPlans = planDuplicateRemoval(
+                shelf.list(),
+                dir,
+                (p) => fs.existsSync(p),
+                isInsideDir
+            );
+            for (const plan of dupPlans) {
+                for (const b of plan.removals) {
+                    await shelf.remove(b.filePath);
+                    merged += 1;
                 }
             }
             // 清理: 书库内已不存在的文件, 其书架记录一并移除
@@ -397,7 +433,10 @@ export function activate(context: vscode.ExtensionContext): void {
             }
             refreshShelfView();
             void vscode.window.showInformationMessage(
-                `书架已刷新：新增 ${added} 本` + (pruned ? `，清理 ${pruned} 条失效记录` : '') +
+                `书架已刷新：新增 ${added} 本` +
+                (skippedDup ? `，跳过重复副本 ${skippedDup} 个` : '') +
+                (merged ? `，合并重复记录 ${merged} 条` : '') +
+                (pruned ? `，清理失效记录 ${pruned} 条` : '') +
                 `（书库内共 ${names.length} 个 txt）`
             );
         }),
