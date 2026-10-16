@@ -411,6 +411,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('.menu-toggle .dw-lines-right'), '切换图标应含右侧条纹路径(展开态)');
   assert(document.querySelector('.menu-toggle .dw-lines-left'), '切换图标应含左侧条纹路径(收起态)');
   assert(document.querySelector('.menu-toggle').getAttribute('title'), '切换按钮应保留 hover 提示(title)');
+  assert(!/\.menu-toggle\s*\{[^}]*color:\s*var\(--sp-muted\)/.test(capturedHtml),
+    'toggle 图标颜色不应偏淡(与菜单项一致)');
+  assert(/\.menu-ico\s*\{/.test(capturedHtml), '菜单项应有图标容器 .menu-ico');
+  const menuSrc = fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'components', 'SideMenu.vue'), 'utf8');
+  assert(/SVG_SHELF/.test(menuSrc) && /1024 1024/.test(menuSrc), '书架图标应换成 1024 viewBox 的新图标');
+  assert(/SVG_CATALOG/.test(menuSrc) && /863\.113/.test(menuSrc), '目录图标应换成用户提供的新图标');
+  assert(!/fill="#231815"/.test(menuSrc), '新图标应去掉硬编码 fill(改用 currentColor 跟随主题)');
   assert(
     /\.menu:not\(\.expanded\) \.dw-lines-right\s*\{\s*display:\s*none/.test(capturedHtml),
     '收起态应隐藏右侧条纹'

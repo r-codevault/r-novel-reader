@@ -300,8 +300,9 @@
     cursor: pointer; text-align: left;
     white-space: nowrap;
   }
-  .menu-toggle { color: var(--sp-muted); }
+  .menu-toggle { color: var(--sp-fg); opacity: .85; }
   .menu-toggle:hover, .menu-item:hover { background: var(--sp-hover); }
+  .menu-toggle:hover { opacity: 1; }
   .menu-item.active {
     color: var(--sp-accent);
     border-left-color: var(--sp-accent);
@@ -309,6 +310,7 @@
     font-weight: 600;
   }
   .menu svg { width: 18px; height: 18px; flex: none; }
+  .menu-ico { display: inline-flex; align-items: center; justify-content: center; flex: none; }
   .menu-label { opacity: 0; transition: opacity .12s ease; }
   /* 切换按钮: 双状态图标(展开=右侧条纹, 收起=左侧条纹) */
   .menu-toggle svg { width: 20px; height: 20px; }
