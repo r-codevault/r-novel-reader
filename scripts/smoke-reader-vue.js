@@ -420,6 +420,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '菜单顺序应为 折叠按钮 + 分割线 + 书架/目录/状态栏/阅读设置/存储位置, 实际: ' + JSON.stringify(order)
   );
   assert(/\.menu-divider\s*\{[^}]*margin:\s*0\s+12px/.test(capturedHtml), '分隔线应无上下外边距(仅左右缩进)');
+  // CSS 完整性: 源文件注释必须成对闭合(未闭合的 /* 会吞掉后续声明, 曾导致分隔线背景丢失)
+  {
+    const srcCss = fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'reader.css'), 'utf8');
+    const opens = (srcCss.match(/\/\*/g) || []).length;
+    const closes = (srcCss.match(/\*\//g) || []).length;
+    assert(opens === closes, `源 CSS 注释应闭合(/* ${opens} 个, */ ${closes} 个)`);
+    assert(
+      /\.menu-divider\s*\{[^}]*background:\s*var\(--sp-border\)/.test(capturedHtml),
+      '分隔线必须有可见背景色(--sp-border)'
+    );
+  }
   assert(
     document.querySelector('.menu').children[1].classList.contains('menu-divider'),
     '分割线应在折叠按钮之后(菜单项之前)'
