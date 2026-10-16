@@ -114,7 +114,11 @@ watch(function () { return state.catalogOpen; }, function (open) {
           <div class="cat-group-head" title="展开 / 收起本卷" @click="toggleGroup(g)">
             <span class="cat-group-name">{{ g.name }}</span>
             <span class="cat-group-count">共 {{ g.total }} 章</span>
-            <span class="cat-group-toggle" title="展开 / 收起本卷">⌃</span>
+            <span class="cat-group-toggle" title="展开 / 收起本卷">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M6 15l6-6 6 6" />
+              </svg>
+            </span>
           </div>
           <div class="cat-items">
             <div v-if="g.entry >= 0" class="cat-item" :data-i="g.entry" :title="g.name"

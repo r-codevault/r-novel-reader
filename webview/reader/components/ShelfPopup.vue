@@ -42,7 +42,7 @@ function addBook(): void {
       <b class="popup-title">书架</b>
       <span class="popup-sub" v-show="shelfHas">共 {{ state.shelf.length }} 本 · 进度自动记录</span>
       <span class="spacer"></span>
-      <button class="popup-close" @click="state.shelfOpen = false">✕</button>
+      <button class="popup-close" @click="state.shelfOpen = false">关闭</button>
     </div>
     <div class="popup-body">
       <div v-if="!shelfHas" class="popup-empty">书架空空如也。</div>

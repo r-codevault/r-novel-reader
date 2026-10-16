@@ -111,6 +111,22 @@ assert(
   '弹窗底色应统一为正文纸面色(--bg)'
 );
 assert(
+  /left:\s*calc\(var\(--menu-w,\s*48px\)\s*\+\s*16px\)/.test(capturedHtml),
+  '弹窗应靠左显示(贴菜单: left = menu-w + 16px)'
+);
+assert(
+  !/translateX\(-50%\)/.test(capturedHtml),
+  '弹窗不应再有居中位移(已改靠左)'
+);
+assert(
+  /\.cat-group-toggle svg\s*\{[^}]*width:\s*18px/.test(capturedHtml),
+  '分卷折叠图标应为 18px SVG(替换过小的 ⌃)'
+);
+assert(
+  /\.popup-close\s*\{[^}]*margin-left:\s*auto/.test(capturedHtml),
+  '关闭按钮应靠右(margin-left: auto)'
+);
+assert(
   /\.popup-backdrop\s*\{[^}]*backdrop-filter:\s*blur/.test(capturedHtml),
   '弹窗出现时应有磨砂玻璃背景(backdrop-filter: blur)'
 );
@@ -318,6 +334,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!document.querySelector('.popup-backdrop'), '点击背景应关闭弹窗并移除背景');
   assert(!$('#shelfPopup').classList.contains('open'), '点击背景后弹窗应关闭');
   console.log('磨砂背景(出现/点击关闭): 通过');
+  // 三个弹窗(书架/阅读设置/存储)关闭按钮文案统一为「关闭」
+  for (const id of ['shelf', 'settings', 'storage']) {
+    menuItem(id).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    const closeBtn = document.querySelector('#shelfPopup.open .popup-close, #settingsPanel.open .popup-close, #storagePopup.open .popup-close');
+    assert(closeBtn && closeBtn.textContent.trim() === '关闭', '弹窗关闭按钮应为「关闭」: ' + id);
+  }
+  document.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+  await sleep(30);
+  console.log('关闭按钮统一为「关闭」: 通过');
 
 
   // 上一章悬浮球

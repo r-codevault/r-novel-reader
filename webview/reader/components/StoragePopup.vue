@@ -17,7 +17,7 @@ const libSet = computed(function () { return !!state.libraryPath; });
     <div class="popup-head">
       <b class="popup-title">存储位置</b>
       <span class="spacer"></span>
-      <button class="popup-close" @click="state.storageOpen = false">✕</button>
+      <button class="popup-close" @click="state.storageOpen = false">关闭</button>
     </div>
     <div class="popup-body popup-body-pad">
       <div class="sp-row-line">

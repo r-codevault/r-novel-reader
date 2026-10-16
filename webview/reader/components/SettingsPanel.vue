@@ -31,7 +31,8 @@ const shortcutHintText = computed(function () {
   <section id="settingsPanel" ref="rootRef" class="settings-panel" :class="{ open: state.settingsOpen }">
     <div class="sp-head">
       <b class="sp-title">设置</b>
-      <button class="sp-close" @click.stop="state.settingsOpen = false">✕</button>
+      <span class="spacer"></span>
+      <button class="popup-close" @click.stop="state.settingsOpen = false">关闭</button>
     </div>
     <div class="sp-row">
       <span class="sp-label">阅读主题</span>
