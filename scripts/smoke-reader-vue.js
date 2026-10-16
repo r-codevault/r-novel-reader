@@ -423,8 +423,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     document.querySelector('.menu').lastElementChild.classList.contains('menu-divider'),
     '分割线应在菜单最下方'
   );
-  // 图标尺寸统一(原来菜单项 18px 比 toggle 20px 偏小)
-  // happy-dom 无布局, 用 CSS 规则断言图标尺寸(原来菜单项 18px 比 toggle 偏小)
+  // 图标尺寸统一(原菜单项 18px < toggle 20px); happy-dom 无布局, 断言 CSS 规则
+  assert(/\.menu svg\s*\{[^}]*width:\s*20px/.test(capturedHtml), '菜单图标应统一 20px');
+  // 鼠标点击不应残留焦点框(仅键盘导航显示)
+  assert(
+    /button:focus:not\(:focus-visible\)[^{]*\{[^}]*outline:\s*none/.test(capturedHtml),
+    '鼠标点击后不应残留焦点框(outline:none)'
+  );
+  assert(/button:focus-visible[^{]*\{[^}]*outline:\s*2px/.test(capturedHtml), '键盘导航仍应显示焦点框');
   // 状态栏开关改用「底栏」矩形图标(不再用眼睛, 避免与护眼模式混淆)
   const sbIconSvg = document.querySelector('.menu-item[data-menu="statusbar"] svg').outerHTML;
   assert(/<rect/.test(sbIconSvg), '状态栏开关应使用矩形(底栏)图标');
