@@ -326,13 +326,12 @@
   .menu-ico { display: inline-flex; align-items: center; justify-content: center; flex: none; }
   .menu-label { opacity: 0; transition: opacity .12s ease; }
   /* 切换按钮: 双状态图标(展开=右侧条纹, 收起=左侧条纹) */
-  /* 折叠按钮: 品牌 logo(自带配色, 不随主题变化); 尺寸放大到 30px */
-  .menu-toggle svg { width: 30px; height: 30px; }
-  /* 收起态(48px 栏): 居中放置 logo, 并收掉左右 padding, 避免大图标被裁切 */
-  .menu:not(.expanded) .menu-toggle {
-    justify-content: center;
-    padding-left: 3px; padding-right: 0;
-  }
+  /* 折叠按钮: 品牌 logo(自带配色, 不随主题变化)
+     logo 贴边填满: 去掉内边距/左边框, 尺寸贴近 48px 栏宽 */
+  .menu-toggle { padding: 0; border-left: none; }
+  .menu-toggle svg { width: 46px; height: 46px; }
+  /* 收起态(48px 栏): 居中放置, 使 logo 填满整栏宽度 */
+  .menu:not(.expanded) .menu-toggle { justify-content: center; }
   .menu.expanded .menu-label { opacity: 1; }
 
   /* ---------- 统一弹窗(书架 / 存储; 目录与设置沿用各自样式, 同样居中于阅读区) ---------- */

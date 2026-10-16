@@ -502,12 +502,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(/#300604/.test(logoSvg.innerHTML) && /#FCE3C3/.test(logoSvg.innerHTML), 'logo 应保留其余原色');
   assert(!/currentColor/.test(logoSvg.innerHTML), 'logo 不应被改成 currentColor(用户要求颜色不改)');
   assert(
-    /\.menu-toggle svg\s*\{[^}]*width:\s*30px/.test(capturedHtml),
-    '折叠按钮 logo 应为 30px(此前 24px 偏小)'
+    /\.menu-toggle svg\s*\{[^}]*width:\s*46px/.test(capturedHtml),
+    '折叠按钮 logo 应放大到 46px(贴近 48px 栏宽)'
+  );
+  assert(
+    /\.menu-toggle\s*\{[^}]*padding:\s*0[^}]*border-left:\s*none/.test(capturedHtml),
+    'logo 应去掉内边距与左边框(贴边填满)'
   );
   assert(
     /\.menu:not\(\.expanded\) \.menu-toggle\s*\{[^}]*justify-content:\s*center/.test(capturedHtml),
-    '收起态应居中放置 logo(避免 48px 栏内被裁切)'
+    '收起态应居中, 使 logo 填满整栏'
   );
   assert(!document.querySelector('.dw-lines-right, .dw-lines-left'), '不应再有旧的双状态条纹路径');
   assert(document.querySelector('.menu-toggle').getAttribute('title'), '切换按钮应保留 hover 提示(title)');
