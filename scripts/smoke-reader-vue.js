@@ -499,6 +499,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(logoSvg, '折叠按钮应有 logo');
   assert(/M430.602/.test(logoSvg.innerHTML), 'logo 路径应为用户提供的图形');
   assert(/#ED8F27/.test(logoSvg.innerHTML), 'logo 应保留原色(#ED8F27 橙)');
+  {
+    // 书上方的放射线条已按要求改为 #FCE3C3, 且与书页内文字线(#300604)拆分
+    const paths = Array.from(document.querySelectorAll('.menu-toggle svg path'));
+    assert(paths.length === 9, `logo 应为 9 条路径(放射线已拆分), 实际 ${paths.length}`);
+    assert(
+      paths[paths.length - 1].getAttribute('fill') === '#FCE3C3',
+      '放射线条应为 #FCE3C3'
+    );
+    assert(
+      paths[paths.length - 2].getAttribute('fill') === '#300604',
+      '书页内文字线应保持深色(#300604)'
+    );
+  }
   assert(/#300604/.test(logoSvg.innerHTML) && /#FCE3C3/.test(logoSvg.innerHTML), 'logo 应保留其余原色');
   assert(!/currentColor/.test(logoSvg.innerHTML), 'logo 不应被改成 currentColor(用户要求颜色不改)');
   assert(
