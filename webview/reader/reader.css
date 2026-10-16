@@ -243,36 +243,42 @@
   .statusbar .status-row .spacer { flex: 1; }
 
   /* ---------- 滚动条: 跟随阅读主题(默认 Chromium 深色滚动条会与浅色主题格格不入) ---------- */
-  .cat-body, #settingsPanel, #catalogPanel {
+  /* ---------- 滚动条: 与底部状态栏进度条同风格(细 + 高亮色 --sp-accent) ---------- */
+  .cat-body, #settingsPanel, #catalogPanel,
+  #shelfPopup .popup-body, #storagePopup .popup-body {
     scrollbar-width: thin;
-    scrollbar-color: var(--chrome-border) transparent;
+    scrollbar-color: var(--sp-accent) transparent; /* Firefox */
   }
-  .cat-body::-webkit-scrollbar, #settingsPanel::-webkit-scrollbar {
-    width: 10px; height: 10px;
+  .cat-body::-webkit-scrollbar, #settingsPanel::-webkit-scrollbar,
+  #catalogPanel::-webkit-scrollbar,
+  #shelfPopup .popup-body::-webkit-scrollbar, #storagePopup .popup-body::-webkit-scrollbar {
+    width: 6px; height: 6px;
   }
-  .cat-body::-webkit-scrollbar-track, #settingsPanel::-webkit-scrollbar-track {
+  .cat-body::-webkit-scrollbar-track, #settingsPanel::-webkit-scrollbar-track,
+  #catalogPanel::-webkit-scrollbar-track,
+  #shelfPopup .popup-body::-webkit-scrollbar-track, #storagePopup .popup-body::-webkit-scrollbar-track {
     background: transparent;
   }
-  .cat-body::-webkit-scrollbar-thumb, #settingsPanel::-webkit-scrollbar-thumb {
-    background: var(--chrome-border);
-    border-radius: 6px;
-    border: 2px solid transparent;
-    background-clip: content-box;
+  .cat-body::-webkit-scrollbar-thumb, #settingsPanel::-webkit-scrollbar-thumb,
+  #catalogPanel::-webkit-scrollbar-thumb,
+  #shelfPopup .popup-body::-webkit-scrollbar-thumb, #storagePopup .popup-body::-webkit-scrollbar-thumb {
+    background: var(--sp-accent); /* 与状态栏进度条填充同色: 浅色红 / 黑夜金 */
+    border-radius: 3px;
   }
-  .cat-body::-webkit-scrollbar-thumb:hover, #settingsPanel::-webkit-scrollbar-thumb:hover {
+  .cat-body::-webkit-scrollbar-thumb:hover, #settingsPanel::-webkit-scrollbar-thumb:hover,
+  #catalogPanel::-webkit-scrollbar-thumb:hover,
+  #shelfPopup .popup-body::-webkit-scrollbar-thumb:hover, #storagePopup .popup-body::-webkit-scrollbar-thumb:hover {
     background: var(--accent);
-    background-clip: content-box;
   }
-  /* 阅读页整体滚动条 */
-  body::-webkit-scrollbar { width: 12px; }
-  body::-webkit-scrollbar-track { background: var(--page-bg); }
-  body::-webkit-scrollbar-thumb {
-    background: var(--chrome-border);
-    border: 3px solid transparent;
-    border-radius: 6px;
-    background-clip: content-box;
+  /* 阅读页整体滚动条(同样风格, 稍宽便于拖拽)
+     注意: 视口滚动条挂在根元素 html 上, body:: 不生效 —— 两处都写 */
+  html::-webkit-scrollbar, body::-webkit-scrollbar { width: 8px; }
+  html::-webkit-scrollbar-track, body::-webkit-scrollbar-track { background: transparent; }
+  html::-webkit-scrollbar-thumb, body::-webkit-scrollbar-thumb {
+    background: var(--sp-accent);
+    border-radius: 4px;
   }
-  body::-webkit-scrollbar-thumb:hover { background: var(--accent); background-clip: content-box; }
+  html::-webkit-scrollbar-thumb:hover, body::-webkit-scrollbar-thumb:hover { background: var(--accent); }
   /* 状态栏右侧的当前章节标题(靠右, 过长省略) */
   .statusbar .status-title {
     flex: 0 1 auto; min-width: 0;

@@ -126,6 +126,11 @@ assert(
   /\.popup-close\s*\{[^}]*margin-left:\s*auto/.test(capturedHtml),
   '关闭按钮应靠右(margin-left: auto)'
 );
+assert(
+  /::-webkit-scrollbar-thumb[^{]*\{[^}]*background:\s*var\(--sp-accent\)/.test(capturedHtml),
+  '滚动条滑块应与状态栏进度条同色(--sp-accent)'
+);
+assert(/::-webkit-scrollbar[^{]*\{[^}]*width:\s*6px/.test(capturedHtml), '弹窗滚动条应为 6px 细条');
 assert(!/\.popup-backdrop/.test(capturedHtml), '磨砂玻璃背景层应已移除');
 assert(!/backdrop-filter/.test(capturedHtml), '不应再有 backdrop-filter(玻璃效果)');
 assert(
