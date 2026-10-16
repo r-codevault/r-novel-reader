@@ -4,6 +4,17 @@
  * 菜单项只负责"打开对应弹窗", 弹窗互斥由 App 统一保证。
  */
 import { state } from '../composables/vscode';
+import { persistSettings } from '../store';
+
+/** 状态栏显隐(默认显示) */
+function statusBarVisible(): boolean {
+  return !state.settings || state.settings.showStatusBar !== false;
+}
+
+function toggleStatusBar(): void {
+  // 独立开关, 不影响已打开的弹窗
+  persistSettings({ showStatusBar: !statusBarVisible() });
+}
 
 interface MenuItem {
   id: 'shelf' | 'catalog' | 'settings' | 'storage';
@@ -73,6 +84,27 @@ function toggle(item: MenuItem): void {
       :class="{ active: state[it.key] }" :data-menu="it.id" :title="it.name" @click="toggle(it)">
       <span class="menu-ico" v-html="it.svg"></span>
       <span class="menu-label">{{ it.name }}</span>
+    </button>
+
+    <!-- 状态栏显示/隐藏开关(默认显示; 图标: 眼睛=显示中, 眼睛带斜线=已隐藏) -->
+    <div class="menu-divider"></div>
+    <button class="menu-item menu-toggle-statusbar" :class="{ active: statusBarVisible() }"
+      :data-menu="'statusbar'" :title="statusBarVisible() ? '隐藏状态栏' : '显示状态栏'"
+      @click="toggleStatusBar">
+      <span class="menu-ico">
+        <svg v-if="statusBarVisible()" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" />
+          <circle cx="12" cy="12" r="2.6" />
+        </svg>
+        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" />
+          <circle cx="12" cy="12" r="2.6" />
+          <path d="M4 20L20 4" />
+        </svg>
+      </span>
+      <span class="menu-label">状态栏</span>
     </button>
   </nav>
 </template>

@@ -29,6 +29,8 @@ export interface ReadingSettings {
   shortcutPrev: string;
   /** 下一章快捷键(如 alt+arrowright) */
   shortcutNext: string;
+  /** 是否显示底部状态栏(默认显示; 由侧边菜单「状态栏」项切换) */
+  showStatusBar: boolean;
 }
 
 export interface ThemeDef {
@@ -194,6 +196,7 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
   contentWidth: 720,
   shortcutPrev: "alt+arrowleft",
   shortcutNext: "alt+arrowright",
+  showStatusBar: true,
 };
 
 const STORAGE_KEY = "novelReader.settings";
@@ -208,6 +211,7 @@ const SETTING_KEYS: (keyof ReadingSettings)[] = [
   "contentWidth",
   "shortcutPrev",
   "shortcutNext",
+  "showStatusBar",
 ];
 
 function clamp(n: number, min: number, max: number, fallback: number): number {
@@ -255,11 +259,15 @@ function configDefaults(): ReadingSettings {
       "shortcutNextChapter",
       DEFAULT_SETTINGS.shortcutNext,
     ),
+    showStatusBar: DEFAULT_SETTINGS.showStatusBar,
   };
 }
 
 function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
   const out: Partial<ReadingSettings> = {};
+  if (typeof s.showStatusBar === "boolean") {
+    out.showStatusBar = s.showStatusBar;
+  }
   if (typeof s.fontSize === "number") {
     out.fontSize = clamp(s.fontSize, 12, 32, DEFAULT_SETTINGS.fontSize);
   }

@@ -406,9 +406,47 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   assert(!menuEl.classList.contains('expanded'), '点菜单按钮应收起');
   assert(document.documentElement.style.getPropertyValue('--menu-w') === '48px', '收起时 --menu-w 应为 48px');
-  assert(document.querySelectorAll('.menu-item').length === 4, '菜单应有 4 个功能项');
+  assert(
+    document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar)').length === 4,
+    '菜单应有 4 个弹窗功能项'
+  );
+  assert(document.querySelectorAll('.menu-item[data-menu]').length === 5, '菜单共 5 项(含状态栏开关)');
+  assert(document.querySelector('.menu-item[data-menu="statusbar"]'), '菜单应有「状态栏」显隐开关');
+  assert(document.querySelector('.menu-divider'), '开关与弹窗项之间应有分隔线');
   document.querySelector('.menu-toggle').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
+  // 状态栏显隐: 默认显示, 点开关隐藏/再点恢复
+  const statusEl = document.querySelector('.statusbar');
+  assert(statusEl && statusEl.style.display !== 'none', '默认应显示状态栏');
+  const sbItem = document.querySelector('.menu-item[data-menu="statusbar"]');
+  assert(sbItem.getAttribute('title') === '隐藏状态栏', '显示中时提示应为「隐藏状态栏」');
+  posted.length = 0;
+  sbItem.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(60);
+  assert(statusEl.style.display === 'none', '点开关后状态栏应隐藏');
+  assert(
+    posted.some((m) => m.type === 'updateSettings' && m.patch && m.patch.showStatusBar === false),
+    '隐藏状态栏应持久化(updateSettings.showStatusBar=false)'
+  );
+  assert(sbItem.getAttribute('title') === '显示状态栏', '隐藏后提示应为「显示状态栏」');
+  posted.length = 0;
+  sbItem.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(60);
+  assert(statusEl.style.display !== 'none', '再点开关应恢复显示');
+  assert(
+    posted.some((m) => m.type === 'updateSettings' && m.patch && m.patch.showStatusBar === true),
+    '恢复显示也应持久化'
+  );
+  // 开关不应影响弹窗(独立开关)
+  menuItem('shelf').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  sbItem.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert($('#shelfPopup').classList.contains('open'), '状态栏开关不应关闭已打开的弹窗');
+  document.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+  await sleep(30);
+  console.log('状态栏显隐开关(默认显示/隐藏/恢复/独立): 通过');
+
   console.log('侧边菜单(占位布局/展开收起/4 功能项): 通过');
 
   // 切换按钮: 双状态图标(展开=右侧条纹, 收起=左侧条纹) + 无「菜单」文字
@@ -576,6 +614,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     assert(/whyNotTrash/.test(extSrc), '不移除文件时应说明原因(未设置书库/不在书库内/文件不存在)');
     assert(/planDuplicateRemoval/.test(extSrc), '刷新书架应做同书去重');
     assert(/deriveTitleAuthor/.test(extSrc), '刷新书架应按文件名同步书名(纠偏)');
+    const settingsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'settings.ts'), 'utf8');
+    assert(/showStatusBar: boolean/.test(settingsSrc), '设置应包含 showStatusBar 字段');
+    assert(/showStatusBar: true/.test(settingsSrc), 'showStatusBar 默认应为 true(显示)');
+    assert(/'  "showStatusBar",'/.test(settingsSrc) || /"showStatusBar",/.test(settingsSrc), 'showStatusBar 应可持久化');
     for (const need of ['novelReader.showBookshelf', 'novelReader.showChapters', 'novelReader.showSettings']) {
       assert(cmds.includes(need), '弹窗入口命令应保留: ' + need);
     }

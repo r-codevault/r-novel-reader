@@ -472,3 +472,10 @@
   .popup-secondary:hover { border-color: var(--accent); color: var(--accent); }
   /* 底部并排时: 主按钮占满剩余宽度 */
   .popup-foot .popup-primary { flex: 1 1 auto; width: auto; }
+
+  /* 菜单分隔线(状态栏开关与弹窗入口分组) */
+  .menu-divider {
+    height: 1px; margin: 6px 12px;
+    background: var(--sp-border);
+    flex: none;
+  }

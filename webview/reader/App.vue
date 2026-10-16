@@ -40,6 +40,11 @@ watch(function () { return state.menuExpanded; }, function (expanded) {
 // ---------------------------------------------------------------- 弹窗互斥(同一时刻只允许一个)
 const popupKeys = ['catalogOpen', 'settingsOpen', 'shelfOpen', 'storageOpen'] as const;
 
+/** 状态栏是否显示(设置项, 默认显示) */
+function statusBarVisible(): boolean {
+  return !state.settings || state.settings.showStatusBar !== false;
+}
+
 function anyPopupOpen(): boolean {
   return state.catalogOpen || state.settingsOpen || state.shelfOpen || state.storageOpen;
 }
@@ -214,7 +219,7 @@ onMounted(function () {
       <ShelfPopup ref="shelfRef" />
       <StoragePopup ref="storageRef" />
       <ReaderArea ref="readerRef" />
-      <StatusBar />
+      <StatusBar v-show="statusBarVisible()" />
     </div>
   </div>
 </template>
