@@ -126,10 +126,8 @@ assert(
   /\.popup-close\s*\{[^}]*margin-left:\s*auto/.test(capturedHtml),
   '关闭按钮应靠右(margin-left: auto)'
 );
-assert(
-  /\.popup-backdrop\s*\{[^}]*backdrop-filter:\s*blur/.test(capturedHtml),
-  '弹窗出现时应有磨砂玻璃背景(backdrop-filter: blur)'
-);
+assert(!/\.popup-backdrop/.test(capturedHtml), '磨砂玻璃背景层应已移除');
+assert(!/backdrop-filter/.test(capturedHtml), '不应再有 backdrop-filter(玻璃效果)');
 assert(
   /#shelfPopup[^{]*\{[^}]*width:\s*max-content/.test(capturedHtml),
   '书架/存储弹窗应随内容撑开(width: max-content)'
@@ -325,15 +323,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!$('#storagePopup').classList.contains('open'), '再点同一菜单项应收起弹窗');
   console.log('弹窗互斥(目录/设置/书架/存储): 通过');
 
-  // 磨砂玻璃背景: 弹窗出现时存在, 点击背景关闭
+  // 无磨砂背景: 弹窗仍能点外部关闭
   menuItem('shelf').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
-  assert(document.querySelector('.popup-backdrop'), '弹窗出现时应有磨砂玻璃背景');
-  document.querySelector('.popup-backdrop').dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+  assert($('#shelfPopup').classList.contains('open'), '点菜单应打开弹窗');
+  assert(!document.querySelector('.popup-backdrop'), '不应存在磨砂玻璃背景层');
+  const outside = document.createElement('div');
+  document.body.appendChild(outside);
+  outside.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
   await sleep(30);
-  assert(!document.querySelector('.popup-backdrop'), '点击背景应关闭弹窗并移除背景');
-  assert(!$('#shelfPopup').classList.contains('open'), '点击背景后弹窗应关闭');
-  console.log('磨砂背景(出现/点击关闭): 通过');
+  assert(!$('#shelfPopup').classList.contains('open'), '点击弹窗外应关闭弹窗');
+  outside.remove();
+  console.log('无磨砂背景 + 点外部关闭: 通过');
   // 三个弹窗(书架/阅读设置/存储)关闭按钮文案统一为「关闭」
   for (const id of ['shelf', 'settings', 'storage']) {
     menuItem(id).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));

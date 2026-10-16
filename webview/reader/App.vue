@@ -44,16 +44,12 @@ function anyPopupOpen(): boolean {
   return state.catalogOpen || state.settingsOpen || state.shelfOpen || state.storageOpen;
 }
 
+/** 关闭全部弹窗(点击弹窗外任意处/按 Esc 时调用) */
 function closeAllPopups(): void {
   state.catalogOpen = false;
   state.settingsOpen = false;
   state.shelfOpen = false;
   state.storageOpen = false;
-}
-
-/** 有弹窗时的磨砂玻璃背景(点击可关闭弹窗) */
-function onBackdropClick(): void {
-  closeAllPopups();
 }
 
 function openOnly(key: typeof popupKeys[number]): void {
@@ -213,8 +209,6 @@ onMounted(function () {
   <div class="shell">
     <SideMenu />
     <div class="main">
-      <!-- 弹窗磨砂背景: 覆盖阅读区(菜单保持清晰可点), 点击关闭弹窗 -->
-      <div v-if="anyPopupOpen()" class="popup-backdrop" @mousedown="onBackdropClick"></div>
       <CatalogPanel ref="catalogRef" />
       <SettingsPanel ref="settingsRef" />
       <ShelfPopup ref="shelfRef" />

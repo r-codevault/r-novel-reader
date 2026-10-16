@@ -411,19 +411,6 @@
   .bk:hover .bp-del { opacity: .6; }
   .bp-del:hover { opacity: 1; background: var(--sp-hover); color: #d9534f; }
 
-  /* ---------- 弹窗磨砂背景(只覆盖阅读区, 菜单保持清晰可点) ---------- */
-  .popup-backdrop {
-    position: fixed;
-    top: 0; right: 0; bottom: 0;
-    left: var(--menu-w, 48px);
-    z-index: 43;
-    background: rgba(20, 20, 20, .22);
-    backdrop-filter: blur(6px) saturate(.9);
-    -webkit-backdrop-filter: blur(6px) saturate(.9);
-    animation: popup-fade .16s ease;
-  }
-  @keyframes popup-fade { from { opacity: 0; } to { opacity: 1; } }
-
   /* 弹窗入场 */
   #catalogPanel.open, #settingsPanel.open, #shelfPopup.open, #storagePopup.open {
     animation: popup-pop .16s ease;
