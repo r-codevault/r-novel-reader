@@ -494,8 +494,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // 切换按钮: 双状态图标(展开=右侧条纹, 收起=左侧条纹) + 无「菜单」文字
   const toggleHtml = document.querySelector('.menu-toggle').innerHTML;
   assert(!toggleHtml.includes('菜单'), '切换按钮不应再显示「菜单」文字(仅保留 hover 提示)');
-  assert(document.querySelector('.menu-toggle .dw-lines-right'), '切换图标应含右侧条纹路径(展开态)');
-  assert(document.querySelector('.menu-toggle .dw-lines-left'), '切换图标应含左侧条纹路径(收起态)');
+  // 折叠按钮: 品牌 logo(原色保留, 不随主题变化)
+  const logoSvg = document.querySelector('.menu-toggle svg');
+  assert(logoSvg, '折叠按钮应有 logo');
+  assert(/M430.602/.test(logoSvg.innerHTML), 'logo 路径应为用户提供的图形');
+  assert(/#ED8F27/.test(logoSvg.innerHTML), 'logo 应保留原色(#ED8F27 橙)');
+  assert(/#300604/.test(logoSvg.innerHTML) && /#FCE3C3/.test(logoSvg.innerHTML), 'logo 应保留其余原色');
+  assert(!/currentColor/.test(logoSvg.innerHTML), 'logo 不应被改成 currentColor(用户要求颜色不改)');
+  assert(!document.querySelector('.dw-lines-right, .dw-lines-left'), '不应再有旧的双状态条纹路径');
   assert(document.querySelector('.menu-toggle').getAttribute('title'), '切换按钮应保留 hover 提示(title)');
   assert(
     /\.progress-fill\s*\{[^}]*background:\s*var\(--sp-accent\)/.test(capturedHtml),
@@ -508,10 +514,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(/SVG_SHELF/.test(menuSrc) && /1024 1024/.test(menuSrc), '书架图标应换成 1024 viewBox 的新图标');
   assert(/SVG_CATALOG/.test(menuSrc) && /863\.113/.test(menuSrc), '目录图标应换成用户提供的新图标');
   assert(!/fill="#231815"/.test(menuSrc), '新图标应去掉硬编码 fill(改用 currentColor 跟随主题)');
-  assert(
-    /\.menu:not\(\.expanded\) \.dw-lines-right\s*\{\s*display:\s*none/.test(capturedHtml),
-    '收起态应隐藏右侧条纹'
-  );
 
   // 书架弹窗
   menuItem('shelf').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
