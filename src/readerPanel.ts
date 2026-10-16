@@ -321,7 +321,14 @@ export class ReaderPanel {
                 void vscode.commands.executeCommand('novelReader.openBook', msg.filePath);
                 break;
             case 'removeBook':
-                void vscode.commands.executeCommand('novelReader.removeFromShelf', msg.filePath);
+                // 失败要显式报错(命令未注册/存储异常时不再静默失败)
+                void vscode.commands
+                    .executeCommand('novelReader.removeFromShelf', msg.filePath)
+                    .then(undefined, (err: unknown) => {
+                        void vscode.window.showErrorMessage(
+                            `移除书籍失败: ${err instanceof Error ? err.message : String(err)}`
+                        );
+                    });
                 break;
             case 'pickLibrary':
                 void vscode.commands.executeCommand('novelReader.pickLibraryPath');

@@ -441,6 +441,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   document.querySelector('#shelfPopup .bp-del').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   assert(posted.some((m) => m.type === 'removeBook'), '点移除应发 removeBook');
+  assert(document.querySelectorAll('#shelfPopup .bk').length === 1, '乐观移除: 点 ✕ 后该行应立即消失');
   document.querySelector('#shelfPopup .popup-primary').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   assert(posted.some((m) => m.type === 'openFile'), '点「添加书籍」应发 openFile');

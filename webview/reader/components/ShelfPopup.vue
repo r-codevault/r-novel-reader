@@ -23,6 +23,9 @@ function onBookClick(b: ShelfItemView, ev: MouseEvent): void {
   const target = ev.target as HTMLElement;
   if (target.closest && target.closest('.bp-del')) {
     ev.stopPropagation();
+    // 乐观移除: 立即从本地列表删掉该行(即时反馈);
+    // 扩展侧确认后(二次确认框)会推送权威列表, 失败则会自动"弹回"
+    state.shelf = state.shelf.filter(function (x) { return x.filePath !== b.filePath; });
     send({ type: 'removeBook', filePath: b.filePath });
     return;
   }
