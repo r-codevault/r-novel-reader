@@ -2,7 +2,7 @@
  * extension.ts — 插件入口
  *
  * 职责:
- *  - 注册命令 / 侧边栏视图(书架 + 章节目录) / 阅读面板
+ *  - 注册命令 / 阅读面板(内含 书架/目录/存储 左抽屉)
  *  - 打开并解码本地 txt(自动识别 UTF-8 / GB18030 / UTF-16 编码)
  *  - 书架管理: 多本小说的登记、进度同步、移除
  *  - 启动时自动延续上一次阅读状态(自动加载上次那本书与进度)
@@ -13,8 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { parseNovel, Novel } from './novelParser';
-import { ChapterViewProvider, ChapterViewRegistrar, ShelfItemView, ViewMode } from './chapterViewProvider';
-import { ReaderPanel } from './readerPanel';
+import { ReaderPanel, ShelfItemView, DrawerTab } from './readerPanel';
 import { ShelfStore } from './shelf';
 import { ensureInLibrary } from './library';
 import { ReadingSettings, SettingsStore } from './settings';
@@ -50,35 +49,21 @@ interface LoadOptions {
 export function activate(context: vscode.ExtensionContext): void {
     const store = new SettingsStore(context.globalState);
     const shelf = new ShelfStore(context.globalState);
-    const chapterView = new ChapterViewProvider();
-    // 侧边栏跟随阅读主题(阅读面板改设置也会同步)
-    chapterView.setTheme(store.get().theme);
-    // 书架 / 目录 / 设置 三个互斥视图(视图名即标题栏文字, 靠 viewMode 上下文切换)
-    for (const mode of Object.keys(ChapterViewProvider.viewIds) as ViewMode[]) {
-        context.subscriptions.push(
-            vscode.window.registerWebviewViewProvider(
-                ChapterViewProvider.viewIds[mode],
-                new ChapterViewRegistrar(chapterView, mode),
-                { webviewOptions: { retainContextWhenHidden: true } }
-            )
-        );
-    }
+    // 书架/目录/存储 已并入阅读面板左抽屉; 面板未打开时用命令面板或状态栏按钮进入
+    ReaderPanel.getShelf = () => shelfItems();
+    ReaderPanel.getLibrary = () => getLibraryPath();
+
+    // 状态栏入口(活动栏侧边栏移除后的常驻入口)
+    const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+    statusItem.text = '$(book) 小说阅读';
+    statusItem.tooltip = '打开阅读面板 / 继续上次阅读';
+    statusItem.command = 'novelReader.resumeCurrent';
+    statusItem.show();
+    context.subscriptions.push(statusItem);
 
     let currentNovel: Novel | null = null;
 
     // ---------------------------------------------------------------- 视图状态同步
-
-    function setViewMode(mode: ViewMode): void {
-        chapterView.setMode(mode);
-        void vscode.commands.executeCommand('setContext', 'novelReader.viewMode', mode);
-    }
-
-    function focusChapterView(): void {
-        if (!chapterView.visible) {
-            const viewId = ChapterViewProvider.viewIds[chapterView.mode] ?? ChapterViewProvider.viewType;
-            void vscode.commands.executeCommand(`${viewId}.focus`);
-        }
-    }
 
     function shelfItems(): ShelfItemView[] {
         return shelf.list().map((b) => ({
@@ -92,7 +77,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     function refreshShelfView(): void {
-        chapterView.setShelf(shelfItems());
+        ReaderPanel.setShelf(shelfItems());
     }
 
     /** 书库目录(空 = 未设置, 直接读取原路径); 由 SettingsStore 统一读写 */
@@ -101,7 +86,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     function syncLibraryToView(): void {
-        chapterView.setLibrary(getLibraryPath());
+        ReaderPanel.setLibrary(getLibraryPath());
     }
 
     // ---------------------------------------------------------------- 加载小说
@@ -166,11 +151,6 @@ export function activate(context: vscode.ExtensionContext): void {
                 (hasProgress ? Math.min(entry.chapterIndex, novel.chapters.length - 1) : 0);
             const scrollRatio = opts.scrollRatio ?? (hasProgress ? entry.scrollRatio : 0);
 
-            chapterView.setNovel(novel);
-            // center=true: 换书/打开后把侧边栏列表滚动定位到当前章
-            // (否则会沿用上一本书的滚动位置)
-            chapterView.setCurrent(chapterIndex, true);
-
             if (opts.openPanel !== false) {
                 ReaderPanel.createOrShow(
                     novel,
@@ -180,7 +160,6 @@ export function activate(context: vscode.ExtensionContext): void {
                     vscode.ViewColumn.One,
                     opts.openSettings
                 );
-                chapterView.setCurrent(chapterIndex, true);
             }
             return novel;
         } catch (err) {
@@ -205,12 +184,31 @@ export function activate(context: vscode.ExtensionContext): void {
         return currentNovel;
     }
 
-    /** 章节变化 -> 同步侧边栏(center=true 时滚动定位到列表中间) */
-    function syncCurrentChapter(index: number, center = false): void {
-        chapterView.setCurrent(index, center);
-    }
-
     // ---------------------------------------------------------------- 命令
+
+        // 抽屉入口(命令面板 / 快捷键): 打开阅读面板并切到对应页签
+        async function openDrawerAt(tab: DrawerTab): Promise<void> {
+            const novel = await ensureNovel();
+            if (!novel) {
+                const picked = await vscode.window.showInformationMessage(
+                    '书架里还没有小说，先添加一本吧。',
+                    '添加书籍'
+                );
+                if (picked === '添加书籍') {
+                    await vscode.commands.executeCommand('novelReader.openFile');
+                }
+                return;
+            }
+            const entry = shelf.get(novel.filePath);
+            const chapterIndex =
+                ReaderPanel.current?.chapterIndex ??
+                (entry && entry.chapterIndex >= 0 ? entry.chapterIndex : 0);
+            const scrollRatio = ReaderPanel.current?.scrollRatio ?? (entry ? entry.scrollRatio : 0);
+            ReaderPanel.createOrShow(novel, chapterIndex, scrollRatio, store);
+            refreshShelfView();
+            syncLibraryToView();
+            ReaderPanel.openDrawer(tab);
+        }
 
     // 打开/添加小说文件的共用实现(openFile 与标题栏「添加书籍」按钮同一行为)
     async function openNovelFile(arg?: vscode.Uri): Promise<void> {
@@ -280,13 +278,9 @@ export function activate(context: vscode.ExtensionContext): void {
                 });
                 refreshShelfView();
                 await loadNovel(novel.filePath, { openPanel: true });
-                setViewMode('chapters');
                 return;
             }
-            const novel = await loadNovel(filePath, { openPanel: true });
-            if (novel) {
-                setViewMode('chapters');
-            }
+            await loadNovel(filePath, { openPanel: true });
         }),
 
         // 书架: 移除某本书(二次确认)
@@ -325,40 +319,13 @@ export function activate(context: vscode.ExtensionContext): void {
             const index = ReaderPanel.current?.chapterIndex ?? Math.max(0, novel.chapters.length - 1);
             const entry = shelf.get(novel.filePath);
             const target = entry && entry.chapterIndex >= 0 ? entry.chapterIndex : index;
-            setViewMode('chapters');
+            refreshShelfView();
             ReaderPanel.createOrShow(novel, target, entry?.scrollRatio ?? 0, store);
-            syncCurrentChapter(target, true);
         }),
 
-        // 侧边栏模式切换(标题栏按钮)
-        vscode.commands.registerCommand('novelReader.showBookshelf', () => {
-            chapterView.setMode('shelf');
-            void vscode.commands.executeCommand('setContext', 'novelReader.viewMode', 'shelf');
-            focusChapterView();
-        }),
-
-        vscode.commands.registerCommand('novelReader.showChapters', () => {
-            chapterView.setMode('chapters');
-            void vscode.commands.executeCommand('setContext', 'novelReader.viewMode', 'chapters');
-            focusChapterView();
-        }),
-
-        // 侧边栏设置(存储位置等)
-        vscode.commands.registerCommand('novelReader.showSettings', () => {
-            chapterView.setMode('settings');
-            void vscode.commands.executeCommand('setContext', 'novelReader.viewMode', 'settings');
-            syncLibraryToView();
-            focusChapterView();
-        }),
-
-        // 设置页「返回」: 回到进入设置前的模式(书架或目录)
-        vscode.commands.registerCommand('novelReader.backFromSettings', () => {
-            const back =
-                chapterView.previousMode === 'shelf'
-                    ? 'novelReader.showBookshelf'
-                    : 'novelReader.showChapters';
-            void vscode.commands.executeCommand(back);
-        }),
+        vscode.commands.registerCommand('novelReader.showBookshelf', () => void openDrawerAt('shelf')),
+        vscode.commands.registerCommand('novelReader.showChapters', () => void openDrawerAt('catalog')),
+        vscode.commands.registerCommand('novelReader.showSettings', () => void openDrawerAt('storage')),
 
         // 选择书库目录(导入时复制到这里)
         vscode.commands.registerCommand('novelReader.pickLibraryPath', async () => {
@@ -384,8 +351,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 return;
             }
             syncLibraryToView();
-            chapterView.setMode('settings');
-            void vscode.commands.executeCommand('setContext', 'novelReader.viewMode', 'settings');
+            if (ReaderPanel.current) { ReaderPanel.openDrawer('storage'); }
             vscode.window.showInformationMessage(`书库目录已设置为 ${dir}，之后导入的小说会复制到这里。`);
         }),
 
@@ -400,8 +366,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 return;
             }
             syncLibraryToView();
-            chapterView.setMode('settings');
-            void vscode.commands.executeCommand('setContext', 'novelReader.viewMode', 'settings');
+            if (ReaderPanel.current) { ReaderPanel.openDrawer('storage'); }
             vscode.window.setStatusBarMessage('已取消书库目录：导入的小说将直接读取原路径', 4000);
         }),
 
@@ -433,7 +398,6 @@ export function activate(context: vscode.ExtensionContext): void {
             }
             const idx = Math.min(Math.max(0, Number(index) || 0), novel.chapters.length - 1);
             ReaderPanel.createOrShow(novel, idx, 0, store);
-            syncCurrentChapter(idx);
         }),
 
         vscode.commands.registerCommand('novelReader.refresh', async () => {
@@ -499,15 +463,6 @@ export function activate(context: vscode.ExtensionContext): void {
         void shelf.updateProgress(currentNovel.filePath, chapterIndex, scrollRatio).then(refreshShelfView);
     };
 
-    // 阅读界面章节变化 -> 侧边栏「当前阅读」条同步
-    ReaderPanel.onDidChangeChapter = (index: number) => {
-        syncCurrentChapter(index);
-    };
-
-    // 阅读面板设置变化 -> 侧边栏主题同步
-    ReaderPanel.onDidChangeSettings = (next) => {
-        chapterView.setTheme(next.theme);
-    };
 
     // ---------------------------------------------------------------- VS Code 设置页 -> 同步阅读偏好
 
@@ -522,20 +477,18 @@ export function activate(context: vscode.ExtensionContext): void {
             const next: ReadingSettings | null = await store.applyConfigurationChange(e);
             if (next) {
                 ReaderPanel.updateSettings(next);
-                chapterView.setTheme(next.theme);
             }
         })
     );
 
     // ---------------------------------------------------------------- 启动: 迁移旧数据 + 自动延续上次阅读状态
 
-    setViewMode('chapters');
     syncLibraryToView();
     void (async () => {
         await shelf.migrateLegacySession();
         refreshShelfView();
         const last = shelf.last();
-        // 没有任何记录, 保持原样(只显示侧边栏)
+        // 没有任何记录: 保持原样(用户可点状态栏「小说阅读」进入)
         if (!last || !fs.existsSync(last.filePath)) {
             return;
         }

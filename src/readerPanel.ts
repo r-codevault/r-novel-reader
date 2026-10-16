@@ -31,6 +31,10 @@ interface InitPayload {
     settings: ReadingSettings;
     /** 打开时自动展开设置面板 */
     openSettings?: boolean;
+    /** 书架列表(抽屉「书架」页) */
+    shelf: ShelfItemView[];
+    /** 书库目录(抽屉「存储」页) */
+    libraryPath: string;
 }
 
 interface ChapterPayload {
@@ -49,7 +53,28 @@ type WebviewMessage =
     | { type: 'updateSettings'; patch: Partial<ReadingSettings> }
     | { type: 'resetSettings' }
     | { type: 'saveProgress'; chapterIndex: number; scrollRatio: number }
-    | { type: 'openFile' };
+    | { type: 'openFile' }
+    // 左抽屉(书架/目录/存储)动作
+    | { type: 'openBook'; filePath: string }
+    | { type: 'removeBook'; filePath: string }
+    | { type: 'pickLibrary' }
+    | { type: 'clearLibrary' }
+    | { type: 'openLibraryFolder' };
+
+/** 书架条目(抽屉「书架」页渲染用) */
+export interface ShelfItemView {
+    filePath: string;
+    title: string;
+    author: string;
+    /** 最后阅读章节序号, -1 表示未开始 */
+    chapterIndex: number;
+    totalChapters: number;
+    /** 是否为当前打开的书 */
+    current: boolean;
+}
+
+/** 左抽屉页签 */
+export type DrawerTab = 'shelf' | 'catalog' | 'storage';
 
 export class ReaderPanel {
     public static readonly viewType = 'novelReader.reader';
@@ -60,6 +85,12 @@ export class ReaderPanel {
     public static onDidChangeSettings?: (settings: ReadingSettings) => void;
     /** 阅读进度回调(由插件入口写入书架) */
     public static onProgress?: (chapterIndex: number, scrollRatio: number) => void;
+    /** 书架数据提供者(插件入口注入): init 时随载荷下发 */
+    public static getShelf?: () => ShelfItemView[];
+    /** 书库目录提供者(插件入口注入) */
+    public static getLibrary?: () => string;
+    /** 视图就绪前的抽屉打开请求 */
+    private static _pendingDrawer: DrawerTab | null = null;
 
     private readonly _panel: vscode.WebviewPanel;
     private readonly _store: SettingsStore;
@@ -184,6 +215,29 @@ export class ReaderPanel {
         ReaderPanel.current?._panel.webview.postMessage({ type: 'settings', payload: settings });
     }
 
+    /** 推送书架列表(抽屉「书架」页实时刷新) */
+    static setShelf(items: ShelfItemView[]): void {
+        void ReaderPanel.current?._panel.webview.postMessage({ type: 'shelf', items });
+    }
+
+    /** 推送书库目录(抽屉「存储」页) */
+    static setLibrary(path: string): void {
+        void ReaderPanel.current?._panel.webview.postMessage({ type: 'library', path });
+    }
+
+    /**
+     * 打开左抽屉并切到指定页签。
+     * 面板未打开(或 webview 未就绪)时先记下, 等 ready/init 后补发。
+     */
+    static openDrawer(tab: DrawerTab): void {
+        const cur = ReaderPanel.current;
+        if (cur && cur._ready) {
+            void cur._panel.webview.postMessage({ type: 'openDrawer', tab });
+            return;
+        }
+        ReaderPanel._pendingDrawer = tab;
+    }
+
     get novel(): Novel {
         return this._novel;
     }
@@ -214,6 +268,12 @@ export class ReaderPanel {
             case 'ready':
                 this._ready = true;
                 this._postInit();
+                // 补发视图就绪前的抽屉打开请求
+                if (ReaderPanel._pendingDrawer) {
+                    const tab = ReaderPanel._pendingDrawer;
+                    ReaderPanel._pendingDrawer = null;
+                    void this._panel.webview.postMessage({ type: 'openDrawer', tab });
+                }
                 break;
             case 'getChapter': {
                 const max = Math.max(0, this._novel.chapters.length - 1);
@@ -256,6 +316,22 @@ export class ReaderPanel {
             case 'openFile':
                 void vscode.commands.executeCommand('novelReader.openFile');
                 break;
+            // 抽屉(书架/存储)动作: 转发到既有命令, 逻辑与旧侧边栏一致
+            case 'openBook':
+                void vscode.commands.executeCommand('novelReader.openBook', msg.filePath);
+                break;
+            case 'removeBook':
+                void vscode.commands.executeCommand('novelReader.removeFromShelf', msg.filePath);
+                break;
+            case 'pickLibrary':
+                void vscode.commands.executeCommand('novelReader.pickLibraryPath');
+                break;
+            case 'clearLibrary':
+                void vscode.commands.executeCommand('novelReader.clearLibraryPath');
+                break;
+            case 'openLibraryFolder':
+                void vscode.commands.executeCommand('novelReader.openLibraryFolder');
+                break;
         }
     }
 
@@ -289,6 +365,8 @@ export class ReaderPanel {
             chapterWords: this._novel.chapters[this._chapterIndex]?.wordCount ?? 0,
             settings: this._settings,
             openSettings: this._openSettingsOnLoad,
+            shelf: ReaderPanel.getShelf ? ReaderPanel.getShelf() : [],
+            libraryPath: ReaderPanel.getLibrary ? ReaderPanel.getLibrary() : '',
         };
         this._openSettingsOnLoad = false;
         this._panel.webview.postMessage({ type: 'init', payload });

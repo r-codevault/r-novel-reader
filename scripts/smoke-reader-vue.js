@@ -16,6 +16,7 @@ const { Window } = require('happy-dom');
 let capturedHtml = '';
 let panelMsgHandler = null;
 const panelMessages = [];
+const executedCommands = [];
 const vscodeStub = {
   ViewColumn: { One: 1 },
   window: {
@@ -41,7 +42,10 @@ const vscodeStub = {
     activeTextEditor: undefined,
     onDidChangeActiveTextEditor: () => ({ dispose() {} }),
   },
-  commands: { registerCommand: () => ({ dispose() {} }), executeCommand: () => {} },
+  commands: {
+    registerCommand: () => ({ dispose() {} }),
+    executeCommand: (cmd, arg) => { executedCommands.push({ cmd, arg }); return Promise.resolve(undefined); },
+  },
   workspace: {
     getConfiguration: () => ({ get: () => undefined, has: () => false }),
     onDidChangeConfiguration: () => ({ dispose() {} }),
@@ -188,6 +192,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const event = new win.MessageEvent('message', { data: { type, payload } });
     sandboxWindow.dispatchEvent(event);
   };
+  /** 顶层字段消息(shelf/library/openDrawer 等) */
+  const sendMsg = (msg) => {
+    const event = new win.MessageEvent('message', { data: msg });
+    sandboxWindow.dispatchEvent(event);
+  };
 
   dispatch('init', {
     filePath: novel.filePath,
@@ -202,6 +211,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     scrollRatio: 0.5,
     chapterWords: 6,
     settings: { ...defaults },
+    shelf: [
+      { filePath: novel.filePath, title: novel.bookTitle, author: novel.author, chapterIndex: 2, totalChapters: 5, current: true },
+      { filePath: 'D:/b.txt', title: '另一本书', author: '', chapterIndex: -1, totalChapters: 8, current: false },
+    ],
+    libraryPath: 'D:/我的书库',
   });
   await sleep(50);
 
@@ -323,6 +337,135 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const progress = posted.find((m) => m.type === 'saveProgress' && m.chapterIndex === 3);
   assert(progress, '章节渲染后应立即上报进度');
   console.log('进度上报(saveProgress): 通过');
+
+  // ---------------- 左侧抽屉(书架 / 目录 / 存储) ----------------
+  // 切换按钮展开
+  const toggle = document.querySelector('.dw-toggle');
+  assert(toggle, '应有左侧抽屉展开/收起按钮');
+  toggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert($('#drawer').classList.contains('open'), '点按钮应展开抽屉');
+  assert(toggle.textContent.includes('收起'), '展开后按钮文案应变为「收起」');
+  assert(!$('#settingsPanel').classList.contains('open'), '抽屉展开时设置面板应关闭(互斥)');
+  assert(!$('#catalogPanel').classList.contains('open'), '抽屉展开时目录浮层应关闭(互斥)');
+
+  // 书架页
+  const bks = document.querySelectorAll('#drawer .bk');
+  assert(bks.length === 2, '抽屉书架应渲染 2 本(实际 ' + bks.length + ')');
+  assert(bks[0].classList.contains('cur'), '当前书应标记');
+  assert(document.querySelector('#drawer .dw-count').textContent.includes('共 2 本'), '应显示册数统计');
+  posted.length = 0;
+  bks[1].dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(
+    posted.some((m) => m.type === 'openBook' && m.filePath === 'D:/b.txt'),
+    '点书架条目应发 openBook'
+  );
+  assert(!$('#drawer').classList.contains('open'), '打开书后抽屉应收起');
+  posted.length = 0;
+  toggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(480);
+  const del = document.querySelector('#drawer .dw-del');
+  del.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(posted.some((m) => m.type === 'removeBook'), '点移除应发 removeBook');
+  posted.length = 0;
+  document.querySelector('#drawer .dw-add').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(posted.some((m) => m.type === 'openFile'), '点「添加书籍」应发 openFile');
+  console.log('抽屉·书架(渲染/打开/移除/添加): 通过');
+
+  // 目录页
+  const tabs = Array.from(document.querySelectorAll('#drawer .dw-tab'));
+  assert(tabs.length === 3, '抽屉应有 3 个页签');
+  tabs.find((t) => t.textContent.includes('目录')).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  const dwChs = document.querySelectorAll('#drawer .cat-item');
+  assert(dwChs.length === 5, '抽屉目录应列出 5 章(实际 ' + dwChs.length + ')');
+  assert(document.querySelector('#drawer .cat-item.cur'), '抽屉目录应高亮当前章');
+  posted.length = 0;
+  Array.from(dwChs).find((el) => el.dataset.i === '0').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(posted.some((m) => m.type === 'getChapter' && m.index === 0), '点抽屉章节应发 getChapter');
+  console.log('抽屉·目录(页签/渲染/高亮/跳转): 通过');
+
+  // 存储页
+  toggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(480);
+  tabs.find((t) => t.textContent.includes('存储')).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(document.querySelector('#drawer .dw-val').textContent.includes('D:/我的书库'), '存储页应显示书库目录');
+  posted.length = 0;
+  const dwBtns = Array.from(document.querySelectorAll('#drawer .dw-btn'));
+  dwBtns.find((b) => b.textContent.includes('选择书库目录')).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  dwBtns.find((b) => b.textContent.includes('打开')).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  dwBtns.find((b) => b.textContent.includes('原路径')).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(posted.some((m) => m.type === 'pickLibrary'), '应发 pickLibrary');
+  assert(posted.some((m) => m.type === 'openLibraryFolder'), '应发 openLibraryFolder');
+  assert(posted.some((m) => m.type === 'clearLibrary'), '应发 clearLibrary');
+  console.log('抽屉·存储(目录展示/按钮): 通过');
+
+  // 扩展消息 openDrawer 可直接打开指定页签
+  sendMsg({ type: 'openDrawer', tab: 'catalog' });
+  await sleep(30);
+  assert($('#drawer').classList.contains('open'), 'openDrawer 消息应展开抽屉');
+  assert(
+    document.querySelector('#drawer .dw-tab.active').textContent.includes('目录'),
+    'openDrawer 应切到指定页签'
+  );
+
+  // shelf / library 消息实时刷新
+  sendMsg({ type: 'shelf', items: [{ filePath: 'D:/c.txt', title: 'C书', author: '', chapterIndex: 0, totalChapters: 3, current: true }] });
+  sendMsg({ type: 'library', path: '' });
+  await sleep(30);
+  assert(document.querySelectorAll('#drawer .bk').length === 1, 'shelf 消息应刷新书架');
+  assert(document.querySelector('#drawer .dw-val').textContent.includes('未设置'), 'library 空值应显示未设置');
+  console.log('抽屉·消息协议(openDrawer/shelf/library): 通过');
+
+  // ---------------- webview 消息 -> 扩展命令 分发 ----------------
+  assert(typeof panelMsgHandler === 'function', '面板应注册消息处理');
+  executedCommands.length = 0;
+  const sendFromWebview = (msg) => { void panelMsgHandler(msg); };
+  sendFromWebview({ type: 'openBook', filePath: 'D:/x.txt' });
+  sendFromWebview({ type: 'removeBook', filePath: 'D:/x.txt' });
+  sendFromWebview({ type: 'pickLibrary' });
+  sendFromWebview({ type: 'clearLibrary' });
+  sendFromWebview({ type: 'openLibraryFolder' });
+  sendFromWebview({ type: 'openFile' });
+  await sleep(20);
+  for (const [cmd, arg] of [
+    ['novelReader.openBook', 'D:/x.txt'],
+    ['novelReader.removeFromShelf', 'D:/x.txt'],
+    ['novelReader.pickLibraryPath', undefined],
+    ['novelReader.clearLibraryPath', undefined],
+    ['novelReader.openLibraryFolder', undefined],
+    ['novelReader.openFile', undefined],
+  ]) {
+    assert(
+      executedCommands.some((e) => e.cmd === cmd && (arg === undefined || e.arg === arg)),
+      `消息应转发到命令 ${cmd}`
+    );
+  }
+  console.log('抽屉动作 -> 扩展命令分发: 通过');
+
+  // ---------------- 扩展清单(活动栏侧边栏已移除) ----------------
+  {
+    const pkgJson = require('../package.json');
+    const c = pkgJson.contributes;
+    assert(!c.viewsContainers, '活动栏容器应已移除(改用面板内抽屉)');
+    assert(!c.views, '侧边栏三视图应已移除');
+    assert(!(c.menus['view/title'] || []).length, 'view/title 菜单应已移除');
+    const cmds = c.commands.map((x) => x.command);
+    assert(!cmds.includes('novelReader.backFromSettings'), '「返回」命令应已移除');
+    for (const need of ['novelReader.showBookshelf', 'novelReader.showChapters', 'novelReader.showSettings']) {
+      assert(cmds.includes(need), `抽屉入口命令应保留: ${need}`);
+    }
+    assert(pkgJson.activationEvents.includes('onStartupFinished'), '启动自动恢复需 onStartupFinished');
+    const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
+    assert(/createStatusBarItem/.test(src), '应有状态栏入口(活动栏移除后的常驻入口)');
+    console.log('扩展清单(无活动栏视图/命令齐备/状态栏入口): 通过');
+  }
 
   console.log('\n阅读面板 Vue 冒烟测试全部通过 ✔');
   process.exit(0);

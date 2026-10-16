@@ -25,12 +25,27 @@ export interface NovelInfo {
   author?: string;
 }
 
+/** 书架条目(左抽屉「书架」页) */
+export interface ShelfItemView {
+  filePath: string;
+  title: string;
+  author: string;
+  chapterIndex: number;
+  totalChapters: number;
+  current: boolean;
+}
+
+/** 左抽屉页签 */
+export type DrawerTab = 'shelf' | 'catalog' | 'storage';
+
 /** 全局共享状态(与扩展侧消息协议字段一一对应) */
 export const state = reactive({
   novel: null as NovelInfo | null,
   settings: null as ReadingSettings | null,
   chapter: null as ChapterPayload | null,
   chapters: [] as { index: number; title: string }[],
+  shelf: [] as ShelfItemView[],
+  libraryPath: '',
   catReverse: false,
   catCollapsed: [] as string[],
   prevCombo: null as ShortcutCombo | null,
@@ -38,6 +53,8 @@ export const state = reactive({
   // UI 状态
   catalogOpen: false,
   settingsOpen: false,
+  drawerOpen: false,
+  drawerTab: 'shelf' as DrawerTab,
   fabAwake: false,
   fabDragging: false,
 });

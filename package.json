@@ -2,7 +2,7 @@
   "name": "r-novel-reader",
   "displayName": "小说阅读器",
   "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面：悬浮球 + 起点风格目录面板、我的书架、书库目录、字体/主题个性化设置，自动延续上次阅读状态。",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -29,37 +29,6 @@
     "onStartupFinished"
   ],
   "contributes": {
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "r-novel-reader",
-          "title": "小说阅读",
-          "icon": "media/icon.svg"
-        }
-      ]
-    },
-    "views": {
-      "r-novel-reader": [
-        {
-          "id": "novelReaderShelf",
-          "name": "书架",
-          "type": "webview",
-          "when": "novelReader.viewMode == shelf"
-        },
-        {
-          "id": "novelReaderCatalog",
-          "name": "目录",
-          "type": "webview",
-          "when": "novelReader.viewMode == chapters || !novelReader.viewMode"
-        },
-        {
-          "id": "novelReaderSettings",
-          "name": "设置",
-          "type": "webview",
-          "when": "novelReader.viewMode == settings"
-        }
-      ]
-    },
     "commands": [
       {
         "command": "novelReader.showBookshelf",
@@ -73,7 +42,7 @@
       },
       {
         "command": "novelReader.showSettings",
-        "title": "设置",
+        "title": "存储位置",
         "icon": "$(settings-gear)"
       },
       {
@@ -106,11 +75,6 @@
         "enablement": "novelReader.hasNovel"
       },
       {
-        "command": "novelReader.backFromSettings",
-        "title": "返回",
-        "icon": "$(arrow-left)"
-      },
-      {
         "command": "novelReader.resumeCurrent",
         "title": "回到当前阅读章节"
       },
@@ -138,33 +102,6 @@
       }
     ],
     "menus": {
-      "view/title": [
-        {
-          "command": "novelReader.backFromSettings",
-          "when": "view =~ /novelReader/ && novelReader.viewMode == settings",
-          "group": "navigation@1"
-        },
-        {
-          "command": "novelReader.showBookshelf",
-          "when": "view =~ /novelReader/ && novelReader.viewMode == chapters",
-          "group": "navigation@1"
-        },
-        {
-          "command": "novelReader.showChapters",
-          "when": "view =~ /novelReader/ && novelReader.viewMode == shelf",
-          "group": "navigation@1"
-        },
-        {
-          "command": "novelReader.refresh",
-          "when": "view =~ /novelReader/ && novelReader.viewMode == chapters && novelReader.hasNovel",
-          "group": "navigation@3"
-        },
-        {
-          "command": "novelReader.showSettings",
-          "when": "view =~ /novelReader/ && novelReader.viewMode != settings",
-          "group": "navigation@4"
-        }
-      ],
       "commandPalette": [
         {
           "command": "novelReader.openFile",
@@ -176,11 +113,11 @@
         },
         {
           "command": "novelReader.showChapters",
-          "title": "小说阅读器: 显示章节目录"
+          "title": "小说阅读器: 章节目录"
         },
         {
           "command": "novelReader.showSettings",
-          "title": "小说阅读器: 设置（存储位置）"
+          "title": "小说阅读器: 存储位置"
         },
         {
           "command": "novelReader.pickLibraryPath",
@@ -334,11 +271,10 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "package": "vsce package --baseContentUrl https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader/blob/master --baseImagesUrl https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader/raw/master",
-    "test": "node scripts/test-shelf.js && node scripts/test-library.js && node scripts/test-parser.js && node scripts/smoke-reader-vue.js && node scripts/smoke-sidebar-vue.js && node scripts/smoke-webview.js",
-    "build:webview": "vite build && vite build --mode sidebar",
+    "test": "node scripts/test-shelf.js && node scripts/test-library.js && node scripts/test-parser.js && node scripts/smoke-reader-vue.js",
+    "build:webview": "vite build",
     "pretest": "npm run compile && npm run build:webview",
-    "dev:reader": "vite --open /webview/reader/dev.html",
-    "dev:sidebar": "vite --open /webview/sidebar/dev.html"
+    "dev": "vite --open /webview/reader/dev.html"
   },
   "devDependencies": {
     "@types/node": "^18.19.0",

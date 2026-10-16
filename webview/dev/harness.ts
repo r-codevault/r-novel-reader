@@ -125,20 +125,3 @@ export function mockReaderInit(): { type: string; payload: Record<string, unknow
   };
 }
 
-/** 侧边栏启动消息序列 */
-export function mockSidebarBoot(): unknown[] {
-  const chapters = mockChapters(30);
-  return [
-    { type: 'theme', themeId: 'sepia' },
-    { type: 'mode', mode: 'chapters' },
-    { type: 'library', path: '' },
-    {
-      type: 'shelf',
-      items: [
-        { filePath: 'D:/mock/debug.txt', title: '调试示例小说', author: '示例作者', chapterIndex: 2, totalChapters: 30, current: true },
-        { filePath: 'D:/mock/other.txt', title: '另一本示例书', author: '', chapterIndex: -1, totalChapters: 12, current: false },
-      ],
-    },
-    { type: 'novel', payload: { hasNovel: true, bookTitle: '调试示例小说', chapters, currentIndex: 2 } },
-  ];
-}

@@ -5,7 +5,7 @@
  *  - 跨组件协调: 扩展消息 / 全局快捷键 / 设置面板定位 / 尺寸变化重排
  */
 import { onMounted, nextTick, ref, watch } from 'vue';
-import { state, vscode, gotoChapter, type ChapterPayload } from './composables/vscode';
+import { state, vscode, gotoChapter, type ChapterPayload, type DrawerTab, type ShelfItemView } from './composables/vscode';
 import { applyThemeVars, DEFAULT_SETTINGS, persistSettings, sendProgress, type ReadingSettings } from './store';
 import { parseShortcut, matchShortcut } from './composables/shortcut';
 import CatalogPanel from './components/CatalogPanel.vue';
@@ -13,6 +13,7 @@ import SettingsPanel from './components/SettingsPanel.vue';
 import ReaderArea from './components/ReaderArea.vue';
 import FabToolbar from './components/FabToolbar.vue';
 import StatusBar from './components/StatusBar.vue';
+import DrawerPanel from './components/DrawerPanel.vue';
 import './reader.css';
 
 const catalogRef = ref<InstanceType<typeof CatalogPanel> | null>(null);
@@ -75,13 +76,21 @@ function positionSettingsPanel(): void {
 
 // 面板打开时机统一在这里定位(悬浮球切换/消息打开都走 state.settingsOpen)
 watch(function () { return state.settingsOpen; }, function (open) {
-  // 目录与设置面板互斥: 同一时刻只显示一个
+  // 同一时刻只显示一个浮层: 设置面板 / 目录浮层 / 左抽屉
   if (open && state.catalogOpen) { state.catalogOpen = false; }
+  if (open && state.drawerOpen) { state.drawerOpen = false; }
   if (open) { nextTick(positionSettingsPanel); }
 });
 
-// 打开目录时同理关掉设置面板
+// 打开目录浮层时同理关掉其它两个
 watch(function () { return state.catalogOpen; }, function (open) {
+  if (open && state.settingsOpen) { state.settingsOpen = false; }
+  if (open && state.drawerOpen) { state.drawerOpen = false; }
+});
+
+// 展开左抽屉时收起两个浮层
+watch(function () { return state.drawerOpen; }, function (open) {
+  if (open && state.catalogOpen) { state.catalogOpen = false; }
   if (open && state.settingsOpen) { state.settingsOpen = false; }
 });
 
@@ -122,6 +131,9 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
         scrollRatio: (p.scrollRatio as number) || 0,
       };
       if (p.openSettings) { state.settingsOpen = true; }
+      // 初始书架/书库数据(抽屉)
+      state.shelf = (p.shelf as ShelfItemView[]) || [];
+      state.libraryPath = (p.libraryPath as string) || '';
       break;
     }
     case 'chapter':
@@ -132,6 +144,17 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       break;
     case 'openSettings':
       state.settingsOpen = true;
+      break;
+    // 抽屉数据/打开请求
+    case 'shelf':
+      state.shelf = (msg as { items?: ShelfItemView[] }).items || [];
+      break;
+    case 'library':
+      state.libraryPath = ((msg as { path?: string }).path) || '';
+      break;
+    case 'openDrawer':
+      state.drawerTab = (((msg as { tab?: DrawerTab }).tab) || 'shelf');
+      state.drawerOpen = true;
       break;
   }
 }
@@ -224,6 +247,7 @@ onMounted(function () {
 </script>
 
 <template>
+  <DrawerPanel />
   <CatalogPanel ref="catalogRef" />
   <SettingsPanel ref="settingsRef" />
   <ReaderArea ref="readerRef" />

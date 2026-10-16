@@ -45,10 +45,9 @@ const virtualConstants = {
   },
 };
 
-export default defineConfig(function ({ mode, command }) {
-  const isSidebar = mode === 'sidebar';
+export default defineConfig(function ({ command }) {
   const isServe = command === 'serve';
-  const name = isSidebar ? 'sidebar' : 'reader';
+  const name = 'reader';
   return {
     plugins: [vue(), virtualConstants],
     server: {
@@ -62,11 +61,11 @@ export default defineConfig(function ({ mode, command }) {
     },
     build: {
       outDir: 'dist-webview',
-      emptyOutDir: !isSidebar, // 第二次构建保留 reader 产物
+      emptyOutDir: true,
       target: 'es2020',
       lib: {
-        entry: path.join(__dirname, 'webview', name, 'main.ts'),
-        name: 'NovelReader' + (isSidebar ? 'Sidebar' : 'Panel'),
+        entry: path.join(__dirname, 'webview', 'reader', 'main.ts'),
+        name: 'NovelReaderPanel',
         formats: ['iife'],
         fileName: () => name + '.js',
       },
