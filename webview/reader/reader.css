@@ -35,7 +35,8 @@
   .cat-head {
     flex: none;
     display: flex; align-items: baseline; gap: 10px;
-    padding: 12px 16px 10px;
+    /* 上间距与左边距一致(18px) */
+    padding: 18px 18px 12px;
     border-bottom: 1px solid var(--chrome-border);
   }
   /* 目录字号与阅读区同步: 章节条目 = 正文字号; 分卷名/面板标题 ≈ 章节标题字号 */
@@ -70,10 +71,10 @@
     margin-left: auto; opacity: .6;
     display: inline-flex; align-items: center; justify-content: center;
     /* 纯图标容器: 不带内边距/底色(box-sizing:border-box 下 padding 会挤掉图标) */
-    width: 22px; height: 22px; flex: none;
+    width: 38px; height: 38px; flex: none;
   }
   .cat-group-head:hover .cat-group-toggle { opacity: 1; }
-  .cat-group-toggle svg { width: 18px; height: 18px; }
+  .cat-group-toggle svg { width: 36px; height: 36px; }
   .cat-group.collapsed .cat-group-toggle svg { transform: rotate(180deg); }
   .cat-group.collapsed .cat-items { display: none; }
   .cat-items {
@@ -114,7 +115,7 @@
     max-height: calc(100vh - 24px);
     overflow-y: auto;
     z-index: 45;
-    padding: 14px 16px 12px;
+    padding: 18px 18px 14px;
     background: var(--sp-bg);
     color: var(--sp-fg);
     border: 1px solid var(--sp-border);
@@ -341,7 +342,8 @@
 
   .popup-head {
     display: flex; align-items: baseline; gap: 10px;
-    padding: 14px 18px 12px;
+    /* 上间距与左边距一致(18px) */
+    padding: 18px 18px 12px;
     border-bottom: 1px solid var(--sp-border);
   }
   .popup-title { font-size: calc(var(--ui-font) + 1px); }

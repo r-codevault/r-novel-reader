@@ -119,8 +119,8 @@ assert(
   '弹窗不应再有居中位移(已改靠左)'
 );
 assert(
-  /\.cat-group-toggle svg\s*\{[^}]*width:\s*18px/.test(capturedHtml),
-  '分卷折叠图标应为 18px SVG(替换过小的 ⌃)'
+  /\.cat-group-toggle svg\s*\{[^}]*width:\s*36px/.test(capturedHtml),
+  '分卷折叠图标应为 36px SVG(放大一倍)'
 );
 assert(
   /\.popup-close\s*\{[^}]*margin-left:\s*auto/.test(capturedHtml),
