@@ -14,7 +14,6 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { parseNovel, Novel } from './novelParser';
 import { ReaderPanel, ShelfItemView, DrawerTab } from './readerPanel';
-import { LauncherViewProvider } from './launcherViewProvider';
 import { ShelfStore } from './shelf';
 import { ensureInLibrary } from './library';
 import { ReadingSettings, SettingsStore } from './settings';
@@ -50,18 +49,9 @@ interface LoadOptions {
 export function activate(context: vscode.ExtensionContext): void {
     const store = new SettingsStore(context.globalState);
     const shelf = new ShelfStore(context.globalState);
-    // 书架/目录/存储 已并入阅读面板左抽屉; 面板未打开时用命令面板或状态栏按钮进入
+    // 书架/目录/存储 已并入阅读面板左抽屉; 面板未打开时用状态栏按钮或命令面板进入
     ReaderPanel.getShelf = () => shelfItems();
     ReaderPanel.getLibrary = () => getLibraryPath();
-
-    // 活动栏图标: 动作型入口(点图标 -> 收起侧边栏并打开阅读面板)
-    const launcher = new LauncherViewProvider();
-    launcher.onActivate = () => void openReaderFromLauncher();
-    context.subscriptions.push(
-        vscode.window.registerWebviewViewProvider(LauncherViewProvider.viewType, launcher, {
-            webviewOptions: { retainContextWhenHidden: true },
-        })
-    );
 
     // 状态栏入口(活动栏侧边栏移除后的常驻入口)
     const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);

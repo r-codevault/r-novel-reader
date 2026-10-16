@@ -2,7 +2,7 @@
   "name": "r-novel-reader",
   "displayName": "小说阅读器",
   "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面：悬浮球 + 起点风格目录面板、我的书架、书库目录、字体/主题个性化设置，自动延续上次阅读状态。",
-  "version": "1.17.1",
+  "version": "1.17.2",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -264,24 +264,6 @@
           "markdownDescription": "阅读页内「下一章」快捷键。写法同上一章，**留空表示禁用**。默认 `alt+arrowright`"
         }
       }
-    },
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "r-novel-reader",
-          "title": "小说阅读",
-          "icon": "media/icon.svg"
-        }
-      ]
-    },
-    "views": {
-      "r-novel-reader": [
-        {
-          "id": "novelReaderHome",
-          "name": "阅读",
-          "type": "webview"
-        }
-      ]
     }
   },
   "scripts": {
