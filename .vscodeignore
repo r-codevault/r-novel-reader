@@ -4,6 +4,7 @@ scripts/**
 docs/**
 webview/**
 .dev-*
+vite.config.mjs.timestamp-*
 node_modules/**
 out/**
 **/*.map

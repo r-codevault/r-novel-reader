@@ -19,6 +19,7 @@ dist/
 # 系统文件
 .DS_Store
 .dev-*
+vite.config.mjs.timestamp-*
 Thumbs.db
 Desktop.ini
 
