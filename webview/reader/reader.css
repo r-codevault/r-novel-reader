@@ -339,6 +339,10 @@
     justify-content: flex-start;
   }
   .menu-toggle svg { width: 46px; height: 46px; transition: width .18s ease, height .18s ease; }
+  /* logo 放射线: 浅色主题用深棕(原色), 黑夜主题用米白(深色背景上才看得清)
+     颜色由主题决定, 用 [data-theme] 分支(store.applyThemeVars 会写入根元素) */
+  .menu-toggle .logo-spark { fill: #300604; }
+  :root[data-theme="dark"] .menu-toggle .logo-spark { fill: #FCE3C3; }
   /* 收起态(48px 栏): logo 与菜单图标统一"水平居中"于同一中轴
      (border-left 3px + padding-left: logo 9px -> 28px logo 居中; 图标 11px + 20px 图标居中) */
   .menu:not(.expanded) .menu-toggle svg { width: 28px; height: 28px; }

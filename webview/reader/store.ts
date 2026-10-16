@@ -21,6 +21,8 @@ export function themeOf(id: string): ThemeDef {
 export function applyThemeVars(s: ReadingSettings): void {
   const t = themeOf(s.theme);
   const root = document.documentElement;
+  // 暴露主题 id 供 CSS 按主题分支(如 logo 放射线在浅色/黑夜用不同颜色)
+  root.dataset.theme = t.id;
   root.style.setProperty('--bg', t.bg);
   root.style.setProperty('--fg', t.fg);
   root.style.setProperty('--page-bg', t.pageBg);

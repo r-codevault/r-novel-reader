@@ -415,7 +415,7 @@ export class ReaderPanel {
                 // webview 外壳: Vue 产物(dist-webview)内联 + 静态主题变量初值(防首帧闪白)
         // UI 全部由 webview/reader/ 的 Vue 3 源码构建而来(npm run build:webview)
         return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="${settings.theme}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">

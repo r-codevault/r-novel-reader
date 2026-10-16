@@ -500,18 +500,31 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(/M430.602/.test(logoSvg.innerHTML), 'logo 路径应为用户提供的图形');
   assert(/#ED8F27/.test(logoSvg.innerHTML), 'logo 应保留原色(#ED8F27 橙)');
   {
-    // 书上方的放射线条已按要求改为 #FCE3C3, 且与书页内文字线(#300604)拆分
+    // 书上方的放射线条: 颜色由主题决定(浅色主题 #300604 / 黑夜 #FCE3C3), 不能再硬编码
     const paths = Array.from(document.querySelectorAll('.menu-toggle svg path'));
     assert(paths.length === 9, `logo 应为 9 条路径(放射线已拆分), 实际 ${paths.length}`);
-    assert(
-      paths[paths.length - 1].getAttribute('fill') === '#FCE3C3',
-      '放射线条应为 #FCE3C3'
-    );
+    const spark = paths[paths.length - 1];
+    assert(spark.getAttribute('class') === 'logo-spark', '放射线应带 logo-spark 类(交给 CSS 控色)');
+    assert(spark.getAttribute('fill') === null, '放射线不应再硬编码 fill(需按主题切换)');
     assert(
       paths[paths.length - 2].getAttribute('fill') === '#300604',
       '书页内文字线应保持深色(#300604)'
     );
   }
+  assert(
+    /\.menu-toggle \.logo-spark[^{]*\{[^}]*fill:\s*#300604/i.test(capturedHtml),
+    '放射线在浅色主题下应为 #300604'
+  );
+  assert(
+    /:root\[data-theme=["']?dark["']?\][^{]*\.logo-spark[^{]*\{[^}]*fill:\s*#fce3c3/i.test(capturedHtml),
+    '放射线在黑夜主题下应为 #FCE3C3'
+  );
+  assert(
+    /root\.dataset\.theme\s*=\s*t\.id/.test(
+      fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'store.ts'), 'utf8')
+    ),
+    'store 应把当前主题 id 写到根元素 data-theme(供 CSS 分支)'
+  );
   assert(/#300604/.test(logoSvg.innerHTML) && /#FCE3C3/.test(logoSvg.innerHTML), 'logo 应保留其余原色');
   assert(!/currentColor/.test(logoSvg.innerHTML), 'logo 不应被改成 currentColor(用户要求颜色不改)');
   assert(
