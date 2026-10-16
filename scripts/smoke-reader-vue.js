@@ -107,6 +107,10 @@ assert(
   '滚动条应主题化(默认 Chromium 深色滚动条与浅色主题不符)'
 );
 assert(
+  /#catalogPanel,\s*#settingsPanel,\s*#shelfPopup,\s*#storagePopup\s*\{[^}]*background:\s*var\(--bg\)/.test(capturedHtml),
+  '弹窗底色应统一为正文纸面色(--bg)'
+);
+assert(
   /\.popup-backdrop\s*\{[^}]*backdrop-filter:\s*blur/.test(capturedHtml),
   '弹窗出现时应有磨砂玻璃背景(backdrop-filter: blur)'
 );

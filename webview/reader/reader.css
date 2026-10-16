@@ -2,8 +2,10 @@
   /* UI 基准字号: 跟随阅读设置的字号(与目录一致), 封顶防止溢出;
      想单独调 UI 大小改这里的系数即可 */
   :root {
-    --ui-font: clamp(15px, var(--font-size), 22px);
-    --ui-font-sub: clamp(12px, calc(var(--font-size) * 0.8), 17px);
+    /* 无衬线(UI 字体)比宋体视觉更大, 取正文的 0.9 倍达到视觉等大;
+       想更小/更大改 0.9 这个系数即可 */
+    --ui-font: clamp(13.5px, calc(var(--font-size) * 0.9), 20px);
+    --ui-font-sub: clamp(11.5px, calc(var(--font-size) * 0.78), 16px);
   }
   html, body { margin: 0; padding: 0; }
   body {
@@ -432,3 +434,21 @@
   }
   .ch-nav-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
   .ch-nav-btn:disabled { opacity: .35; cursor: default; }
+
+  /* ---------- 弹窗统一底色: 用正文纸面色(--bg), 内部控件用页面色(--page-bg)拉开对比 ---------- */
+  #catalogPanel, #settingsPanel, #shelfPopup, #storagePopup {
+    background: var(--bg);
+    color: var(--fg);
+    /* 控件/选中态: 在纸色底上需要更浅/更深的页面色才能看清 */
+    --sp-bg: var(--bg);
+    --sp-control-bg: var(--page-bg);
+    --input-bg: var(--page-bg);
+    --input-fg: var(--fg);
+    --sp-fg: var(--fg);
+  }
+  /* 目录条目 hover/当前章的选中底 */
+  #catalogPanel .cat-item:hover { background: var(--page-bg); }
+  #catalogPanel .cat-item.cur { background: var(--page-bg); }
+  #catalogPanel .cat-btn { background: var(--page-bg); color: var(--fg); }
+  #catalogPanel .cat-btn:hover { border-color: var(--accent); color: var(--accent); }
+  #catalogPanel .cat-head, #catalogPanel .cat-foot { color: var(--fg); }
