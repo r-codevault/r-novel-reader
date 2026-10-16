@@ -47,10 +47,12 @@ function toggle(item: MenuItem): void {
   <nav class="menu" :class="{ expanded: state.menuExpanded }">
     <button class="menu-toggle" :title="state.menuExpanded ? '收起菜单' : '展开菜单'"
       @click="state.menuExpanded = !state.menuExpanded">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-        <path d="M4 6h16M4 12h16M4 18h16" />
+      <!-- 双状态图标: 展开=右侧条纹(内容可见), 收起=左侧条纹(右侧留白); 均由 CSS 控制显隐 -->
+      <svg viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true">
+        <path d="M878.592 198.656H147.456c-12.288 0-22.528 10.24-22.528 22.528v602.112c0 6.144 2.048 12.288 6.144 16.384 4.096 4.096 10.24 6.144 16.384 6.144h731.136c6.144 0 12.288-2.048 16.384-6.144 4.096-4.096 6.144-10.24 6.144-16.384V219.136c0-6.144-2.048-12.288-6.144-16.384-4.096-2.048-10.24-4.096-16.384-4.096z m-696.32 55.296h161.792v534.528H182.272V253.952z m663.552 534.528H399.36V253.952h446.464v534.528z m0 0" />
+        <path class="dw-lines-right" d="M514.048 356.352h206.848v55.296H514.048v-55.296z m0 145.408h206.848v55.296H514.048v-55.296z m0 145.408h206.848v55.296H514.048v-55.296z m0 0" />
+        <path class="dw-lines-left" d="M205.824 356.352h96.768v55.296H205.824v-55.296z m0 145.408h96.768v55.296H205.824v-55.296z m0 145.408h96.768v55.296H205.824v-55.296z m0 0" />
       </svg>
-      <span class="menu-label">菜单</span>
     </button>
     <button v-for="it in items" :key="it.id" class="menu-item"
       :class="{ active: state[it.key] }" :data-menu="it.id" :title="it.name" @click="toggle(it)">

@@ -405,6 +405,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   console.log('侧边菜单(占位布局/展开收起/4 功能项): 通过');
 
+  // 切换按钮: 双状态图标(展开=右侧条纹, 收起=左侧条纹) + 无「菜单」文字
+  const toggleHtml = document.querySelector('.menu-toggle').innerHTML;
+  assert(!toggleHtml.includes('菜单'), '切换按钮不应再显示「菜单」文字(仅保留 hover 提示)');
+  assert(document.querySelector('.menu-toggle .dw-lines-right'), '切换图标应含右侧条纹路径(展开态)');
+  assert(document.querySelector('.menu-toggle .dw-lines-left'), '切换图标应含左侧条纹路径(收起态)');
+  assert(document.querySelector('.menu-toggle').getAttribute('title'), '切换按钮应保留 hover 提示(title)');
+  assert(
+    /\.menu:not\(\.expanded\) \.dw-lines-right\s*\{\s*display:\s*none/.test(capturedHtml),
+    '收起态应隐藏右侧条纹'
+  );
+
   // 书架弹窗
   menuItem('shelf').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);

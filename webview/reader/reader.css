@@ -309,6 +309,13 @@
   }
   .menu svg { width: 18px; height: 18px; flex: none; }
   .menu-label { opacity: 0; transition: opacity .12s ease; }
+  /* 切换按钮: 双状态图标(展开=右侧条纹, 收起=左侧条纹) */
+  .menu-toggle svg { width: 20px; height: 20px; }
+  .menu .dw-lines-left { display: none; }
+  .menu.expanded .dw-lines-right { display: block; }
+  .menu.expanded .dw-lines-left { display: none; }
+  .menu:not(.expanded) .dw-lines-right { display: none; }
+  .menu:not(.expanded) .dw-lines-left { display: block; }
   .menu.expanded .menu-label { opacity: 1; }
 
   /* ---------- 统一弹窗(书架 / 存储; 目录与设置沿用各自样式, 同样居中于阅读区) ---------- */
