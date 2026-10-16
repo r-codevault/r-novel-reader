@@ -459,6 +459,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     );
     const views = c.views['r-novel-reader'];
     assert(views && views.length === 1 && views[0].id === 'novelReaderHome', '活动栏应只有一个入口视图');
+    assert(views[0].name === '阅读', '入口视图名应为「阅读」');
     assert(views[0].type === 'webview', '入口视图应为 webview');
     assert(!(c.menus['view/title'] || []).length, '不应再有 view/title 菜单(旧三视图遗留)');
     const cmds = c.commands.map((x) => x.command);
@@ -468,13 +469,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     }
     assert(pkgJson.activationEvents.includes('onStartupFinished'), '启动自动恢复需 onStartupFinished');
 
-    // 入口视图(launcher)协议与按钮
+    // 入口视图(launcher)为动作型: 点图标收起侧边栏并打开阅读面板
     const launcherSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'launcherViewProvider.ts'), 'utf8');
-    for (const t of ['continue', 'bookshelf', 'catalog', 'storage', 'openFile']) {
-      assert(launcherSrc.includes("'" + t + "'") || launcherSrc.includes('type: ' + "'" + t + "'"), '入口视图应支持动作: ' + t);
-    }
     assert(/novelReaderHome/.test(launcherSrc), '入口视图 id 应为 novelReaderHome');
-    assert(/btnContinue|btnShelf|btnCatalog|btnStorage|btnAdd/.test(launcherSrc), '入口视图应有直达按钮');
+    assert(/workbench\.action\.closeSidebar/.test(launcherSrc), '入口视图应自动收起侧边栏(图标不留面板)');
+    assert(/onActivate/.test(launcherSrc), '入口视图应有激活动作钩子');
+    assert(!/btnShelf|我的书架/.test(launcherSrc), '入口视图不应再渲染书架等 UI(只留图标动作)');
 
     const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
     assert(/createStatusBarItem/.test(src), '应有状态栏入口');

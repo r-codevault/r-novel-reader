@@ -54,8 +54,9 @@ export function activate(context: vscode.ExtensionContext): void {
     ReaderPanel.getShelf = () => shelfItems();
     ReaderPanel.getLibrary = () => getLibraryPath();
 
-    // 活动栏入口视图(极简启动页: 当前在读 + 直达按钮; 列表 UI 在阅读面板左抽屉)
+    // 活动栏图标: 动作型入口(点图标 -> 收起侧边栏并打开阅读面板)
     const launcher = new LauncherViewProvider();
+    launcher.onActivate = () => void openReaderFromLauncher();
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(LauncherViewProvider.viewType, launcher, {
             webviewOptions: { retainContextWhenHidden: true },
@@ -87,21 +88,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
     function refreshShelfView(): void {
         ReaderPanel.setShelf(shelfItems());
-        syncLauncher();
-    }
-
-    /** 活动栏入口视图: 当前在读的书 */
-    function syncLauncher(): void {
-        const entry = currentNovel ? shelf.get(currentNovel.filePath) : undefined;
-        launcher.setCurrent(
-            currentNovel
-                ? {
-                      title: currentNovel.bookTitle,
-                      chapterIndex: entry && entry.chapterIndex >= 0 ? entry.chapterIndex : -1,
-                      totalChapters: currentNovel.chapters.length,
-                  }
-                : null
-        );
     }
 
     /** 书库目录(空 = 未设置, 直接读取原路径); 由 SettingsStore 统一读写 */
@@ -210,7 +196,30 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ---------------------------------------------------------------- 命令
 
-        // 抽屉入口(命令面板 / 快捷键): 打开阅读面板并切到对应页签
+        /** 活动栏图标动作: 打开阅读面板(在读则续读, 否则引导添加) */
+    async function openReaderFromLauncher(): Promise<void> {
+        const novel = await ensureNovel();
+        if (!novel) {
+            const picked = await vscode.window.showInformationMessage(
+                '书架里还没有小说，先添加一本吧。',
+                '添加书籍'
+            );
+            if (picked === '添加书籍') {
+                await vscode.commands.executeCommand('novelReader.openFile');
+            }
+            return;
+        }
+        const entry = shelf.get(novel.filePath);
+        const chapterIndex =
+            ReaderPanel.current?.chapterIndex ??
+            (entry && entry.chapterIndex >= 0 ? entry.chapterIndex : 0);
+        const scrollRatio = ReaderPanel.current?.scrollRatio ?? (entry ? entry.scrollRatio : 0);
+        ReaderPanel.createOrShow(novel, chapterIndex, scrollRatio, store);
+        refreshShelfView();
+        syncLibraryToView();
+    }
+
+    // 抽屉入口(命令面板 / 快捷键): 打开阅读面板并切到对应页签
         async function openDrawerAt(tab: DrawerTab): Promise<void> {
             const novel = await ensureNovel();
             if (!novel) {
