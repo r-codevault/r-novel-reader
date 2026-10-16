@@ -51,6 +51,11 @@ function closeAllPopups(): void {
   state.storageOpen = false;
 }
 
+/** 有弹窗时的磨砂玻璃背景(点击可关闭弹窗) */
+function onBackdropClick(): void {
+  closeAllPopups();
+}
+
 function openOnly(key: typeof popupKeys[number]): void {
   closeAllPopups();
   state[key] = true;
@@ -208,6 +213,8 @@ onMounted(function () {
   <div class="shell">
     <SideMenu />
     <div class="main">
+      <!-- 弹窗磨砂背景: 覆盖阅读区(菜单保持清晰可点), 点击关闭弹窗 -->
+      <div v-if="anyPopupOpen()" class="popup-backdrop" @mousedown="onBackdropClick"></div>
       <CatalogPanel ref="catalogRef" />
       <SettingsPanel ref="settingsRef" />
       <ShelfPopup ref="shelfRef" />

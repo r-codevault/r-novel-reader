@@ -107,6 +107,14 @@ assert(
   '滚动条应主题化(默认 Chromium 深色滚动条与浅色主题不符)'
 );
 assert(
+  /\.popup-backdrop\s*\{[^}]*backdrop-filter:\s*blur/.test(capturedHtml),
+  '弹窗出现时应有磨砂玻璃背景(backdrop-filter: blur)'
+);
+assert(
+  /#shelfPopup[^{]*\{[^}]*width:\s*max-content/.test(capturedHtml),
+  '书架/存储弹窗应随内容撑开(width: max-content)'
+);
+assert(
   /scrollbarSlider-background/.test(capturedHtml),
   '应映射 --vscode-scrollbarSlider-*(VS Code 注入的滚动条样式用这几个变量)'
 );
@@ -296,6 +304,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(20);
   assert(!$('#storagePopup').classList.contains('open'), '再点同一菜单项应收起弹窗');
   console.log('弹窗互斥(目录/设置/书架/存储): 通过');
+
+  // 磨砂玻璃背景: 弹窗出现时存在, 点击背景关闭
+  menuItem('shelf').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(document.querySelector('.popup-backdrop'), '弹窗出现时应有磨砂玻璃背景');
+  document.querySelector('.popup-backdrop').dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+  await sleep(30);
+  assert(!document.querySelector('.popup-backdrop'), '点击背景应关闭弹窗并移除背景');
+  assert(!$('#shelfPopup').classList.contains('open'), '点击背景后弹窗应关闭');
+  console.log('磨砂背景(出现/点击关闭): 通过');
+
 
   // 上一章悬浮球
   dispatch('chapter', { index: 1, title: '第2章 标题2', paragraphs: ['a'], totalChapters: 5, chapterWords: 1, scrollRatio: 0 });
