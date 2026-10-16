@@ -106,13 +106,13 @@ defineExpose({ positionHandles });
       <h2 class="chapter-title">{{ chapter ? chapter.title : '' }}</h2>
       <p v-if="paras.length === 0" class="empty-tip">(本章无内容)</p>
       <p v-for="(p, i) in paras" :key="i">{{ p }}</p>
-
-      <!-- 章节底部导航(跟随页面滚动) -->
-      <div class="ch-nav" v-if="chapter">
-        <button class="ch-nav-btn" :disabled="isFirst" @click="prevChapter">← 上一章</button>
-        <button class="ch-nav-btn" :disabled="isLast" @click="nextChapter">下一章 →</button>
-      </div>
     </article>
+
+    <!-- 章节底部导航(纸面外侧, 跟随页面滚动) -->
+    <div class="ch-nav" v-if="chapter">
+      <button class="ch-nav-btn" :disabled="isFirst" @click="prevChapter">← 上一章</button>
+      <button class="ch-nav-btn" :disabled="isLast" @click="nextChapter">下一章 →</button>
+    </div>
     <div ref="handleLeftRef" class="width-handle" :style="handleLeftStyle" aria-hidden="true"
       @pointerdown="beginWidthDrag('left', $event)"></div>
     <div ref="handleRightRef" class="width-handle" :style="handleRightStyle" aria-hidden="true"

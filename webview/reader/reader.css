@@ -385,11 +385,11 @@
   .bk:hover .bp-del { opacity: .6; }
   .bp-del:hover { opacity: 1; background: var(--sp-hover); color: #d9534f; }
 
-  /* ---------- 正文底部章节导航(跟随页面滚动) ---------- */
+  /* ---------- 章节导航(纸面外侧留白区, 跟随页面滚动) ---------- */
   .ch-nav {
     display: flex; gap: 12px; justify-content: center;
-    margin-top: 40px; padding-top: 22px;
-    border-top: 1px solid var(--chrome-border);
+    margin: 18px auto 0;
+    max-width: var(--content-width);
   }
   .ch-nav-btn {
     min-width: 120px; padding: 8px 18px;
@@ -397,6 +397,7 @@
     color: var(--fab-fg); background: var(--fab-bg);
     border: 1px solid var(--fab-border); border-radius: 8px;
     cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
   }
   .ch-nav-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
   .ch-nav-btn:disabled { opacity: .35; cursor: default; }

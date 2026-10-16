@@ -407,8 +407,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log('存储弹窗(目录展示/按钮): 通过');
 
   // 底部章节导航(跟随页面滚动的正文尾部按钮)
-  const chNavs = Array.from(document.querySelectorAll('#content .ch-nav-btn'));
-  assert(chNavs.length === 2, '正文底部应有上一章/下一章两个按钮(实际 ' + chNavs.length + ')');
+  const chNavs = Array.from(document.querySelectorAll('#reader .ch-nav-btn'));
+  assert(chNavs.length === 2, '应有两个章节导航按钮(实际 ' + chNavs.length + ')');
+  assert(!document.querySelector('#content .ch-nav'), '章节导航应在纸面外侧(#content 之外)');
   posted.length = 0;
   chNavs[0].dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
