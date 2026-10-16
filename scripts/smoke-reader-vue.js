@@ -416,12 +416,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const order = Array.from(document.querySelector('.menu').children).map((el) =>
     el.classList.contains('menu-divider') ? 'divider' : el.getAttribute('data-menu'));
   assert(
-    JSON.stringify(order) === JSON.stringify([null, 'shelf', 'catalog', 'statusbar', 'settings', 'storage', 'divider']),
-    '菜单顺序应为 书架/目录/状态栏/阅读设置/存储位置 + 末尾分割线, 实际: ' + JSON.stringify(order)
+    JSON.stringify(order) === JSON.stringify([null, 'divider', 'shelf', 'catalog', 'statusbar', 'settings', 'storage']),
+    '菜单顺序应为 折叠按钮 + 分割线 + 书架/目录/状态栏/阅读设置/存储位置, 实际: ' + JSON.stringify(order)
   );
   assert(
-    document.querySelector('.menu').lastElementChild.classList.contains('menu-divider'),
-    '分割线应在菜单最下方'
+    document.querySelector('.menu').children[1].classList.contains('menu-divider'),
+    '分割线应在折叠按钮之后(菜单项之前)'
   );
   // 图标尺寸统一(原菜单项 18px < toggle 20px); happy-dom 无布局, 断言 CSS 规则
   assert(/\.menu svg\s*\{[^}]*width:\s*20px/.test(capturedHtml), '菜单图标应统一 20px');

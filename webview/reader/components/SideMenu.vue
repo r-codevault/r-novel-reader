@@ -80,6 +80,10 @@ function toggle(item: MenuItem): void {
         <path class="dw-lines-left" d="M205.824 356.352h96.768v55.296H205.824v-55.296z m0 145.408h96.768v55.296H205.824v-55.296z m0 145.408h96.768v55.296H205.824v-55.296z m0 0" />
       </svg>
     </button>
+
+    <!-- 菜单分隔线(位于折叠按钮与菜单项之间) -->
+    <div class="menu-divider"></div>
+
     <button v-for="it in items.filter(function (x) { return x.id === 'shelf' || x.id === 'catalog'; })"
       :key="it.id" class="menu-item" :class="{ active: state[it.key] }" :data-menu="it.id"
       :title="it.name" @click="toggle(it)">
@@ -113,8 +117,5 @@ function toggle(item: MenuItem): void {
       <span class="menu-ico" v-html="it.svg"></span>
       <span class="menu-label">{{ it.name }}</span>
     </button>
-
-    <!-- 菜单分隔线(放在菜单最下方) -->
-    <div class="menu-divider"></div>
   </nav>
 </template>
