@@ -411,6 +411,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('.menu-toggle .dw-lines-right'), '切换图标应含右侧条纹路径(展开态)');
   assert(document.querySelector('.menu-toggle .dw-lines-left'), '切换图标应含左侧条纹路径(收起态)');
   assert(document.querySelector('.menu-toggle').getAttribute('title'), '切换按钮应保留 hover 提示(title)');
+  assert(
+    /\.progress-fill\s*\{[^}]*background:\s*var\(--sp-accent\)/.test(capturedHtml),
+    '底部进度条填充应存在, 且与侧边栏高亮同色(--sp-accent)'
+  );
   assert(!/\.menu-toggle\s*\{[^}]*color:\s*var\(--sp-muted\)/.test(capturedHtml),
     'toggle 图标颜色不应偏淡(与菜单项一致)');
   assert(/\.menu-ico\s*\{/.test(capturedHtml), '菜单项应有图标容器 .menu-ico');
