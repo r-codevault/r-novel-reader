@@ -312,6 +312,8 @@
     border: none; border-left: 3px solid transparent;
     cursor: pointer; text-align: left;
     white-space: nowrap;
+    /* 收起/展开时左右位置平滑过渡(避免动画期间图标左右乱跳) */
+    transition: padding-left .18s ease;
   }
   .menu-toggle { color: var(--sp-fg); opacity: .85; }
   .menu-toggle:hover, .menu-item:hover { background: var(--sp-hover); }
@@ -337,7 +339,11 @@
     justify-content: flex-start;
   }
   .menu-toggle svg { width: 46px; height: 46px; transition: width .18s ease, height .18s ease; }
+  /* 收起态(48px 栏): logo 与菜单图标统一"水平居中"于同一中轴
+     (border-left 3px + padding-left: logo 9px -> 28px logo 居中; 图标 11px + 20px 图标居中) */
   .menu:not(.expanded) .menu-toggle svg { width: 28px; height: 28px; }
+  .menu:not(.expanded) .menu-toggle { padding-left: 9px; }
+  .menu:not(.expanded) .menu-item { padding-left: 11px; }
   .menu.expanded .menu-label { opacity: 1; }
 
   /* ---------- 统一弹窗(书架 / 存储; 目录与设置沿用各自样式, 同样居中于阅读区) ---------- */

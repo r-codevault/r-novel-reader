@@ -527,8 +527,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '收起态 logo 应缩到 28px 并与图标列同左缘对齐'
   );
   assert(
-    !/\.menu:not\(\.expanded\) \.menu-toggle\s*\{[^}]*padding-left/.test(capturedHtml),
-    '收起态不应改 padding-left(会让左缘在两态间跳变)'
+    /\.menu:not\(\.expanded\) \.menu-toggle\s*\{[^}]*padding-left:\s*9px/.test(capturedHtml),
+    '收起态 logo 应居中(padding-left: 9px)'
+  );
+  assert(
+    /\.menu:not\(\.expanded\) \.menu-item\s*\{[^}]*padding-left:\s*11px/.test(capturedHtml),
+    '收起态菜单图标应水平居中(padding-left: 11px)'
+  );
+  assert(
+    /\.menu-toggle,\s*\.menu-item\s*\{[^}]*transition:\s*padding-left/.test(capturedHtml),
+    '左右位置应可过渡(收起/展开时图标平滑移动)'
   );
   assert(
     /viewBox="158 184 686 720"/.test(capturedHtml) || /viewBox="158 184 686 720"/.test(fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'components', 'SideMenu.vue'), 'utf8')),
