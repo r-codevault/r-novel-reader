@@ -335,7 +335,7 @@
            justify-content, 宽度动画进行中会算错位置(logo 会甩向右侧再回来)。 */
   .menu-toggle {
     border-left: none;
-    padding: 0 0 2px 17px; /* 顶部贴齐, 仅留底部 2px 与分隔线的间距 */
+    padding: 10px 0 10px 17px; /* 上下内边距与其它菜单项一致(10px) */
     justify-content: flex-start;
   }
   .menu-toggle svg { width: 46px; height: 46px; transition: width .18s ease, height .18s ease; }

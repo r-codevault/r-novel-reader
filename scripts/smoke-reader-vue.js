@@ -532,8 +532,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '展开态 logo 应为 46px'
   );
   assert(
-    /\.menu-toggle\s*\{[^}]*padding:\s*0\s+0\s+2px\s+17px/.test(capturedHtml),
-    'logo 应顶部贴齐(无上内边距), 左边距 17px 与图标对齐'
+    /\.menu-toggle\s*\{[^}]*padding:\s*10px\s+0\s+10px\s+17px/.test(capturedHtml),
+    'logo 行上下内边距应与其他菜单项一致(10px), 左边距 17px 与图标对齐'
   );
   assert(
     /\.menu\s*\{[^}]*padding-top:\s*0/.test(capturedHtml),
