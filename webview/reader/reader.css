@@ -532,8 +532,11 @@
   .sp-caret { width: 12px; height: 12px; flex: none; opacity: .7; }
   .sp-province-menu {
     position: absolute; top: calc(100% + 4px); left: 0; z-index: 40;
-    width: 236px; max-height: 268px; overflow-y: auto;
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px;
+    /* 宽高都交给内容: 不写死尺寸、不设 max-height/overflow ->
+       列表自动撑开(34 省 5 列 7 行), 任何字号下都不会出现下拉自带滚动条 */
+    width: max-content;
+    max-width: min(92vw, 380px);
+    display: grid; grid-template-columns: repeat(5, auto); gap: 2px;
     padding: 6px;
     background: var(--sp-control-bg);
     border: 1px solid var(--sp-border);
@@ -541,7 +544,7 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
   }
   .sp-province-item {
-    padding: 4px 2px;
+    padding: 3px 2px;
     font-family: var(--vscode-font-family, inherit);
     font-size: clamp(10px, calc(var(--font-size) * .68), 13px);
     color: var(--sp-fg);

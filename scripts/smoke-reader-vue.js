@@ -502,6 +502,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   const provItems = document.querySelectorAll('#settingsPanel .sp-province-menu .sp-province-item');
   assert(provItems.length === 34, '展开后应有 34 个省级区域(实际 ' + provItems.length + ')');
+  // 列表必须完全展开(自适应内容), 不能再出现自带滚动条
+  // (happy-dom 无 getComputedStyle, 直接断言 CSS 规则)
+  {
+    const menuRule = /\.sp-province-menu\s*\{([^}]*)\}/.exec(capturedHtml);
+    assert(menuRule, '应存在 .sp-province-menu 样式规则');
+    const css = menuRule[1];
+    assert(/width:\s*max-content/.test(css), '省份列表宽度应自适应内容(max-content)');
+    assert(!/max-height/.test(css), '省份列表不应限制高度(应由内容撑开)');
+    assert(!/overflow(-y)?:\s*(auto|scroll)/.test(css), '省份列表不应有滚动条');
+  }
   posted.length = 0;
   const gdItem = Array.from(provItems).find((el) => (el.textContent || '').trim() === '广东');
   assert(gdItem, '省份列表应包含「广东」');
