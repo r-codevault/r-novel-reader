@@ -13,7 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { parseNovel, deriveTitleAuthor, Novel } from './novelParser';
-import { ReaderPanel, ShelfItemView, DrawerTab, ReaderPanelState } from './readerPanel';
+import { ReaderPanel, ShelfItemView, DrawerTab } from './readerPanel';
 import { ShelfStore } from './shelf';
 import { ensureInLibrary, isInsideDir } from './library';
 import { shelfBookKey, planDuplicateRemoval } from './shelfMaintenance';
@@ -54,27 +54,6 @@ export function activate(context: vscode.ExtensionContext): void {
     // 书架/目录/存储 已并入阅读面板左抽屉; 面板未打开时用状态栏按钮或命令面板进入
     ReaderPanel.getShelf = () => shelfItems();
     ReaderPanel.getLibrary = () => getLibraryPath();
-
-    // ---------------------------------------------------------------- 阅读页窗口恢复
-    // VS Code 重开窗口会尝试恢复上次的 webview; 这里接管它:
-    // 默认(设置 novelReader.restoreOnStartup = false)直接丢弃, 不让阅读页自动弹出;
-    // 需要"重开窗口继续读"的用户可在设置里打开, 届时会重新解析并还原章节/位置。
-    context.subscriptions.push(
-        vscode.window.registerWebviewPanelSerializer(ReaderPanel.viewType, {
-            async deserializeWebviewPanel(
-                panel: vscode.WebviewPanel,
-                state: unknown
-            ): Promise<void> {
-                const enabled = store.get().restoreOnStartup;
-                await ReaderPanel.restore(
-                    panel,
-                    state as ReaderPanelState | undefined,
-                    store,
-                    enabled
-                );
-            },
-        })
-    );
 
     // 状态栏入口(活动栏侧边栏移除后的常驻入口)
     const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);

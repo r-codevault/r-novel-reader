@@ -45,8 +45,6 @@ export interface ReadingSettings {
   shortcutNext: string;
   /** 是否显示底部状态栏(默认显示; 由侧边菜单「状态栏」项切换) */
   showStatusBar: boolean;
-  /** 重开 VS Code 时是否恢复上次打开的阅读页(关闭则丢弃 VS Code 恢复的阅读页 Tab) */
-  restoreOnStartup: boolean;
   /** 正文栏宽: 视口宽度比例(0 = 关闭, 使用 contentWidth 的像素值) */
   widthRatio: number;
   /** 地域色彩主题: 省级行政区代码(见 provinceColors.ts), theme=province 时生效 */
@@ -220,7 +218,6 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
   shortcutNext: "alt+arrowright",
   showStatusBar: true,
 
-  restoreOnStartup: false,
   widthRatio: 0,
   province: DEFAULT_PROVINCE_CODE,
   term: DEFAULT_TERM_ID,
@@ -240,7 +237,6 @@ const SETTING_KEYS: (keyof ReadingSettings)[] = [
   "shortcutNext",
   "showStatusBar",
 
-  "restoreOnStartup",
   "widthRatio",
   "province",
   "term",
@@ -293,7 +289,6 @@ function configDefaults(): ReadingSettings {
     ),
     showStatusBar: DEFAULT_SETTINGS.showStatusBar,
 
-    restoreOnStartup: DEFAULT_SETTINGS.restoreOnStartup,
     widthRatio: 0,
     province: DEFAULT_SETTINGS.province,
     term: DEFAULT_SETTINGS.term,
@@ -334,9 +329,6 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
   // 主题白名单: 6 个预设 + province(地域色彩, 不在 THEMES 里但合法)
   if (typeof s.theme === "string" && (s.theme === "province" || s.theme === "term" || THEMES.some((t) => t.id === s.theme))) {
     out.theme = s.theme;
-  }
-  if (typeof s.restoreOnStartup === "boolean") {
-    out.restoreOnStartup = s.restoreOnStartup;
   }
   if (typeof s.widthRatio === "number" && isFinite(s.widthRatio) && s.widthRatio >= 0 && s.widthRatio <= 1) {
     // 只接受预设比例或 0(自定义像素)

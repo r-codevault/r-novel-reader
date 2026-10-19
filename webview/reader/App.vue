@@ -5,7 +5,7 @@
  * 弹窗互斥: 任何时刻最多一个弹窗(目录/阅读设置/书架/存储)
  */
 import { onMounted, nextTick, ref, watch } from 'vue';
-import { state, vscode, gotoChapter, saveRestoreState, type ChapterPayload, type DrawerTab, type ShelfItemView } from './composables/vscode';
+import { state, vscode, gotoChapter, type ChapterPayload, type DrawerTab, type ShelfItemView } from './composables/vscode';
 import { applyThemeVars, DEFAULT_SETTINGS, persistSettings, sendProgress, type ReadingSettings } from './store';
 import { parseShortcut, matchShortcut } from './composables/shortcut';
 import CatalogPanel from './components/CatalogPanel.vue';
@@ -102,7 +102,6 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.catReverse = false;
       state.catCollapsed = [];
       applySettings(p.settings as ReadingSettings);
-      saveRestoreState({ filePath: (p.filePath as string) || '', chapterIndex: 0, scrollRatio: 0 });
       state.chapter = {
         index: p.chapterIndex as number,
         title: p.chapterTitle as string,

@@ -3,7 +3,7 @@
  */
 import { reactive } from 'vue';
 import type { ReadingSettings, ThemeDef } from '../../src/settings';
-import { state, send, saveRestoreState, type ChapterPayload } from './composables/vscode';
+import { state, send, type ChapterPayload } from './composables/vscode';
 import { parseShortcut } from './composables/shortcut';
 
 /** 由构建期注入的常量(虚拟模块, 见 vite.config.mjs; 单一来源 src/settings.ts) */
@@ -186,10 +186,6 @@ export function sendProgress(immediate: boolean): void {
     const max = document.body.scrollHeight - window.innerHeight;
     const ratio = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
     send({ type: 'saveProgress', chapterIndex: state.chapter.index, scrollRatio: ratio });
-    // 同步写"窗口重开恢复信息"(webview state), 扩展在 restoreOnStartup 开启时据此还原
-    if (state.novel && state.novel.filePath) {
-      saveRestoreState({ filePath: state.novel.filePath, chapterIndex: state.chapter.index, scrollRatio: ratio });
-    }
   };
   if (immediate) {
     send2();

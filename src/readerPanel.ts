@@ -10,9 +10,8 @@
 
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
-import { Novel, parseNovel } from './novelParser';
+import { Novel } from './novelParser';
 import { readWebviewAsset } from './webviewAssets';
-
 import { ReadingSettings, SettingsStore, THEMES, fontStackById, themeById } from './settings';
 
 interface InitPayload {
@@ -62,14 +61,6 @@ type WebviewMessage =
     | { type: 'clearLibrary' }
     | { type: 'openLibraryFolder' }
     | { type: 'refreshLibrary' };
-
-/** 窗口重开时的恢复信息(VS Code 持久化 webview 状态用) */
-export interface ReaderPanelState {
-    filePath: string;
-    title: string;
-    chapterIndex: number;
-    scrollRatio: number;
-}
 
 /** 书架条目(抽屉「书架」页渲染用) */
 export interface ShelfItemView {
@@ -187,54 +178,6 @@ export class ReaderPanel {
         });
         ReaderPanel.current = new ReaderPanel(panel, novel, chapterIndex, scrollRatio, store);
         ReaderPanel.current._openSettingsOnLoad = openSettings;
-    }
-
-    /** 供 serializer 使用: 仅当传入的是当前面板时返回恢复信息 */
-    static serializeFor(panel: vscode.WebviewPanel): ReaderPanelState | undefined {
-        return ReaderPanel.current && ReaderPanel.current._panel === panel
-            ? ReaderPanel.current._serialize()
-            : undefined;
-    }
-
-    /** 窗口重开时保存给 VS Code 的恢复信息 */
-    _serialize(): ReaderPanelState | undefined {
-        if (!this._novel) {
-            return undefined;
-        }
-        return {
-            filePath: this._novel.filePath,
-            title: this._novel.bookTitle,
-            chapterIndex: this._chapterIndex,
-            scrollRatio: this._scrollRatio,
-        };
-    }
-
-    /**
-     * VS Code 重开窗口时反序列化阅读页。
-     * - 开关关闭(默认)或状态无效: 直接丢弃这个恢复出来的 Tab, 不打扰启动
-     * - 开关开启: 重新解析小说并接管该面板, 还原章节与章内位置
-     */
-    static async restore(
-        panel: vscode.WebviewPanel,
-        state: ReaderPanelState | undefined,
-        store: SettingsStore,
-        restoreOnStartup: boolean
-    ): Promise<boolean> {
-        if (!restoreOnStartup || !state || !state.filePath) {
-            panel.dispose();
-            return false;
-        }
-        try {
-            const raw = await vscode.workspace.fs.readFile(vscode.Uri.file(state.filePath));
-            const novel = parseNovel(Buffer.from(raw).toString('utf-8'), state.filePath);
-            const idx = Math.min(Math.max(0, state.chapterIndex || 0), Math.max(0, novel.chapters.length - 1));
-            ReaderPanel.current = new ReaderPanel(panel, novel, idx, state.scrollRatio || 0, store);
-            return true;
-        } catch {
-            // 源文件被移动/删除: 不静默留一个坏面板
-            panel.dispose();
-            return false;
-        }
     }
 
     /** 侧边栏点击章节 / 上一章 / 下一章 */

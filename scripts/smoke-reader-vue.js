@@ -959,25 +959,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       'launcher 入口文件应已删除'
     );
     console.log('扩展清单(无活动栏入口/状态栏常驻/命令齐备): 通过');
-
-  // 窗口重开恢复: 默认关闭(不自动弹出阅读页), 开启时可还原
-  {
-    const extSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
-    const panelSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'readerPanel.ts'), 'utf8');
-    const settingsSrc2 = fs.readFileSync(path.join(__dirname, '..', 'src', 'settings.ts'), 'utf8');
-    const storeSrc2 = fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'store.ts'), 'utf8');
-    assert(/registerWebviewPanelSerializer/.test(extSrc), '应注册 WebviewPanelSerializer 以接管窗口恢复');
-    assert(/static async restore\(/.test(panelSrc), 'ReaderPanel 应提供 restore 反序列化入口');
-    assert(/!restoreOnStartup[\s\S]{0,80}panel\.dispose\(\)/.test(panelSrc),
-      '开关关闭时必须直接 dispose 恢复出来的面板(否则仍会自动打开)');
-    assert(/restoreOnStartup: false/.test(settingsSrc2), 'restoreOnStartup 默认应为 false');
-    assert(/saveRestoreState\(/.test(storeSrc2), 'webview 应写入恢复信息(webview state)');
-    const pkgJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
-    const prop = pkgJson.contributes.configuration.properties['novelReader.restoreOnStartup'];
-    assert(prop, '清单应声明 novelReader.restoreOnStartup 设置项');
-    assert(prop.default === false, '该设置默认应为 false');
-    console.log('窗口重开恢复(开关默认关闭/关闭即丢弃/可还原): 通过');
-  }
   }
 
   console.log('\n阅读面板 Vue 冒烟测试全部通过 ✔');
