@@ -12,7 +12,8 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { Novel } from './novelParser';
 import { readWebviewAsset } from './webviewAssets';
-import { ReadingSettings, SettingsStore, THEMES, fontStackById, themeById } from './settings';
+import { fetchDailyColor } from './dailyColor';
+import { ReadingSettings, SettingsStore, THEMES, beijingDateKey, fontStackById, localDailyColor, themeById } from './settings';
 
 interface InitPayload {
     filePath: string;
@@ -35,6 +36,10 @@ interface InitPayload {
     shelf: ShelfItemView[];
     /** 书库目录(抽屉「存储」页) */
     libraryPath: string;
+    /** 每日一色的推导色板(theme=daily 时 webview 直接使用) */
+    dailyTheme?: import('./settings').ThemeDef;
+    /** 今日色原始信息(色名/原始色值, 界面展示用) */
+    dailyInfo?: { name: string; hex: string };
 }
 
 interface ChapterPayload {
@@ -60,7 +65,10 @@ type WebviewMessage =
     | { type: 'pickLibrary' }
     | { type: 'clearLibrary' }
     | { type: 'openLibraryFolder' }
-    | { type: 'refreshLibrary' };
+    | { type: 'refreshLibrary' }
+    // 每日一色
+    | { type: 'applyDaily' }
+    | { type: 'setDailySource'; source: 'local' | 'remote' };
 
 /** 书架条目(抽屉「书架」页渲染用) */
 export interface ShelfItemView {
@@ -213,7 +221,10 @@ export class ReaderPanel {
     }
 
     static updateSettings(settings: ReadingSettings): void {
-        ReaderPanel.current?._panel.webview.postMessage({ type: 'settings', payload: settings });
+        const inst = ReaderPanel.current;
+        if (inst) {
+            inst._postSettings(settings);
+        }
     }
 
     /** 推送书架列表(抽屉「书架」页实时刷新) */
@@ -296,14 +307,14 @@ export class ReaderPanel {
                 });
                 void this._store.update(msg.patch).then((next) => {
                     this._settings = next;
-                    this._panel.webview.postMessage({ type: 'settings', payload: next });
+                    this._postSettings(next);
                     ReaderPanel.onDidChangeSettings?.(next);
                 });
                 break;
             case 'resetSettings':
                 void this._store.reset().then((next) => {
                     this._settings = next;
-                    this._panel.webview.postMessage({ type: 'settings', payload: next });
+                    this._postSettings(next);
                     ReaderPanel.onDidChangeSettings?.(next);
                 });
                 break;
@@ -350,6 +361,23 @@ export class ReaderPanel {
                         );
                     });
                 break;
+            case 'applyDaily':
+                // 应用每日一色: 先确保今日色是当天的, 再切主题
+                void this._ensureDaily().then(async () => {
+                    const next = await this._store.update({ theme: 'daily' });
+                    this._postSettings(next);
+                    ReaderPanel.onDidChangeSettings?.(next);
+                });
+                break;
+            case 'setDailySource':
+                void this._store
+                    .update({ dailySource: msg.source === 'remote' ? 'remote' : 'local', dailyDate: '' })
+                    .then((next) => {
+                        this._settings = next;
+                        // 切来源后立即重取今日色(remote 会去抓官网)
+                        return this._ensureDaily();
+                    });
+                break;
         }
     }
 
@@ -385,9 +413,57 @@ export class ReaderPanel {
             openSettings: this._openSettingsOnLoad,
             shelf: ReaderPanel.getShelf ? ReaderPanel.getShelf() : [],
             libraryPath: ReaderPanel.getLibrary ? ReaderPanel.getLibrary() : '',
+            dailyTheme: themeById('daily', undefined, this._settings.dailyName, this._settings.dailyHex),
+            dailyInfo: {
+                name: this._settings.dailyName || localDailyColor().name,
+                hex: this._settings.dailyHex || localDailyColor().hex,
+            },
         };
         this._openSettingsOnLoad = false;
         this._panel.webview.postMessage({ type: 'init', payload });
+    }
+
+    /** 下发设置(附带每日一色推导好的主题, webview 直接查用) */
+    private _postSettings(next: ReadingSettings): void {
+        this._settings = next;
+        this._panel.webview.postMessage({
+            type: 'settings',
+            payload: {
+                ...next,
+                dailyTheme: themeById('daily', undefined, next.dailyName, next.dailyHex),
+                dailyInfo: { name: next.dailyName || localDailyColor().name, hex: next.dailyHex || localDailyColor().hex },
+            },
+        });
+    }
+
+    /**
+     * 确保"今日色"是最新的:
+     *  - 已缓存且日期是今天 -> 直接复用
+     *  - 来源 remote -> 抓官网(失败自动回退本地)
+     *  - 来源 local  -> 按日期从本地色库轮换
+     */
+    private async _ensureDaily(): Promise<ReadingSettings> {
+        const today = beijingDateKey();
+        const cur = this._settings;
+        if (cur.dailyDate === today && cur.dailyHex) {
+            return cur;
+        }
+        const local = localDailyColor(today);
+        let hit: { name: string; hex: string } | null = null;
+        if (cur.dailySource === 'remote') {
+            hit = await fetchDailyColor();
+        }
+        const next = await this._store.update({
+            dailyDate: today,
+            dailyName: hit ? hit.name : local.name,
+            dailyHex: hit ? hit.hex : local.hex,
+        });
+        if (cur.dailySource === 'remote' && !hit) {
+            void vscode.window.setStatusBarMessage('$(warning) 官网取色失败，已使用本地每日色', 4000);
+        }
+        this._postSettings(next);
+        ReaderPanel.onDidChangeSettings?.(next);
+        return next;
     }
 
     private _postChapter(): void {

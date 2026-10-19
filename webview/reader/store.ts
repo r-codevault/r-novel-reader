@@ -12,18 +12,32 @@ export { THEMES, FONT_STACKS, DEFAULT_SETTINGS, PROVINCES, PROVINCE_THEMES };
 
 export { state };
 
-export function themeOf(id: string, province?: string): ThemeDef {
+export function themeOf(id: string, province?: string, dailyTheme?: ThemeDef | null): ThemeDef {
   if (id === 'province') {
     // 地域色彩主题: 色板在构建期按 34 个省算好(vite.config), 端上直接查表
     return PROVINCE_THEMES[province || ''] || PROVINCE_THEMES['110000'] || THEMES[0];
+  }
+  if (id === 'daily') {
+    // 每日一色: 色板由扩展按"今日色"推导后随设置下发
+    return dailyTheme || THEMES[0];
   }
   for (const t of THEMES) { if (t.id === id) { return t; } }
   return THEMES[0];
 }
 
+/** 应用「每日一色」主题(取今日色并切换) */
+export function applyDailyTheme(): void {
+  send({ type: 'applyDaily' });
+}
+
+/** 切换每日一色的取色来源: local=本地轮换 / remote=官网每日推荐 */
+export function setDailySource(source: 'local' | 'remote'): void {
+  send({ type: 'setDailySource', source });
+}
+
 /** 把主题色写到 :root CSS 变量(与旧 applySettings 一致) */
 export function applyThemeVars(s: ReadingSettings): void {
-  const t = themeOf(s.theme, s.province);
+  const t = themeOf(s.theme, s.province, state.dailyTheme);
   const root = document.documentElement;
   // 暴露主题 id 供 CSS 按主题分支(如 logo 放射线在浅色/黑夜用不同颜色)
   root.dataset.theme = t.id;

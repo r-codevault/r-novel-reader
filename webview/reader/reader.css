@@ -532,3 +532,39 @@
     border: 1px solid rgba(0, 0, 0, .18);
     flex: none;
   }
+
+  /* ---------- 每日一色: 色块 + 色名/色值 + 来源 + 应用按钮 ---------- */
+  .sp-daily { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+  .sp-daily-chip {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--sp-border); /* 无色时的占位, 避免显示成空洞 */
+    border: 1px solid rgba(0, 0, 0, .18);
+    flex: none;
+  }
+  .sp-daily-name {
+    font-size: clamp(11px, calc(var(--font-size) * .74), 14px);
+    color: var(--sp-fg); font-weight: 600;
+    max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .sp-daily-hex {
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: clamp(10px, calc(var(--font-size) * .66), 13px);
+    color: var(--sp-muted);
+  }
+  .sp-select-sm { max-width: 92px; padding: 4px 6px; }
+  .sp-daily-apply {
+    flex: none;
+    padding: 4px 10px;
+    font-family: var(--vscode-font-family, inherit);
+    font-size: clamp(11px, calc(var(--font-size) * .72), 14px);
+    color: var(--sp-accent);
+    background: transparent;
+    border: 1px solid var(--sp-accent);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .sp-daily-apply:hover:not(:disabled) { background: var(--sp-hover); }
+  .sp-daily-apply.active, .sp-daily-apply:disabled {
+    color: var(--sp-muted); border-color: var(--sp-border);
+    cursor: default;
+  }

@@ -101,6 +101,8 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.chapters = (p.chapters as { index: number; title: string }[]) || [];
       state.catReverse = false;
       state.catCollapsed = [];
+      state.dailyTheme = (p.dailyTheme as import('./store').ThemeDef) || null;
+      state.dailyInfo = (p.dailyInfo as { name: string; hex: string }) || null;
       applySettings(p.settings as ReadingSettings);
       state.chapter = {
         index: p.chapterIndex as number,
@@ -118,9 +120,13 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
     case 'chapter':
       state.chapter = msg.payload as unknown as ChapterPayload;
       break;
-    case 'settings':
+    case 'settings': {
+      const raw = (msg.payload || {}) as Record<string, unknown>;
+      state.dailyTheme = (raw.dailyTheme as import('./store').ThemeDef) || null;
+      state.dailyInfo = (raw.dailyInfo as { name: string; hex: string }) || null;
       applySettings(msg.payload as unknown as ReadingSettings);
       break;
+    }
     case 'openSettings':
       openOnly('settingsOpen');
       break;

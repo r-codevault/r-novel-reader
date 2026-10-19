@@ -4,11 +4,27 @@
  * 面板定位(贴合悬浮球)由 App 协调, 本组件暴露根元素
  */
 import { computed, ref } from 'vue';
-import { state, THEMES, PROVINCES, persistSettings, stepFontSize, stepSetting, resetSettings } from '../store';
+import { state, THEMES, PROVINCES, persistSettings, applyDailyTheme, setDailySource, stepFontSize, stepSetting, resetSettings } from '../store';
 import { shortcutLabel } from '../composables/shortcut';
 
 const rootRef = ref<HTMLElement | null>(null);
 defineExpose({ el: rootRef });
+
+/** 今日色(来自扩展下发的推导色板; 未取过则为空) */
+const dailyColor = computed(function () {
+  return state.dailyTheme ? { name: state.dailyTheme.name, hex: state.dailyTheme.accent } : null;
+});
+
+/** 当前是否正在使用每日一色 */
+const usingDaily = computed(function () {
+  return !!state.settings && state.settings.theme === 'daily';
+});
+
+/** 取色来源切换 */
+function onDailySourceChange(e: Event): void {
+  const v = (e.target as HTMLSelectElement).value;
+  setDailySource(v === 'remote' ? 'remote' : 'local');
+}
 
 /** 当前选中省份(未启用地域主题时也回退到已选省, 便于预览) */
 const provinceCode = computed(function () {
@@ -74,6 +90,24 @@ const shortcutHintText = computed(function () {
           <i v-for="c in provinceColors" :key="c.hex + c.name" class="sp-color-chip"
             :style="{ background: c.hex }" :title="c.name + ' ' + c.hex"></i>
         </span>
+      </div>
+    </div>
+    <!-- 每日一色: 官网每日推荐 / 本地按日轮换, 取一色推导整套阅读色板 -->
+    <div class="sp-row">
+      <span class="sp-label">每日一色</span>
+      <div class="sp-daily">
+        <i class="sp-daily-chip" :style="{ background: dailyColor ? dailyColor.hex : 'transparent' }"
+          :title="dailyColor ? dailyColor.name + ' ' + dailyColor.hex : '尚未取色'"></i>
+        <span class="sp-daily-name">{{ dailyColor ? dailyColor.name : '—' }}</span>
+        <span class="sp-daily-hex">{{ dailyColor ? dailyColor.hex : '' }}</span>
+        <span class="spacer"></span>
+        <select class="sp-select sp-select-sm" :value="settings ? settings.dailySource : 'local'"
+          title="取色来源" @change="onDailySourceChange">
+          <option value="local">本地轮换</option>
+          <option value="remote">官网同步</option>
+        </select>
+        <button class="sp-daily-apply" :class="{ active: usingDaily }"
+          :disabled="usingDaily" @click="applyDailyTheme()">{{ usingDaily ? '已应用' : '应用' }}</button>
       </div>
     </div>
     <div class="sp-row">

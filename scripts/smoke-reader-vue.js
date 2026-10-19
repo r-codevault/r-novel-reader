@@ -513,8 +513,46 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const storeSrc = fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'store.ts'), 'utf8');
   assert(/PROVINCE_THEMES\[province/.test(storeSrc), 'webview themeOf 应从省份色板查表');
   const settingsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'settings.ts'), 'utf8');
-  assert(/s\.theme === "province" \|\| THEMES\.some/.test(settingsSrc), '主题白名单必须放行 province(否则会静默丢弃)');
+  assert(/s\.theme === "province"[^;]*s\.theme === "daily"[^;]*THEMES\.some/.test(settingsSrc),
+    '主题白名单必须放行 province 与 daily(否则会静默丢弃)'
+  );
   assert(/ensureContrast\(/.test(settingsSrc), '色板推导必须做过对比度校正');
+  // 每日一色: 色块/色名/色值 + 来源下拉 + 应用按钮
+  document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(40);
+  const dailyChip = document.querySelector('#settingsPanel .sp-daily .sp-daily-chip');
+  const dailyApply = document.querySelector('#settingsPanel .sp-daily .sp-daily-apply');
+  const dailySrc = document.querySelector('#settingsPanel .sp-daily .sp-select-sm');
+  assert(dailyChip && dailyApply && dailySrc, '设置面板应有「每日一色」行(色块/应用/来源)');
+  assert(dailySrc.querySelectorAll('option').length === 2, '来源应有 本地轮换 / 官网同步 两项');
+  assert(
+    dailySrc.querySelector('option[value="remote"]'),
+    '应提供「官网同步」选项'
+  );
+  posted.length = 0;
+  dailyApply.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(40);
+  assert(posted.some((m) => m.type === 'applyDaily'), '点应用应请求扩展取今日色并切换主题');
+  posted.length = 0;
+  dailySrc.value = 'remote';
+  dailySrc.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await sleep(40);
+  assert(
+    posted.some((m) => m.type === 'setDailySource' && m.source === 'remote'),
+    '切换来源应通知扩展(官网同步)'
+  );
+  document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  // 扩展侧接线: 解析器 + 官网抓取 + 兜底
+  const dailySrcTs = fs.readFileSync(path.join(__dirname, '..', 'src', 'dailyColor.ts'), 'utf8');
+  assert(/parseDailyColor/.test(dailySrcTs) && /cncolor\.art\/daily/.test(dailySrcTs), '应实现官网页面解析');
+  assert(/Accept-Encoding'?: '?identity|\\?identity/.test(dailySrcTs) || /identity/.test(dailySrcTs), '请求应要求不压缩(免 gzip 依赖)');
+  assert(/resolve\(null\)/.test(dailySrcTs), '抓取失败必须 resolve(null) 以便回退本地');
+  const panelTs = fs.readFileSync(path.join(__dirname, '..', 'src', 'readerPanel.ts'), 'utf8');
+  assert(/case 'applyDaily'/.test(panelTs) && /case 'setDailySource'/.test(panelTs), '面板应处理 applyDaily / setDailySource');
+  assert(/_ensureDaily\(\)/.test(panelTs), '应有当日色缓存/刷新逻辑');
+  console.log('每日一色(色块/应用/来源/官网解析接线): 通过');
+
   console.log('地域色彩主题(下拉/色卡/切换/构建期色板): 通过');
 
   console.log('侧边菜单(占位布局/展开收起/4 功能项): 通过');
