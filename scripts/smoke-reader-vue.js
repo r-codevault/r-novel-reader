@@ -652,7 +652,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '主题白名单必须放行 province 与 term(否则会静默丢弃)'
   );
   assert(/TERM_THEMES\[term/.test(storeSrc), 'webview themeOf 应从节气色板查表');
-  assert(/ensureContrast\(/.test(settingsSrc), '色板推导必须做过对比度校正');
+  // 色板推导已抽到 themePaint.ts(供 webview 运行时复用), 对比度校正在那里
+  const paintSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'themePaint.ts'), 'utf8');
+  assert(/ensureContrast\(/.test(paintSrc), '色板推导必须做过对比度校正');
+  assert(
+    /from ['"]\.\/themePaint['"]/.test(settingsSrc) && /paintTheme/.test(settingsSrc),
+    'settings.ts 应复用 themePaint 的色板推导(单一来源)'
+  );
   assert(/\*::-webkit-scrollbar\s*\{[^}]*width:\s*8px/.test(capturedHtml), '全局滚动条应收细到 8px');
   // 廿四节气: 与地域色彩同一行(阅读主题的第二行), 24 项, 悬浮可预览
   {
@@ -687,6 +693,59 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
     await sleep(30);
     console.log('廿四节气主题(同行/24项/悬浮预览/落盘): 通过');
+
+  // 自定义主题色: 第三行色盘 + 粘贴框, 实时预览且不落盘, 提交后切到 custom 主题
+  {
+    const row = document.querySelector('#settingsPanel .sp-row-theme');
+    const customRow = row && row.querySelector('.sp-custom-row');
+    assert(customRow, '阅读主题应有第三行自定义色');
+    const well = customRow.querySelector('.sp-color-well input[type="color"]');
+    assert(well, '自定义色行应有原生色盘');
+    assert(/^#[0-9a-f]{6}$/.test(well.value), '色盘初值应为合法 #rrggbb, 实际 ' + well.value);
+    const hexInput = customRow.querySelector('.sp-hex-input');
+    assert(hexInput, '自定义色行应有粘贴/键入输入框');
+
+    // 粘贴色值 -> 回车生效, 落盘 customHex + theme=custom
+    const root = document.documentElement;
+    posted.length = 0;
+    hexInput.focus();
+    hexInput.value = '#1A2847';
+    hexInput.dispatchEvent(new win.Event('input', { bubbles: true }));
+    hexInput.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await sleep(50);
+    assert(
+      posted.some((m) => m.type === 'updateSettings' && m.patch && m.patch.customHex === '#1a2847' && m.patch.theme === 'custom'),
+      '粘贴颜色并回车应保存 customHex(归一化为小写) 并切到 custom 主题'
+    );
+    assert(root.dataset.theme === 'custom', '应用后 data-theme 应为 custom');
+
+    // 拖色盘: input 事件只预览(不落盘), change 才提交
+    posted.length = 0;
+    const bgBefore = root.style.getPropertyValue('--bg').trim();
+    well.value = '#ff0000';
+    well.dispatchEvent(new win.Event('input', { bubbles: true }));
+    await sleep(30);
+    assert(root.style.getPropertyValue('--bg').trim() !== bgBefore, '拖色盘应实时预览色板');
+    assert(posted.length === 0, '拖动过程不应写设置(仅预览)');
+    well.dispatchEvent(new win.Event('change', { bubbles: true }));
+    await sleep(40);
+    assert(
+      posted.some((m) => m.type === 'updateSettings' && m.patch && m.patch.customHex === '#ff0000'),
+      '松开色盘(change)应提交代表色'
+    );
+
+    // 非法输入: 静默回退, 不应污染设置
+    posted.length = 0;
+    hexInput.focus();
+    hexInput.value = 'zzz';
+    hexInput.dispatchEvent(new win.Event('input', { bubbles: true }));
+    hexInput.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await sleep(40);
+    assert(!posted.some((m) => m.patch && 'customHex' in m.patch), '非法颜色不应被保存');
+    document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    console.log('自定义主题色(色盘/粘贴/实时预览/回车提交/非法拒绝): 通过');
+  }
   // 下拉定位与色条: 菜单锚定在第二行容器(而不是各自按钮), 否则会越界被裁
   {
     assert(/\.sp-theme-extra[^{]*\{[^}]*position:\s*relative/.test(capturedHtml), '第二行容器应作为菜单定位基准');

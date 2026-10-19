@@ -137,6 +137,49 @@
   .sp-themes { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
   .sp-theme-dots { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .sp-theme-extra { position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  /* 第三行: 自定义主题色(色盘 + 粘贴框) —— 独占一行, 与上面两个下拉视觉分层 */
+  .sp-custom-row {
+    display: flex; align-items: center; gap: 8px;
+    flex: 1 0 100%;
+    padding-top: 2px;
+  }
+  .sp-custom-label {
+    font-size: clamp(11px, calc(var(--font-size) * .72), 14px);
+    color: var(--sp-muted);
+    white-space: nowrap;
+  }
+  /* 原生 color 控件: 缩成色块, 隐藏系统默认边框但保留可点区域 */
+  .sp-color-well {
+    position: relative; flex: none;
+    width: 28px; height: 22px;
+    border: 1px solid var(--sp-border); border-radius: 4px;
+    overflow: hidden; cursor: pointer;
+    background: transparent;
+  }
+  .sp-color-well.active { box-shadow: 0 0 0 2px var(--sp-accent); border-color: transparent; }
+  .sp-color-well input[type='color'] {
+    position: absolute; inset: -4px;
+    width: calc(100% + 8px); height: calc(100% + 8px);
+    padding: 0; border: none; cursor: pointer; background: none;
+  }
+  .sp-color-well input[type='color']::-webkit-color-swatch-wrapper { padding: 0; }
+  .sp-color-well input[type='color']::-webkit-color-swatch { border: none; }
+  .sp-hex-input {
+    flex: 1 1 auto; min-width: 0;
+    padding: 2px 8px;
+    line-height: 18px;
+    font-family: var(--vscode-font-family, inherit);
+    font-size: clamp(11px, calc(var(--font-size) * .72), 14px);
+    color: var(--sp-fg);
+    background: var(--sp-control-bg);
+    border: 1px solid var(--sp-border); border-radius: 4px;
+  }
+  .sp-hex-input:hover { border-color: var(--sp-accent); }
+  /* 实时色块: 输入合法色值时显示对应颜色, 非法则透明 */
+  .sp-hex-preview {
+    flex: none; width: 16px; height: 16px;
+    border: 1px solid var(--sp-border); border-radius: 3px;
+  }
   .sp-dot {
     width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
     border: 1px solid var(--sp-border);
