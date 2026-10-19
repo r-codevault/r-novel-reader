@@ -38,6 +38,19 @@ export interface ShelfItemView {
 /** 左抽屉页签 */
 export type DrawerTab = 'shelf' | 'catalog' | 'storage';
 
+/**
+ * 写入"窗口重开恢复信息"(VS Code 的 webview state)。
+ * VS Code 会在重开窗口时把它作为 deserializeWebviewPanel 的 state 参数回传;
+ * 扩展侧据此决定是否恢复阅读页(见 novelReader.restoreOnStartup)。
+ */
+export function saveRestoreState(s: { filePath: string; chapterIndex: number; scrollRatio: number }): void {
+  try {
+    vscode.setState(s);
+  } catch {
+    // 非 webview 环境(单测/浏览器预览)忽略
+  }
+}
+
 /** 全局共享状态(与扩展侧消息协议字段一一对应) */
 export const state = reactive({
   novel: null as NovelInfo | null,

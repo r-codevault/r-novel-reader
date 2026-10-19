@@ -209,6 +209,7 @@ npm run compile
 | `novelReader.fontFamily` | string | `system` | `system` / `songti` / `heiti` / `kaiti` / `fangsong` / `yahei` |
 | `novelReader.lineHeight` | number | `1.8` | 1.2–2.8 |
 | `novelReader.paragraphSpacing` | number | `0.8` | 0–2（em） |
+| `novelReader.restoreOnStartup` | boolean | `false` | 重开 VS Code 时是否恢复上次阅读页（默认关闭，避免自动弹出阅读页） |
 | `novelReader.contentWidth` | number | `720` | 480–4000（像素）；面板提供视口比例档 33.33%/55.55%/66.66%/77.77%（随窗口自适应）或自定义像素，超出窗口时横向滚动 |
 | `novelReader.theme` | string | `sepia` | `white` / `beige` / `sepia` / `green` / `blue` / `dark` |
 | `novelReader.shortcutPrevChapter` | string | `alt+arrowleft` | 阅读页内「上一章」快捷键，如 `ctrl+shift+p`；留空禁用 |
