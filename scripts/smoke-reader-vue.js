@@ -489,6 +489,34 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   assert(document.activeElement !== focusTarget, 'Esc 后应清掉焦点(避免残留焦点框)');
 
+  // 地域色彩主题: 省份下拉 + 色卡预览 + 选中即切换主题
+  document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(40);
+  const provSelect = document.querySelector('#settingsPanel .sp-province .sp-select');
+  assert(provSelect, '设置面板应有「地域色彩」省份下拉');
+  assert(provSelect.querySelectorAll('option').length === 34, '省份下拉应有 34 个省级区域(实际 ' + provSelect.querySelectorAll('option').length + ')');
+  const chips = document.querySelectorAll('#settingsPanel .sp-color-chip');
+  assert(chips.length >= 4, '应展示当前省份的色卡预览(实际 ' + chips.length + ' 个)');
+  posted.length = 0;
+  provSelect.value = '440000';
+  provSelect.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await sleep(40);
+  assert(
+    posted.some((m) => m.type === 'updateSettings' && m.patch && m.patch.theme === 'province' && m.patch.province === '440000'),
+    '选省应同时切换地域主题并保存省份代码'
+  );
+  document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  // 地域色板必须由构建期注入(34 套), 不能端上现算
+  const virtualSrc = fs.readFileSync(path.join(__dirname, '..', 'vite.config.mjs'), 'utf8');
+  assert(/PROVINCE_THEMES/.test(virtualSrc) && /provinceTheme/.test(virtualSrc), 'vite 应构建期生成省份色板');
+  const storeSrc = fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'store.ts'), 'utf8');
+  assert(/PROVINCE_THEMES\[province/.test(storeSrc), 'webview themeOf 应从省份色板查表');
+  const settingsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'settings.ts'), 'utf8');
+  assert(/s\.theme === "province" \|\| THEMES\.some/.test(settingsSrc), '主题白名单必须放行 province(否则会静默丢弃)');
+  assert(/ensureContrast\(/.test(settingsSrc), '色板推导必须做过对比度校正');
+  console.log('地域色彩主题(下拉/色卡/切换/构建期色板): 通过');
+
   console.log('侧边菜单(占位布局/展开收起/4 功能项): 通过');
 
   // 切换按钮: 双状态图标(展开=右侧条纹, 收起=左侧条纹) + 无「菜单」文字

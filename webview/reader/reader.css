@@ -510,3 +510,25 @@
     outline: 2px solid var(--sp-accent);
     outline-offset: -2px;
   }
+
+  /* ---------- 地域色彩主题: 省份下拉 + 色卡预览 ---------- */
+  .sp-province { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+  .sp-select {
+    flex: none;
+    max-width: 120px;
+    padding: 5px 8px;
+    font-family: var(--vscode-font-family, inherit);
+    font-size: clamp(11px, calc(var(--font-size) * .72), 14px);
+    color: var(--sp-fg);
+    background: var(--sp-control-bg);
+    border: 1px solid var(--sp-border);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .sp-select:focus { outline: none; border-color: var(--sp-accent); }
+  .sp-province-colors { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .sp-color-chip {
+    width: 12px; height: 12px; border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, .18);
+    flex: none;
+  }

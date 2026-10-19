@@ -7,19 +7,23 @@ import { state, send, type ChapterPayload } from './composables/vscode';
 import { parseShortcut } from './composables/shortcut';
 
 /** 由构建期注入的常量(虚拟模块, 见 vite.config.mjs; 单一来源 src/settings.ts) */
-import { THEMES, FONT_STACKS, DEFAULT_SETTINGS } from 'virtual:novel-constants';
-export { THEMES, FONT_STACKS, DEFAULT_SETTINGS };
+import { THEMES, FONT_STACKS, DEFAULT_SETTINGS, PROVINCES, PROVINCE_THEMES } from 'virtual:novel-constants';
+export { THEMES, FONT_STACKS, DEFAULT_SETTINGS, PROVINCES, PROVINCE_THEMES };
 
 export { state };
 
-export function themeOf(id: string): ThemeDef {
+export function themeOf(id: string, province?: string): ThemeDef {
+  if (id === 'province') {
+    // 地域色彩主题: 色板在构建期按 34 个省算好(vite.config), 端上直接查表
+    return PROVINCE_THEMES[province || ''] || PROVINCE_THEMES['110000'] || THEMES[0];
+  }
   for (const t of THEMES) { if (t.id === id) { return t; } }
   return THEMES[0];
 }
 
 /** 把主题色写到 :root CSS 变量(与旧 applySettings 一致) */
 export function applyThemeVars(s: ReadingSettings): void {
-  const t = themeOf(s.theme);
+  const t = themeOf(s.theme, s.province);
   const root = document.documentElement;
   // 暴露主题 id 供 CSS 按主题分支(如 logo 放射线在浅色/黑夜用不同颜色)
   root.dataset.theme = t.id;

@@ -8,6 +8,7 @@
  */
 
 import * as vscode from "vscode";
+import { PROVINCES, DEFAULT_PROVINCE_CODE } from "./provinceColors";
 
 export interface ReadingSettings {
   /** 正文字号(px) */
@@ -31,6 +32,8 @@ export interface ReadingSettings {
   shortcutNext: string;
   /** 是否显示底部状态栏(默认显示; 由侧边菜单「状态栏」项切换) */
   showStatusBar: boolean;
+  /** 地域色彩主题: 省级行政区代码(见 provinceColors.ts), theme=province 时生效 */
+  province: string;
 }
 
 export interface ThemeDef {
@@ -197,6 +200,8 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
   shortcutPrev: "alt+arrowleft",
   shortcutNext: "alt+arrowright",
   showStatusBar: true,
+
+  province: DEFAULT_PROVINCE_CODE,
 };
 
 const STORAGE_KEY = "novelReader.settings";
@@ -212,6 +217,8 @@ const SETTING_KEYS: (keyof ReadingSettings)[] = [
   "shortcutPrev",
   "shortcutNext",
   "showStatusBar",
+
+  "province",
 ];
 
 function clamp(n: number, min: number, max: number, fallback: number): number {
@@ -260,6 +267,8 @@ function configDefaults(): ReadingSettings {
       DEFAULT_SETTINGS.shortcutNext,
     ),
     showStatusBar: DEFAULT_SETTINGS.showStatusBar,
+
+    province: DEFAULT_SETTINGS.province,
   };
 }
 
@@ -294,8 +303,12 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
       DEFAULT_SETTINGS.paragraphSpacing,
     );
   }
-  if (typeof s.theme === "string" && THEMES.some((t) => t.id === s.theme)) {
+  // 主题白名单: 6 个预设 + province(地域色彩, 不在 THEMES 里但合法)
+  if (typeof s.theme === "string" && (s.theme === "province" || THEMES.some((t) => t.id === s.theme))) {
     out.theme = s.theme;
+  }
+  if (typeof s.province === "string" && PROVINCES.some((p) => p.code === s.province)) {
+    out.province = s.province;
   }
   if (typeof s.contentWidth === "number") {
     out.contentWidth = clamp(
@@ -382,8 +395,184 @@ export class SettingsStore {
   }
 }
 
-export function themeById(id: string): ThemeDef {
+export function themeById(id: string, provinceCode?: string): ThemeDef {
+  if (id === "province") {
+    return provinceTheme(provinceCode);
+  }
   return THEMES.find((t) => t.id === id) ?? THEMES[0];
+}
+
+// ---------------------------------------------------------------- 地域色彩主题
+//
+// 设计要点: 省份色卡是"取自实物的原色"(故宫红/琉璃黄/天坛蓝...), 直接当背景
+// 必然出现文字不可读。所以只用它推导"色相", 明度一律由算法锁定:
+//   - 纸面/留白: 取该省主色相, 压到极浅(明度 0.91~0.96) -> 深色字始终清晰
+//   - 正文色: 同色相压到很深(明度 0.16) -> 与纸面对比度通常在 12:1 以上
+//   - 强调色: 原色若与纸面对比不足 4.5:1 则逐步压暗, 保证图标/当前章可辨认
+// 这样 34 个省都能得到"有地域色相但可长时间阅读"的配色。
+
+function hexToRgbTriple(hex: string): [number, number, number] {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) {
+    return [0, 0, 0];
+  }
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** rgb -> {h:0~360, s:0~1, l:0~1} */
+function rgbToHsl([r, g, b]: [number, number, number]): { h: number; s: number; l: number } {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  const d = max - min;
+  if (d === 0) {
+    return { h: 0, s: 0, l };
+  }
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h: number;
+  if (max === rn) {
+    h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6;
+  } else if (max === gn) {
+    h = ((bn - rn) / d + 2) / 6;
+  } else {
+    h = ((rn - gn) / d + 4) / 6;
+  }
+  return { h: h * 360, s, l };
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const hue = ((h % 360) + 360) % 360;
+  const sat = Math.min(1, Math.max(0, s));
+  const lig = Math.min(1, Math.max(0, l));
+  const c = (1 - Math.abs(2 * lig - 1)) * sat;
+  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const m = lig - c / 2;
+  let rgb: [number, number, number];
+  if (hue < 60) {
+    rgb = [c, x, 0];
+  } else if (hue < 120) {
+    rgb = [x, c, 0];
+  } else if (hue < 180) {
+    rgb = [0, c, x];
+  } else if (hue < 240) {
+    rgb = [0, x, c];
+  } else if (hue < 300) {
+    rgb = [x, 0, c];
+  } else {
+    rgb = [c, 0, x];
+  }
+  const to = (v: number) => Math.round((v + m) * 255).toString(16).padStart(2, "0");
+  return `#${to(rgb[0])}${to(rgb[1])}${to(rgb[2])}`;
+}
+
+/** WCAG 相对亮度 */
+function relativeLuminance(hex: string): number {
+  const [r, g, b] = hexToRgbTriple(hex).map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** 对比度(1~21) */
+export function contrastRatio(fg: string, bg: string): number {
+  const a = relativeLuminance(fg);
+  const b = relativeLuminance(bg);
+  const hi = Math.max(a, b);
+  const lo = Math.min(a, b);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * 取该省"代表色"作为色相来源。
+ * 优先用色卡首项(数据按"最具代表性"排序, 如北京=故宫红), 但首项若是近白/近黑
+ * 则色相不可靠, 退而取饱和度最高且明度适中的那个。
+ */
+function pickRepresentative(colors: { hex: string }[]): { hex: string } {
+  const first = colors[0];
+  if (first) {
+    const hsl = rgbToHsl(hexToRgbTriple(first.hex));
+    if (hsl.s >= 0.12 && hsl.l >= 0.15 && hsl.l <= 0.82) {
+      return first;
+    }
+  }
+  let best: { hex: string } | null = null;
+  let bestScore = -1;
+  for (const c of colors) {
+    const hsl = rgbToHsl(hexToRgbTriple(c.hex));
+    if (hsl.l < 0.15 || hsl.l > 0.82) {
+      continue;
+    }
+    const score = hsl.s;
+    if (score > bestScore) {
+      bestScore = score;
+      best = c;
+    }
+  }
+  return best || first || { hex: "#8A8A8A" };
+}
+
+/** 把强调色压暗到与纸面对比度达标(默认 4.5:1, 正文级) */
+function ensureContrast(fg: string, bg: string, target: number): string {
+  if (contrastRatio(fg, bg) >= target) {
+    return fg;
+  }
+  const hsl = rgbToHsl(hexToRgbTriple(fg));
+  let l = hsl.l;
+  for (let i = 0; i < 40 && l > 0.06; i += 1) {
+    l -= 0.02;
+    const next = hslToHex(hsl.h, hsl.s, l);
+    if (contrastRatio(next, bg) >= target) {
+      return next;
+    }
+  }
+  return hslToHex(hsl.h, hsl.s, 0.12);
+}
+
+/**
+ * 按省份推导完整的阅读色板。
+ * @param provinceCode 省级行政区代码(如 110000); 缺省用北京
+ */
+export function provinceTheme(provinceCode?: string): ThemeDef {
+  const region =
+    PROVINCES.find((p) => p.code === provinceCode) ??
+    PROVINCES.find((p) => p.code === DEFAULT_PROVINCE_CODE) ??
+    PROVINCES[0];
+  const colors = region && region.colors.length > 0 ? region.colors : [{ hex: "#8A8A8A" }];
+  const rep = pickRepresentative(colors);
+  const h = rgbToHsl(hexToRgbTriple(rep.hex)).h;
+  // 纸面/留白/面板: 同一色相不同明度(层次可辨), 饱和度取到"看得出地域色、又不喧宾夺主"
+  // 注: 明度不能太高(>0.96 时不同色相在 8bit 下会被量化成同一个颜色, 省份之间就没区别了);
+  //     地域辨识度主要由留白区(pageBg)承担, 纸面保持偏白的"纸感"
+  const bg = hslToHex(h, 0.26, 0.925);
+  const pageBg = hslToHex(h, 0.3, 0.85);
+  const chromeBg = hslToHex(h, 0.24, 0.915);
+  const chromeBorder = hslToHex(h, 0.32, 0.76);
+  // 正文/次要文字: 深色。次要文字同样要过对比度门槛(4.5:1), 不够就自动加暗
+  const fg = hslToHex(h, 0.32, 0.16);
+  const muted = ensureContrast(hslToHex(h, 0.12, 0.44), bg, 4.5);
+  // 强调色: 代表色压暗到达标(与纸面同色相, 整体协调)
+  const rawPrimary = rep.hex;
+  const accent = ensureContrast(rawPrimary, bg, 4.5);
+  const accentFg = contrastRatio("#ffffff", accent) >= 3 ? "#ffffff" : "#1a1a1a";
+  return {
+    id: "province",
+    name: region ? region.name : "地域色彩",
+    bg,
+    fg,
+    pageBg,
+    chromeBg,
+    chromeBorder,
+    accent,
+    accentFg,
+    muted,
+    panelAccent: ensureContrast(rawPrimary, chromeBg, 3),
+    panelHover: hslToHex(h, 0.18, 0.9),
+  };
 }
 
 export function fontStackById(id: string): string {

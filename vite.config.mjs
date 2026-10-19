@@ -25,6 +25,18 @@ const require2 = createRequire(import.meta.url);
 const settings = require2(path.join(__dirname, 'dist', 'settings.js'));
 const fontStacks = Object.fromEntries(settings.FONTS.map((f) => [f.id, f.stack]));
 
+// 地域色彩: 34 个省份的完整色板在构建期算好(webview 端零计算), 只传 code/name/slogan/色卡
+const provinceColors = require2(path.join(__dirname, 'dist', 'provinceColors.js'));
+const PROVINCES = provinceColors.PROVINCES.map((p) => ({
+  code: p.code,
+  name: p.name,
+  slogan: p.slogan,
+  colors: p.colors.map((c) => ({ name: c.name, hex: c.hex })),
+}));
+const PROVINCE_THEMES = Object.fromEntries(
+  provinceColors.PROVINCES.map((p) => [p.code, settings.provinceTheme(p.code)])
+);
+
 /**
  * 虚拟模块 'virtual:novel-constants' — 把 settings.ts 的常量注入 webview。
  * 用虚拟模块而非 vite define: define 在 dev(esbuild 路径) 下不可靠, 虚拟模块 dev/build 行为一致。
@@ -41,6 +53,8 @@ const virtualConstants = {
       'export const THEMES = ' + JSON.stringify(settings.THEMES) + ';',
       'export const FONT_STACKS = ' + JSON.stringify(fontStacks) + ';',
       'export const DEFAULT_SETTINGS = ' + JSON.stringify(settings.DEFAULT_SETTINGS) + ';',
+      'export const PROVINCES = ' + JSON.stringify(PROVINCES) + ';',
+      'export const PROVINCE_THEMES = ' + JSON.stringify(PROVINCE_THEMES) + ';',
     ].join('\n');
   },
 };
