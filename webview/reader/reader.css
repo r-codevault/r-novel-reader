@@ -153,8 +153,25 @@
   }
   .sp-seg-btn:hover { border-color: var(--sp-accent); }
   .sp-seg-btn.active { border-color: var(--sp-accent); color: var(--sp-accent); }
-  .sp-step { display: flex; align-items: stretch; border: 1px solid var(--sp-border); border-radius: 4px; overflow: hidden; }
-  .sp-step-btn {
+  /* 自定义页面宽度: 数字输入 + 单位 + 应用 */
+  .sp-row-custom { margin-top: -4px; margin-bottom: 4px; }
+  .sp-width-custom { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; }
+  .sp-width-input {
+    width: 92px; padding: 3px 8px; font-family: inherit;
+    font-size: clamp(12px, calc(var(--font-size) * 0.8), 15px);
+    font-variant-numeric: tabular-nums;
+    background: var(--input-bg); color: var(--input-fg);
+    border: 1px solid var(--sp-border); border-radius: 4px;
+  }
+  .sp-width-input:focus { outline: none; border-color: var(--sp-accent); }
+  .sp-width-input::-webkit-inner-spin-button,
+  .sp-width-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .sp-width-unit { font-size: clamp(11px, calc(var(--font-size) * 0.72), 14px); color: var(--sp-muted); }
+  .sp-width-tip {
+    margin: -4px 0 12px 78px; line-height: 1.5;
+    font-size: clamp(11px, calc(var(--font-size) * 0.7), 14px); color: var(--sp-muted);
+  }
+  .sp-step { display: flex; align-items: stretch; border: 1px solid var(--sp-border); border-radius: 4px; overflow: hidden; }  .sp-step-btn {
     border: none; background: var(--sp-control-bg); color: var(--sp-fg); cursor: pointer;
     padding: 4px 10px; font-family: inherit;
     font-size: clamp(12px, calc(var(--font-size) * 0.8), 15px); line-height: 1.4;
@@ -186,7 +203,8 @@
     padding: 24px 20px 70px;
   }
   #content {
-    max-width: var(--content-width);
+    width: var(--content-width);
+    max-width: 100%;
     margin: 0 auto;
     background: var(--bg); color: var(--fg);
     border: 1px solid var(--chrome-border);
@@ -199,6 +217,9 @@
     line-height: var(--line-height);
     letter-spacing: .02em;
   }
+  /* 自定义/拖拽宽度: 不再向窗口收缩, 超出视口时由文档横向滚动 */
+  html[data-width-mode="custom"] #content { max-width: none; }
+  html[data-width-mode="custom"] #reader { width: max-content; min-width: 100%; }
   #content p { margin: 0 0 var(--para-spacing); text-indent: 2em; }
   #content .chapter-title {
     text-indent: 0; text-align: center;
@@ -227,7 +248,7 @@
 
   /* ---------- 底部状态栏(含整书进度条) ---------- */
   .statusbar {
-    position: fixed; left: var(--menu-w, 48px); right: 0; bottom: 0;
+    position: fixed; left: var(--menu-w, 48px); right: 0; bottom: var(--x-sb, 0px);
     display: flex; flex-direction: column;
     font-size: 12px;
     /* 状态栏属 chrome 层: 用 VS Code UI 字体, 与正文阅读字体解耦(否则会跟着宋体/黑体变) */

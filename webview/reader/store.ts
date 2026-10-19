@@ -7,8 +7,8 @@ import { state, send, type ChapterPayload } from './composables/vscode';
 import { parseShortcut } from './composables/shortcut';
 
 /** 由构建期注入的常量(虚拟模块, 见 vite.config.mjs; 单一来源 src/settings.ts) */
-import { THEMES, FONT_STACKS, DEFAULT_SETTINGS, PROVINCES, PROVINCE_THEMES, SOLAR_TERMS, TERM_THEMES } from 'virtual:novel-constants';
-export { THEMES, FONT_STACKS, DEFAULT_SETTINGS, PROVINCES, PROVINCE_THEMES, SOLAR_TERMS, TERM_THEMES };
+import { THEMES, FONT_STACKS, DEFAULT_SETTINGS, CONTENT_WIDTH, PROVINCES, PROVINCE_THEMES, SOLAR_TERMS, TERM_THEMES } from 'virtual:novel-constants';
+export { THEMES, FONT_STACKS, DEFAULT_SETTINGS, CONTENT_WIDTH, PROVINCES, PROVINCE_THEMES, SOLAR_TERMS, TERM_THEMES };
 
 export { state };
 
@@ -80,6 +80,28 @@ export function applyThemeVars(s: ReadingSettings): void {
   root.style.setProperty('--line-height', String(s.lineHeight));
   root.style.setProperty('--para-spacing', s.paragraphSpacing + 'em');
   root.style.setProperty('--content-width', s.contentWidth + 'px');
+  // 栏宽模式: 预设档跟随窗口收缩; 自定义/拖拽值允许超出视口 -> 文档横向滚动
+  root.dataset.widthMode = CONTENT_WIDTH.steps.indexOf(s.contentWidth) >= 0 ? 'preset' : 'custom';
+  syncXScrollbar();
+}
+
+let xSbPending = false;
+/**
+ * 横向滚动条实测高度 -> --x-sb。
+ * 自定义宽度超出窗口时, 文档底部会出现横向滚动条, 固定状态栏会把它盖住, 故让状态栏上移让位。
+ * (每帧至多量一次, 避免拖拽时反复触发布局)
+ */
+export function syncXScrollbar(): void {
+  if (xSbPending) { return; }
+  xSbPending = true;
+  requestAnimationFrame(function () {
+    xSbPending = false;
+    const root = document.documentElement;
+    const h = root.dataset.widthMode === 'custom'
+      ? Math.max(0, window.innerHeight - root.clientHeight)
+      : 0;
+    root.style.setProperty('--x-sb', h + 'px');
+  });
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;

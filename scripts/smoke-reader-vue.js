@@ -379,8 +379,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(300);
   const widthUpdate = posted.find((m) => m.type === 'updateSettings' && m.patch && typeof m.patch.contentWidth === 'number');
   assert(widthUpdate, '拖宽松手应发出 contentWidth 更新');
-  assert(widthUpdate.patch.contentWidth <= 1200, '拖宽不应超过 1200 上限');
-  console.log('正文宽度拖拽(手柄/持久化/上限): 通过');
+  assert(widthUpdate.patch.contentWidth <= 4000, '拖宽不应超过 4000 上限(自定义宽度已放开)');
+  console.log('正文宽度拖拽(手柄/持久化/放宽上限): 通过');
 
   // 快捷键 Alt+ArrowRight 下一章
   const nextCountBefore = posted.filter((m) => m.type === 'getChapter').length;

@@ -209,7 +209,7 @@ npm run compile
 | `novelReader.fontFamily` | string | `system` | `system` / `songti` / `heiti` / `kaiti` / `fangsong` / `yahei` |
 | `novelReader.lineHeight` | number | `1.8` | 1.2–2.8 |
 | `novelReader.paragraphSpacing` | number | `0.8` | 0–2（em） |
-| `novelReader.contentWidth` | number | `720` | 480–1200（像素） |
+| `novelReader.contentWidth` | number | `720` | 480–4000（像素）；面板可选 640/800/1000/1200 预设或自定义，超出窗口时横向滚动 |
 | `novelReader.theme` | string | `sepia` | `white` / `beige` / `sepia` / `green` / `blue` / `dark` |
 | `novelReader.shortcutPrevChapter` | string | `alt+arrowleft` | 阅读页内「上一章」快捷键，如 `ctrl+shift+p`；留空禁用 |
 | `novelReader.shortcutNextChapter` | string | `alt+arrowright` | 阅读页内「下一章」快捷键；留空禁用 |

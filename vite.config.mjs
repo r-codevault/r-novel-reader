@@ -62,6 +62,7 @@ const virtualConstants = {
       'export const THEMES = ' + JSON.stringify(settings.THEMES) + ';',
       'export const FONT_STACKS = ' + JSON.stringify(fontStacks) + ';',
       'export const DEFAULT_SETTINGS = ' + JSON.stringify(settings.DEFAULT_SETTINGS) + ';',
+      'export const CONTENT_WIDTH = ' + JSON.stringify(settings.CONTENT_WIDTH) + ';',
       'export const PROVINCES = ' + JSON.stringify(PROVINCES) + ';',
       'export const PROVINCE_THEMES = ' + JSON.stringify(PROVINCE_THEMES) + ';',
       'export const SOLAR_TERMS = ' + JSON.stringify(SOLAR_TERMS) + ';',

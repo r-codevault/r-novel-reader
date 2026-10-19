@@ -5,11 +5,11 @@
  */
 import { computed, onMounted, reactive, ref } from 'vue';
 import { state, gotoChapter } from '../composables/vscode';
-import { persistSettings } from '../store';
+import { persistSettings, CONTENT_WIDTH, syncXScrollbar } from '../store';
 
-// 与 settings.ts 的 contentWidth clamp 范围一致
-const WIDTH_MIN = 480;
-const WIDTH_MAX = 1200;
+// 与 settings.ts 的 CONTENT_WIDTH 一致: 上限放宽到 4000, 允许拖出窗口宽度(横向滚动)
+const WIDTH_MIN = CONTENT_WIDTH.min;
+const WIDTH_MAX = CONTENT_WIDTH.max;
 
 const readerRef = ref<HTMLElement | null>(null);
 const contentRef = ref<HTMLElement | null>(null);
@@ -55,6 +55,10 @@ function beginWidthDrag(side: 'left' | 'right', e: PointerEvent): void {
   if (!handle) { return; }
   widthDrag = { side: side, startX: e.clientX, startW: contentRef.value.getBoundingClientRect().width, handle: handle };
   resizingWidth.value = true;
+  // 拖拽期间一律按「自定义」处理: 允许拖过窗口宽度, 由文档横向滚动承载
+  document.documentElement.dataset.widthMode = 'custom';
+  // 命中窄窗口时实际渲染宽度可能小于设定值, 先把变量钉到当前渲染宽度, 避免按下瞬间跳宽
+  document.documentElement.style.setProperty('--content-width', Math.round(widthDrag.startW) + 'px');
   // 捕获指针: 保证松手(手指抬起)即结束拖拽
   if (handle.setPointerCapture && e.pointerId !== undefined) {
     try { handle.setPointerCapture(e.pointerId); } catch { /* 忽略 */ }
@@ -66,11 +70,12 @@ function beginWidthDrag(side: 'left' | 'right', e: PointerEvent): void {
 function moveWidthDrag(e: PointerEvent): void {
   if (!widthDrag) { return; }
   const delta = e.clientX - widthDrag.startX;
-  // 左缘向右拖 → 变窄; 右缘向右拖 → 变宽; 上限 1200 拖拽过程即实时回弹
+  // 左缘向右拖 → 变窄; 右缘向右拖 → 变宽; 上限放开到 CONTENT_WIDTH.max, 超出窗口即横向滚动
   const factor = widthDrag.side === 'left' ? -1 : 1;
   const next = Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, Math.round(widthDrag.startW + factor * delta)));
   document.documentElement.style.setProperty('--content-width', next + 'px');
   positionHandles();
+  syncXScrollbar();
 }
 
 function endWidthDrag(e: PointerEvent): void {
@@ -94,6 +99,7 @@ onMounted(function () {
   document.addEventListener('pointerup', function (e: PointerEvent) { endWidthDrag(e); });
   document.addEventListener('pointercancel', function (e: PointerEvent) { endWidthDrag(e); });
   window.addEventListener('resize', positionHandles);
+  window.addEventListener('resize', syncXScrollbar);
   requestAnimationFrame(positionHandles);
 });
 

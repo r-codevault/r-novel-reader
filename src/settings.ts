@@ -11,6 +11,17 @@ import * as vscode from "vscode";
 import { PROVINCES, DEFAULT_PROVINCE_CODE } from "./provinceColors";
 import { SOLAR_TERMS, DEFAULT_TERM_ID } from "./solarTerms";
 
+/**
+ * 正文栏宽(px): 预设档位 + 合法区间。
+ * 设置面板的档位按钮、拖拽手柄、后端 clamp 共用这一份定义(经虚拟模块注入 webview)。
+ * 超过 1200 不设死上限 —— 由用户自定义, 窗口装不下时横向滚动。
+ */
+export const CONTENT_WIDTH = {
+  min: 480,
+  max: 4000,
+  steps: [640, 800, 1000, 1200],
+};
+
 export interface ReadingSettings {
   /** 正文字号(px) */
   fontSize: number;
@@ -259,8 +270,8 @@ function configDefaults(): ReadingSettings {
     theme: cfg.get<string>("theme", DEFAULT_SETTINGS.theme),
     contentWidth: clamp(
       cfg.get<number>("contentWidth", DEFAULT_SETTINGS.contentWidth),
-      480,
-      1200,
+      CONTENT_WIDTH.min,
+      CONTENT_WIDTH.max,
       DEFAULT_SETTINGS.contentWidth,
     ),
     shortcutPrev: cfg.get<string>(
@@ -322,8 +333,8 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
   if (typeof s.contentWidth === "number") {
     out.contentWidth = clamp(
       s.contentWidth,
-      480,
-      1200,
+      CONTENT_WIDTH.min,
+      CONTENT_WIDTH.max,
       DEFAULT_SETTINGS.contentWidth,
     );
   }

@@ -3,8 +3,8 @@
  * SettingsPanel.vue — 设置面板(起点风格)
  * 面板定位(贴合悬浮球)由 App 协调, 本组件暴露根元素
  */
-import { computed, ref, watch } from 'vue';
-import { state, THEMES, PROVINCES, SOLAR_TERMS, persistSettings, previewTheme, restoreTheme, stepFontSize, stepSetting, resetSettings } from '../store';
+import { computed, nextTick, ref, watch } from 'vue';
+import { state, THEMES, PROVINCES, SOLAR_TERMS, CONTENT_WIDTH, persistSettings, previewTheme, restoreTheme, stepFontSize, stepSetting, resetSettings } from '../store';
 import { shortcutLabel } from '../composables/shortcut';
 
 const rootRef = ref<HTMLElement | null>(null);
@@ -92,12 +92,50 @@ function chooseProvince(code: string): void {
   persistSettings({ province: code, theme: 'province' });
 }
 
-const widthSteps = [640, 800, 1000, 1200];
+const widthSteps = CONTENT_WIDTH.steps;
 const fontOptions = [
   { id: 'heiti', name: '黑体' },
   { id: 'songti', name: '宋体' },
   { id: 'kaiti', name: '楷体' },
 ];
+
+/* ---------- 页面宽度: 预设档 + 自定义(可超出窗口, 横向滚动) ---------- */
+const customOpen = ref(false);
+const customValue = ref('');
+const customInputRef = ref<HTMLInputElement | null>(null);
+
+/** 当前值不在预设档内 -> 视为自定义 */
+const isPresetWidth = computed(function () {
+  const s = state.settings;
+  return !!s && widthSteps.indexOf(Number(s.contentWidth)) >= 0;
+});
+
+function openCustomWidth(): void {
+  const cur = state.settings ? Number(state.settings.contentWidth) : widthSteps[0];
+  customValue.value = String(Math.round(cur));
+  customOpen.value = true;
+  nextTick(function () {
+    if (customInputRef.value) { customInputRef.value.focus(); customInputRef.value.select(); }
+  });
+}
+
+function applyCustomWidth(): void {
+  if (!customOpen.value) { return; }
+  const n = Math.round(Number(customValue.value));
+  customOpen.value = false;
+  if (!isFinite(n) || n <= 0) { return; }
+  const v = Math.min(CONTENT_WIDTH.max, Math.max(CONTENT_WIDTH.min, n));
+  customValue.value = String(v);
+  persistSettings({ contentWidth: v });
+}
+
+/** 估读每行汉字数: 扣掉纸面左右内边距(34×2)与 0.02em 字距 */
+const customChars = computed(function () {
+  const s = state.settings;
+  if (!s) { return 0; }
+  const w = Number(customValue.value) || Number(s.contentWidth);
+  return Math.max(1, Math.floor((w - 68) / (s.fontSize * 1.02)));
+});
 
 const settings = computed(() => state.settings);
 const shortcutHintText = computed(function () {
@@ -207,8 +245,24 @@ const shortcutHintText = computed(function () {
       <div class="sp-seg">
         <button v-for="w in widthSteps" :key="w" class="sp-seg-btn"
           :class="{ active: settings && Number(settings.contentWidth) === w }"
-          @click="persistSettings({ contentWidth: w })">{{ w }}</button>
+          @click="customOpen = false; persistSettings({ contentWidth: w })">{{ w }}</button>
+        <button class="sp-seg-btn" :class="{ active: !isPresetWidth || customOpen }"
+          @click="openCustomWidth">自定义</button>
       </div>
+    </div>
+    <div class="sp-row sp-row-custom" v-if="customOpen">
+      <span class="sp-label">自定义宽度</span>
+      <div class="sp-width-custom">
+        <input ref="customInputRef" v-model="customValue" class="sp-width-input" type="number"
+          :min="CONTENT_WIDTH.min" :max="CONTENT_WIDTH.max" step="10"
+          @keydown.enter.prevent="applyCustomWidth" @keydown.esc.prevent="customOpen = false"
+          @blur="applyCustomWidth" />
+        <span class="sp-width-unit">px</span>
+        <button class="sp-seg-btn" @click="applyCustomWidth">应用</button>
+      </div>
+    </div>
+    <div class="sp-width-tip" v-if="customOpen">
+      {{ CONTENT_WIDTH.min }}–{{ CONTENT_WIDTH.max }}px · 约 {{ customChars }} 字/行 · 超出窗口时横向滚动
     </div>
     <button class="sp-reset" @click="resetSettings">恢复默认设置</button>
     <div class="settings-hint">{{ shortcutHintText }}</div>
