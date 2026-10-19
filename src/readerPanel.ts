@@ -95,7 +95,12 @@ export class ReaderPanel {
     /** 设置变化(面板内改设置/重置后); 扩展用它把主题同步给侧边栏 */
     public static onDidChangeSettings?: (settings: ReadingSettings) => void;
     /** 阅读进度回调(由插件入口写入书架) */
-    public static onProgress?: (chapterIndex: number, scrollRatio: number) => void;
+    /**
+ * 进度上报回调。**必须携带 filePath** —— 面板可能来自窗口恢复路径
+ * (未经过 loadNovel, 扩展侧的 currentNovel 未必是同一本书),
+ * 只靠章节号无法判断该写进哪本书的记录。
+ */
+public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio: number) => void;
     /** 书架数据提供者(插件入口注入): init 时随载荷下发 */
     public static getShelf?: () => ShelfItemView[];
     /** 书库目录提供者(插件入口注入) */
@@ -210,18 +215,21 @@ export class ReaderPanel {
         };
     }
 
-    /**
-     * VS Code 重开窗口时反序列化阅读页。
+/**
+ * VS Code 重开窗口时反序列化阅读页。
+ *
      *
-     * 触发前提: 上次退出时这个面板**确实开着**(VS Code 只恢复已存在的 Tab),
-     * 因此默认行为是"原样恢复"—— 上次看到哪一章、章内滚到哪, 重开后都一样。
+ * 触发前提: 上次退出时这个面板**确实开着**(VS Code 只恢复已存在的 Tab),
+ * 因此默认行为是"原样恢复"—— 上次看到哪一章、章内滚到哪, 重开后都一样。
      *
-     * 进度来源优先级: **书架记录(扩展侧 Memento) > webview state**。
-     * 书架记录由扩展主进程在收到 saveProgress 时写入, 与 webview 生命周期解耦,
-     * 是可靠真相源; webview 的 setState 随时序可能只留下最后一帧, 不可单独依赖。
+ * 进度来源: **书架记录(扩展侧 Memento)优先, webview state 兜底**。
+     * - 书架记录由主进程在收到 saveProgress 时写入, 与 webview 生命周期解耦,
+     *   杀进程/崩溃时最后一条已落盘的进度仍可恢复 —— 它是可靠真相源。
+     * - webview 的 setState 必须在 webview 正常卸载时才可靠, 进程被杀常丢或残留旧值,
+     *   因此只作兜底, **绝不与书架记录取较大值**(那会用旧快照覆盖新进度)。
      *
      * - 开关被用户显式关闭 / 状态无效 / 源文件已不在: 丢弃这个恢复出来的 Tab
-     * - 注意: 全新开VS Code(上次没开过阅读页)时 VS Code 根本没有 Tab 要恢复,
+     * - 注意: 全新开 VS Code(上次没开过阅读页)时 VS Code 根本没有 Tab 要恢复,
      *   压根不会调用这里 —— 所以"启动时自动弹窗"与本方法无关,
      *   那由 activate 里不开面板保证(见 extension.ts 启动段)。
      */
@@ -230,7 +238,7 @@ export class ReaderPanel {
         state: ReaderPanelState | undefined,
         store: SettingsStore,
         restoreOnStartup: boolean,
-        /** 书架进度查询(可选): 有则作为优先真相源 */
+        /** 书架进度查询(可选): 有则作为唯一真相源 */
         shelfProgress?: (filePath: string) => { chapterIndex: number; scrollRatio: number } | undefined
     ): Promise<boolean> {
         if (!restoreOnStartup || !state || !state.filePath) {
@@ -246,13 +254,18 @@ export class ReaderPanel {
                 panel.dispose();
                 return false;
             }
-            // 优先用书架进度: 章节号取两者较大值(书架是主进程写的, 更可信),
-            // 章内滚动位置取书架值
+            const last = Math.max(0, novel.chapters.length - 1);
+            // 书架有有效进度 -> 无条件采用(它一定比webview state 更新);
+            // 否则退回 webview state(该书可能还没被登记过进度)
             const shelved = shelfProgress?.(state.filePath);
-            const chapterIndex = Math.max(0, state.chapterIndex || 0, shelved?.chapterIndex ?? -1);
-            const scrollRatio = shelved && shelved.chapterIndex >= 0 ? shelved.scrollRatio : state.scrollRatio || 0;
-            const idx = Math.min(chapterIndex, Math.max(0, novel.chapters.length - 1));
-            ReaderPanel.current = new ReaderPanel(panel, novel, idx, scrollRatio || 0, store);
+            const hasShelf = !!shelved && shelved.chapterIndex >= 0;
+            const rawIndex = hasShelf ? shelved.chapterIndex : state.chapterIndex || 0;
+            const idx = Math.min(Math.max(0, rawIndex), last);
+            // scrollRatio 同理: 章节不匹配时该值无意义, 归零避免套用到别的章节
+            const sameChapter = hasShelf ? idx === state.chapterIndex : true;
+            const rawRatio = hasShelf ? shelved.scrollRatio : state.scrollRatio || 0;
+            const scrollRatio = sameChapter && isFinite(rawRatio) ? Math.min(1, Math.max(0, rawRatio)) : 0;
+            ReaderPanel.current = new ReaderPanel(panel, novel, idx, scrollRatio, store);
             return true;
         } catch {
             // 源文件被移动/删除: 不静默留一个坏面板
@@ -334,6 +347,21 @@ export class ReaderPanel {
         return this._scrollRatio;
     }
 
+    /** 书籍标题(窗口恢复后补登记书架时用) */
+    get bookTitle(): string {
+        return this._novel ? this._novel.bookTitle : '';
+    }
+
+    /** 作者 */
+    get author(): string {
+        return this._novel ? this._novel.author : '';
+    }
+
+    /** 总章节数(窗口恢复后补登记书架时用) */
+    get chapterCount(): number {
+        return this._novel ? this._novel.chapters.length : 0;
+    }
+
     dispose(): void {
         ReaderPanel.current = undefined;
         this._panel.dispose();
@@ -389,11 +417,15 @@ export class ReaderPanel {
                 });
                 break;
             case 'saveProgress':
-                // 进度交给插件入口写入书架(不再维护单独的 session)
-                ReaderPanel.onProgress?.(
-                    msg.chapterIndex,
-                    Math.min(1, Math.max(0, msg.scrollRatio || 0))
-                );
+                // 进度交给插件入口写入书架(不再维护单独的 session);
+                // 连同 filePath 一起传, 窗口恢复出来的面板也能写到正确的书
+                if (this._novel) {
+                    ReaderPanel.onProgress?.(
+                        this._novel.filePath,
+                        msg.chapterIndex,
+                        Math.min(1, Math.max(0, msg.scrollRatio || 0))
+                    );
+                }
                 break;
             case 'openFile':
                 void vscode.commands.executeCommand('novelReader.openFile');

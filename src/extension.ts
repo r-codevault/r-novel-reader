@@ -47,7 +47,8 @@ export function activate(context: vscode.ExtensionContext): void {
                 state: unknown
             ): Promise<void> {
                 const enabled = store.get().restoreOnStartup;
-                // 书架进度(主进程 Memento)是更可靠的真相源, 优先于 webview state
+                // 书架进度查询(供restore 用)。返回 undefined = 该书尚未登记进度,
+                // 此时 restore 会退回 webview state, 并在下方补登记。
                 const shelved = (filePath: string) => {
                     const b = shelf.get(filePath);
                     return b && b.chapterIndex >= 0
@@ -61,6 +62,18 @@ export function activate(context: vscode.ExtensionContext): void {
                     enabled,
                     shelved
                 );
+                // 恢复后的面板同样要保证在书架里(旧版本或异常路径可能没登记),
+                // 并把恢复用的章节号立刻写回书架 —— 否则下一次重启就又丢了
+                const fp = (state as ReaderPanelState | undefined)?.filePath;
+                const restored = ReaderPanel.current;
+                if (fp && restored && !shelf.get(fp)) {
+                    void shelf.upsert({
+                        filePath: fp,
+                        title: restored.bookTitle || path.basename(fp),
+                        author: restored.author,
+                        totalChapters: restored.chapterCount,
+                    }).then(() => shelf.updateProgress(fp, restored.chapterIndex, restored.scrollRatio));
+                }
             },
         })
     );
@@ -627,11 +640,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ---------------------------------------------------------------- 阅读进度 -> 书架
 
-    ReaderPanel.onProgress = (chapterIndex: number, scrollRatio: number) => {
-        if (!currentNovel) {
-            return;
-        }
-        void shelf.updateProgress(currentNovel.filePath, chapterIndex, scrollRatio).then(refreshShelfView);
+    ReaderPanel.onProgress = (filePath: string, chapterIndex: number, scrollRatio: number) => {
+        // 用消息里带的 filePath, 而不是 currentNovel ——
+        // 窗口恢复出来的面板不会经过 loadNovel, currentNovel 可能为空或指向别的书
+        void shelf.updateProgress(filePath, chapterIndex, scrollRatio).then(refreshShelfView);
     };
 
 

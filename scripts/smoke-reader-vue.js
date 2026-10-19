@@ -992,7 +992,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const extSrc3 = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
 
     assert(
-      /shelfProgress/.test(panelSrc) && /shelved\?\.chapterIndex/.test(panelSrc),
+      /shelfProgress/.test(panelSrc) && /hasShelf/.test(panelSrc),
       'restore 应以书架进度为优先真相源(webview setState 不可靠)'
     );
     assert(
@@ -1016,6 +1016,45 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       '上报时应同步 scrollRatio 供切章恢复使用'
     );
     console.log('恢复进度优先级(书架为准/init 不写死0/滚动上报): 通过');
+  }
+
+  // 恢复路径的进度写入: onProgress 必须带 filePath, 且 shelf 有记录时不得与webview state 取较大值
+  {
+    const panelSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'readerPanel.ts'), 'utf8');
+    const extSrc4 = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
+    // 1) onProgress 签名带 filePath(窗口恢复的面板不经loadNovel, currentNovel 未必同书)
+    assert(
+      /onProgress\?: \(filePath: string, chapterIndex: number, scrollRatio: number\)/.test(panelSrc),
+      'onProgress 必须携带 filePath —— 恢复出来的面板不能用 currentNovel 判断是哪本书'
+    );
+    assert(
+      /onProgress\?\.\(\s*this\._novel\.filePath/.test(panelSrc),
+      'saveProgress 应把本面板的 filePath 一并上报'
+    );
+    assert(
+      /onProgress = \(filePath: string/.test(extSrc4) && /shelf\.updateProgress\(filePath,/.test(extSrc4),
+      '扩展侧应按消息里的 filePath 写入进度'
+    );
+    // 2) 章节号不能取较大值 —— 旧快照会覆盖更新的进度
+    assert(
+      !/Math\.max\(0, state\.chapterIndex \|\| 0, shelved\?\.chapterIndex/.test(panelSrc),
+      '恢复章节号不得与 webview state 取较大值(旧快照会覆盖更新的进度)'
+    );
+    assert(
+      /hasShelf\s*\?\s*shelved\.chapterIndex/.test(panelSrc),
+      '书架有有效进度时应无条件采用, 无记录才退回 webview state'
+    );
+    // 3) 恢复后自愈: 书架没这本书就补登记 + 立刻落盘章节号
+    assert(
+      /!shelf\.get\(fp\)/.test(extSrc4) && /shelf\.upsert\(\{/.test(extSrc4),
+      '恢复后面板若未登记在书架, 应补登记'
+    );
+    // 4) 章节不匹配时 scrollRatio 归零(避免把别的章节的滚动比例套过来)
+    assert(
+      /sameChapter/.test(panelSrc) && /: 0;/.test(panelSrc),
+      '章节不匹配时应把章内滚动位置归零'
+    );
+    console.log('恢复路径进度写入(带filePath/不取较大值/补登记/比例归零): 通过');
   }
 
   // 启动绝不自动弹出: activate 里预载书架不得 openPanel:true
