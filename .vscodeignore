@@ -12,3 +12,4 @@ out/**
 vite.config.mjs
 tsconfig.json
 README.md
+media/**/*.json
