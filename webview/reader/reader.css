@@ -532,7 +532,8 @@
   .sp-province-btn.open { border-color: var(--sp-accent); }
   .sp-caret { width: 12px; height: 12px; flex: none; opacity: .7; }
   .sp-province-menu {
-    position: absolute; top: calc(100% + 4px); left: 0; z-index: 40;
+    /* 右对齐向左展开: 触发按钮在行末, left:0 会向右溢出被面板裁掉 */
+    position: absolute; top: calc(100% + 4px); right: 0; left: auto; z-index: 40;
     /* 宽高都交给内容: 不写死尺寸、不设 max-height/overflow ->
        列表自动撑开(34 省 5 列 7 行), 任何字号下都不会出现下拉自带滚动条 */
     width: max-content;

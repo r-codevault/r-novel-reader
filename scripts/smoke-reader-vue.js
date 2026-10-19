@@ -495,6 +495,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // 省份选择器已并入「阅读主题」行(与预设色块同一行), 且不再显示色卡圆点
   const provBtn = document.querySelector('#settingsPanel .sp-themes .sp-province-btn');
   assert(provBtn, '「阅读主题」行内应有省份选择器');
+  // 未启用地域主题时应为占位文案「地域色彩」(此前会误显示上次的省份名)
+  {
+    // 先点一个预设主题色块 -> 此时不属于地域主题
+    const sepiaDot = document.querySelector('#settingsPanel .sp-dot[data-theme="sepia"]');
+    sepiaDot.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    const label = (provBtn.textContent || '').trim();
+    assert(label === '地域色彩', '未选地域主题时按钮应显示占位「地域色彩」, 实际: ' + label);
+  }
   assert(!document.querySelector('#settingsPanel .sp-province'), '不应再有独立的「地域色彩」行容器');
   assert(!document.querySelector('#settingsPanel .sp-color-chip'), '不应再显示省份色卡圆点');
   {

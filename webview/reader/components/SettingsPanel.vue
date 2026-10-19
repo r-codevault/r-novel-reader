@@ -19,10 +19,11 @@ const provinceCode = computed(function () {
 /** 省份列表是否展开(自绘下拉, 避免原生 select 的粗滚动条) */
 const provinceOpen = ref(false);
 
-/** 当前省份名 */
+/** 按钮文案: 只有正在使用地域主题时才显示省份名, 否则显示占位「地域色彩」 */
 const provinceName = computed(function () {
+  if (!state.settings || state.settings.theme !== 'province') { return '地域色彩'; }
   const found = PROVINCES.find(function (p) { return p.code === provinceCode.value; });
-  return found ? found.name : '选择省份';
+  return found ? found.name : '地域色彩';
 });
 
 /** 点击面板其他位置时收起省份列表 */
@@ -114,8 +115,9 @@ const shortcutHintText = computed(function () {
             </svg>
           </button>
           <div v-if="provinceOpen" class="sp-province-menu" @mouseleave="endPreview()">
+            <!-- 仅在正在使用地域主题时才高亮"当前省", 否则与占位文案语义保持一致 -->
             <button v-for="p in PROVINCES" :key="p.code" class="sp-province-item"
-              :class="{ active: p.code === provinceCode }"
+              :class="{ active: settings && settings.theme === 'province' && p.code === provinceCode }"
               @mouseenter="previewProvince(p.code)" @focus="previewProvince(p.code)"
               @click="chooseProvince(p.code)">{{ p.name }}</button>
           </div>
