@@ -322,7 +322,8 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
       DEFAULT_SETTINGS.paragraphSpacing,
     );
   }
-  if (typeof s.theme === "string" && THEMES.some((t) => t.id === s.theme)) {
+  // 主题白名单: 6 个预设 + custom(自定义图片主题, 不在 THEMES 里但合法)
+  if (typeof s.theme === "string" && (s.theme === "custom" || THEMES.some((t) => t.id === s.theme))) {
     out.theme = s.theme;
   }
   if (typeof s.contentWidth === "number") {

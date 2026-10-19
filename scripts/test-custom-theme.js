@@ -39,4 +39,38 @@ assert.strictEqual(DEFAULT_SETTINGS.customBgBlur, 4, '默认模糊应为 4px');
 // 3) 未知主题仍回退到预设(不影响老数据)
 assert.strictEqual(themeById('nope').id, 'white', '未知主题应回退到第一个预设');
 
-console.log('自定义主题测试全部通过 ✔');
+// 4) 回归: theme='custom' 必须能真正落盘
+//    —— 曾经因为 sanitize 只认 THEMES 里的 6 个预设, 'custom' 被静默丢弃, 表现为"选完图没反应"
+(async function () {
+  const { SettingsStore } = require('../dist/settings');
+  const mem = {};
+  const memento = {
+    get: (key, dflt) => (key in mem ? mem[key] : dflt),
+    update: async (key, value) => { mem[key] = value; },
+  };
+  const store = new SettingsStore(memento);
+  const next = await store.update({
+    theme: 'custom',
+    customBgPath: 'C:/tmp/bg.png',
+    customBgDark: true,
+    customBgMask: 55,
+    customBgBlur: 6,
+  });
+  assert.strictEqual(next.theme, 'custom', 'custom 主题必须能保存(曾因白名单校验被丢弃)');
+  assert.strictEqual(next.customBgPath, 'C:/tmp/bg.png', '背景图路径应保存');
+  assert.strictEqual(next.customBgDark, true, '图片明暗应保存');
+  assert.strictEqual(next.customBgMask, 55, '遮罩浓度应保存');
+  assert.strictEqual(next.customBgBlur, 6, '模糊半径应保存');
+
+  // 5) 参数钳制: 越界值不应写入
+  const clamped = await store.update({ customBgMask: 200, customBgBlur: -5 });
+  assert.strictEqual(clamped.customBgMask, 100, '遮罩浓度上限应为 100');
+  assert.strictEqual(clamped.customBgBlur, 0, '模糊下限应为 0');
+
+  // 6) 切回预设主题后, 自定义参数仍保留(下次切回来即生效)
+  const back = await store.update({ theme: 'sepia' });
+  assert.strictEqual(back.theme, 'sepia', '应能切回预设主题');
+  assert.strictEqual(back.customBgPath, 'C:/tmp/bg.png', '自定义背景设置不应被清除');
+
+  console.log('自定义主题测试全部通过 ✔');
+})();

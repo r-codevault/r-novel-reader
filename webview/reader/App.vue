@@ -87,10 +87,12 @@ function openTab(tab: DrawerTab | undefined): void {
 
 /**
  * 采样自定义背景图的平均亮度, 回报扩展(决定正文用深色还是浅色)。
- * 用 canvas 采样 32×32 缩略图, 够用且极快; data URL 同源, 不会被画布污染。
+ * 优先用 data URL(同源、绝不被画布污染); 大图不传 data URL 时退化为 webview URI
+ * (webview 资源与文档同源, 画布同样可读像素; 若被判定为跨源则静默放弃)。
  */
-function probeCustomBgLuminance(dataUrl: string): void {
-  if (!dataUrl) { return; }
+function probeCustomBgLuminance(dataUrl: string, uri = ''): void {
+  const src = dataUrl || uri;
+  if (!src) { return; }
   const img = new Image();
   img.onload = function () {
     try {
@@ -112,10 +114,13 @@ function probeCustomBgLuminance(dataUrl: string): void {
       if (!count) { return; }
       send({ type: 'customBgLuminance', dark: sum / count < 128 });
     } catch {
-      // 采样失败: 保持现有明暗判定
+      // 采样失败(画布跨源等): 保持现有明暗判定, 不影响使用
     }
   };
-  img.src = dataUrl;
+  img.onerror = function () {
+    // 加载失败: 静默忽略
+  };
+  img.src = src;
 }
 
 // ---------------------------------------------------------------- 扩展消息
@@ -158,9 +163,11 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       applySettings(msg.payload as unknown as ReadingSettings);
       break;
     }
-    case 'probeCustomBg':
-      probeCustomBgLuminance(((msg as { dataUrl?: string }).dataUrl) || '');
+    case 'probeCustomBg': {
+      const m = msg as { dataUrl?: string; uri?: string };
+      probeCustomBgLuminance(m.dataUrl || '', m.uri || '');
       break;
+    }
     case 'openSettings':
       openOnly('settingsOpen');
       break;

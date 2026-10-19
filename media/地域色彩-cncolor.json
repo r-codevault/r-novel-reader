@@ -1,0 +1,2789 @@
+{
+  "source": "https://cncolor.art/regional-colors",
+  "site": "色韵 · cncolor.art",
+  "title": "中国地域色彩 · 省级行政区象征色",
+  "description": "34 个省级行政区（含中国台湾、中国香港、中国澳门）的地域象征色卡，每地区 5–6 色，按行政区划代码排序。",
+  "scrapedAt": "2026-10-19",
+  "stats": {
+    "regions": 34,
+    "colors": 190
+  },
+  "categoryLabels": {
+    "architecture": "建筑",
+    "specialty": "特产",
+    "costume": "服饰",
+    "food": "美食",
+    "craft": "器物",
+    "heritage": "非遗",
+    "nature": "自然",
+    "animal": "动物"
+  },
+  "regions": [
+    {
+      "name": "北京",
+      "code": "110000",
+      "slogan": "紫禁城里的中国色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "故宫红",
+          "hex": "#9D2933",
+          "rgb": [
+            157,
+            41,
+            51
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "紫禁城宫墙",
+          "description": "故宫城墙的朱红色，象征皇权与吉祥，是北京最具辨识度的颜色。"
+        },
+        {
+          "name": "琉璃黄",
+          "hex": "#F3C13C",
+          "rgb": [
+            243,
+            193,
+            60
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "琉璃瓦顶",
+          "description": "皇家建筑屋顶的琉璃金黄，体现尊贵与辉煌。"
+        },
+        {
+          "name": "天坛蓝",
+          "hex": "#3A5F7A",
+          "rgb": [
+            58,
+            95,
+            122
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "天坛祈年殿",
+          "description": "天坛祈年殿琉璃瓦的深邃蓝色，象征天穹。"
+        },
+        {
+          "name": "烤鸭枣红",
+          "hex": "#A52A2A",
+          "rgb": [
+            165,
+            42,
+            42
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "北京烤鸭",
+          "description": "北京烤鸭皮色枣红，油亮诱人。"
+        },
+        {
+          "name": "京白",
+          "hex": "#F5F5F5",
+          "rgb": [
+            245,
+            245,
+            245
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "京剧脸谱",
+          "description": "京剧中象征奸诈的白色脸谱，也是胡同灰墙白瓦的底色。"
+        },
+        {
+          "name": "鸽哨灰",
+          "hex": "#7A7A7A",
+          "rgb": [
+            122,
+            122,
+            122
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "胡同灰墙",
+          "description": "老北京胡同青砖灰瓦的色调，宁静而厚重。"
+        }
+      ]
+    },
+    {
+      "name": "天津",
+      "code": "120000",
+      "slogan": "津门码头的烟火色",
+      "colorCount": 5,
+      "colors": [
+        {
+          "name": "泥人红",
+          "hex": "#C83C3C",
+          "rgb": [
+            200,
+            60,
+            60
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "泥人张彩塑",
+          "description": "天津泥人张彩塑常用的鲜艳红，代表民间喜庆。"
+        },
+        {
+          "name": "狗不理白",
+          "hex": "#F5F5DC",
+          "rgb": [
+            245,
+            245,
+            220
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "狗不理包子",
+          "description": "狗不理包子蒸笼与面皮温润的米白色。"
+        },
+        {
+          "name": "海河蓝",
+          "hex": "#4A90A4",
+          "rgb": [
+            74,
+            144,
+            164
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "海河",
+          "description": "海河水面映照着城市灯光的幽蓝。"
+        },
+        {
+          "name": "杨柳青年画绿",
+          "hex": "#6B8E23",
+          "rgb": [
+            107,
+            142,
+            35
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "杨柳青年画",
+          "description": "杨柳青年画中常用的青绿，寓意生机与繁荣。"
+        },
+        {
+          "name": "小洋楼灰",
+          "hex": "#808080",
+          "rgb": [
+            128,
+            128,
+            128
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "五大道小洋楼",
+          "description": "五大道历史建筑石材的沉稳灰色。"
+        }
+      ]
+    },
+    {
+      "name": "河北",
+      "code": "130000",
+      "slogan": "燕赵大地的雄健色",
+      "colorCount": 5,
+      "colors": [
+        {
+          "name": "赵州桥灰",
+          "hex": "#708090",
+          "rgb": [
+            112,
+            128,
+            144
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "赵州桥",
+          "description": "赵州桥千年石拱的青灰色，见证历史沧桑。"
+        },
+        {
+          "name": "避暑山庄绿",
+          "hex": "#556B2F",
+          "rgb": [
+            85,
+            107,
+            47
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "承德避暑山庄",
+          "description": "避暑山庄苍松翠柏掩映的深绿色。"
+        },
+        {
+          "name": "沧州铁狮黑",
+          "hex": "#2F2F2F",
+          "rgb": [
+            47,
+            47,
+            47
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "沧州铁狮子",
+          "description": "沧州铁狮子铸铁的乌黑色，象征威严。"
+        },
+        {
+          "name": "驴肉火烧黄",
+          "hex": "#D2B48C",
+          "rgb": [
+            210,
+            180,
+            140
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "驴肉火烧",
+          "description": "驴肉火烧外皮的酥黄色。"
+        },
+        {
+          "name": "白洋淀青",
+          "hex": "#5F9EA0",
+          "rgb": [
+            95,
+            158,
+            160
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "白洋淀",
+          "description": "白洋淀芦苇荡与水天的青碧色。"
+        }
+      ]
+    },
+    {
+      "name": "山西",
+      "code": "140000",
+      "slogan": "晋商大院的砖红色",
+      "colorCount": 5,
+      "colors": [
+        {
+          "name": "大院红",
+          "hex": "#A0522D",
+          "rgb": [
+            160,
+            82,
+            45
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "乔家大院",
+          "description": "晋商大院青砖红墙的暖褐色。"
+        },
+        {
+          "name": "平遥城墙灰",
+          "hex": "#696969",
+          "rgb": [
+            105,
+            105,
+            105
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "平遥古城",
+          "description": "平遥古城墙砖石的深灰色。"
+        },
+        {
+          "name": "老陈醋棕",
+          "hex": "#3D2B1F",
+          "rgb": [
+            61,
+            43,
+            31
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "山西老陈醋",
+          "description": "山西老陈醋醇厚浓郁的深棕色。"
+        },
+        {
+          "name": "云冈石窟黄",
+          "hex": "#D3B48C",
+          "rgb": [
+            211,
+            180,
+            140
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "云冈石窟",
+          "description": "云冈石窟砂岩的暖黄色。"
+        },
+        {
+          "name": "晋祠古柏绿",
+          "hex": "#4A5D23",
+          "rgb": [
+            74,
+            93,
+            35
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "晋祠古柏",
+          "description": "晋祠千年古柏的苍绿色。"
+        }
+      ]
+    },
+    {
+      "name": "内蒙古",
+      "code": "150000",
+      "slogan": "草原长调的天际色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "草原绿",
+          "hex": "#228B22",
+          "rgb": [
+            34,
+            139,
+            34
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "呼伦贝尔草原",
+          "description": "内蒙古草原一望无际的翠绿。"
+        },
+        {
+          "name": "蒙古包白",
+          "hex": "#F6F5DC",
+          "rgb": [
+            246,
+            245,
+            220
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "蒙古包",
+          "description": "蒙古包毡房温润的乳白色。"
+        },
+        {
+          "name": "哈达蓝",
+          "hex": "#1E90FF",
+          "rgb": [
+            30,
+            144,
+            255
+          ],
+          "category": "costume",
+          "categoryName": "服饰",
+          "source": "蒙古族哈达",
+          "description": "象征天空与纯洁的蓝色哈达。"
+        },
+        {
+          "name": "马奶酒乳白",
+          "hex": "#FFF8E7",
+          "rgb": [
+            255,
+            248,
+            231
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "马奶酒",
+          "description": "马奶酒微微泛黄的乳白色。"
+        },
+        {
+          "name": "大漠金沙",
+          "hex": "#DAA520",
+          "rgb": [
+            218,
+            165,
+            32
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "巴丹吉林沙漠",
+          "description": "沙漠起伏的金黄色沙浪。"
+        },
+        {
+          "name": "马头琴棕",
+          "hex": "#8B4513",
+          "rgb": [
+            139,
+            69,
+            19
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "马头琴",
+          "description": "马头琴木质琴身的深棕色。"
+        }
+      ]
+    },
+    {
+      "name": "辽宁",
+      "code": "210000",
+      "slogan": "关东黑土的工业色",
+      "colorCount": 5,
+      "colors": [
+        {
+          "name": "沈阳故宫红",
+          "hex": "#B22222",
+          "rgb": [
+            178,
+            34,
+            34
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "沈阳故宫",
+          "description": "沈阳故宫宫墙的朱红色。"
+        },
+        {
+          "name": "岫岩玉绿",
+          "hex": "#2E8B57",
+          "rgb": [
+            46,
+            139,
+            87
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "岫岩玉",
+          "description": "岫岩玉温润的青绿色。"
+        },
+        {
+          "name": "钢都灰",
+          "hex": "#718090",
+          "rgb": [
+            113,
+            128,
+            144
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "鞍山钢铁",
+          "description": "鞍山钢铁工业的冷峻灰色。"
+        },
+        {
+          "name": "红海滩红",
+          "hex": "#C93C3C",
+          "rgb": [
+            201,
+            60,
+            60
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "盘锦红海滩",
+          "description": "盘锦红海滩碱蓬草的火红色。"
+        },
+        {
+          "name": "辽参褐",
+          "hex": "#654321",
+          "rgb": [
+            101,
+            67,
+            33
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "辽参",
+          "description": "大连海参晾晒后的深褐色。"
+        }
+      ]
+    },
+    {
+      "name": "吉林",
+      "code": "220000",
+      "slogan": "长白雪域的净白色",
+      "colorCount": 5,
+      "colors": [
+        {
+          "name": "长白山白",
+          "hex": "#FFFAFA",
+          "rgb": [
+            255,
+            250,
+            250
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "长白山",
+          "description": "长白山天池雪峰的净白色。"
+        },
+        {
+          "name": "雾凇银",
+          "hex": "#C0C0C0",
+          "rgb": [
+            192,
+            192,
+            192
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "吉林雾凇",
+          "description": "松花江畔雾凇的银白色。"
+        },
+        {
+          "name": "人参黄",
+          "hex": "#DBA520",
+          "rgb": [
+            219,
+            165,
+            32
+          ],
+          "category": "specialty",
+          "categoryName": "特产",
+          "source": "吉林人参",
+          "description": "人参根须的淡黄色。"
+        },
+        {
+          "name": "朝鲜族白",
+          "hex": "#F6F5F5",
+          "rgb": [
+            246,
+            245,
+            245
+          ],
+          "category": "costume",
+          "categoryName": "服饰",
+          "source": "朝鲜族服饰",
+          "description": "朝鲜族传统服饰素雅的白色。"
+        },
+        {
+          "name": "梅花鹿棕",
+          "hex": "#8C4513",
+          "rgb": [
+            140,
+            69,
+            19
+          ],
+          "category": "animal",
+          "categoryName": "动物",
+          "source": "梅花鹿",
+          "description": "长白山梅花鹿温暖的棕褐色。"
+        }
+      ]
+    },
+    {
+      "name": "黑龙江",
+      "code": "230000",
+      "slogan": "北国冰雪的极白色",
+      "colorCount": 5,
+      "colors": [
+        {
+          "name": "冰雪白",
+          "hex": "#F0F8FF",
+          "rgb": [
+            240,
+            248,
+            255
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "哈尔滨冰雪大世界",
+          "description": "北国冰雪的晶莹白色。"
+        },
+        {
+          "name": "黑土黑",
+          "hex": "#1C1C1C",
+          "rgb": [
+            28,
+            28,
+            28
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "东北黑土",
+          "description": "肥沃黑土地的深黑色。"
+        },
+        {
+          "name": "松花江蓝",
+          "hex": "#4682B4",
+          "rgb": [
+            70,
+            130,
+            180
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "松花江",
+          "description": "松花江冰封江面的蓝白色。"
+        },
+        {
+          "name": "红肠红",
+          "hex": "#A62A2A",
+          "rgb": [
+            166,
+            42,
+            42
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "哈尔滨红肠",
+          "description": "哈尔滨红肠的枣红色。"
+        },
+        {
+          "name": "丹顶鹤白",
+          "hex": "#FFFFFF",
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "category": "animal",
+          "categoryName": "动物",
+          "source": "丹顶鹤",
+          "description": "扎龙湿地丹顶鹤羽衣的雪白。"
+        }
+      ]
+    },
+    {
+      "name": "上海",
+      "code": "310000",
+      "slogan": "魔都霓虹的摩登色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "石库门红",
+          "hex": "#A42A2A",
+          "rgb": [
+            164,
+            42,
+            42
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "石库门",
+          "description": "石库门建筑红砖的暖红色。"
+        },
+        {
+          "name": "外滩灰",
+          "hex": "#6C6C6C",
+          "rgb": [
+            108,
+            108,
+            108
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "外滩万国建筑",
+          "description": "外滩万国建筑群的石材灰色。"
+        },
+        {
+          "name": "东方明珠粉",
+          "hex": "#F4A7B9",
+          "rgb": [
+            244,
+            167,
+            185
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "东方明珠",
+          "description": "东方明珠球体的粉紫色。"
+        },
+        {
+          "name": "生煎金黄",
+          "hex": "#D9A520",
+          "rgb": [
+            217,
+            165,
+            32
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "上海生煎",
+          "description": "生煎包底部焦脆的金黄色。"
+        },
+        {
+          "name": "旗袍绿",
+          "hex": "#006400",
+          "rgb": [
+            0,
+            100,
+            0
+          ],
+          "category": "costume",
+          "categoryName": "服饰",
+          "source": "旗袍",
+          "description": "海派旗袍常用的墨绿色。"
+        },
+        {
+          "name": "黄浦江蓝",
+          "hex": "#191970",
+          "rgb": [
+            25,
+            25,
+            112
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "黄浦江",
+          "description": "黄浦江夜景倒映的深蓝色。"
+        }
+      ]
+    },
+    {
+      "name": "江苏",
+      "code": "320000",
+      "slogan": "江南园林的文人色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "园林绿",
+          "hex": "#6C8E23",
+          "rgb": [
+            108,
+            142,
+            35
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "苏州园林",
+          "description": "苏州园林芭蕉、翠竹的橄榄绿。"
+        },
+        {
+          "name": "南京城墙灰",
+          "hex": "#818080",
+          "rgb": [
+            129,
+            128,
+            128
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "南京明城墙",
+          "description": "南京明城墙砖石的青灰色。"
+        },
+        {
+          "name": "苏绣粉",
+          "hex": "#FFB6C1",
+          "rgb": [
+            255,
+            182,
+            193
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "苏绣",
+          "description": "苏绣丝线柔嫩的粉色。"
+        },
+        {
+          "name": "雨花石红",
+          "hex": "#C73C3C",
+          "rgb": [
+            199,
+            60,
+            60
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "南京雨花石",
+          "description": "雨花石中温润的玛瑙红。"
+        },
+        {
+          "name": "阳澄湖青",
+          "hex": "#609EA0",
+          "rgb": [
+            96,
+            158,
+            160
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "阳澄湖",
+          "description": "阳澄湖水面的青碧色。"
+        },
+        {
+          "name": "淮扬菜白",
+          "hex": "#FFFAF0",
+          "rgb": [
+            255,
+            250,
+            240
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "淮扬菜",
+          "description": "淮扬菜讲究的清白色调。"
+        }
+      ]
+    },
+    {
+      "name": "浙江",
+      "code": "330000",
+      "slogan": "山水浙江的青花色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "西湖绿",
+          "hex": "#6A8E23",
+          "rgb": [
+            106,
+            142,
+            35
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "西湖",
+          "description": "西湖苏堤春晓的柳绿色。"
+        },
+        {
+          "name": "龙泉青瓷青",
+          "hex": "#5E9EA0",
+          "rgb": [
+            94,
+            158,
+            160
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "龙泉青瓷",
+          "description": "龙泉青瓷雨过天青的釉色。"
+        },
+        {
+          "name": "龙井茶绿",
+          "hex": "#566B2F",
+          "rgb": [
+            86,
+            107,
+            47
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "西湖龙井",
+          "description": "龙井茶叶冲泡后的翠绿色。"
+        },
+        {
+          "name": "丝绸白",
+          "hex": "#FEF8E7",
+          "rgb": [
+            254,
+            248,
+            231
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "杭州丝绸",
+          "description": "杭州丝绸温润的象牙白。"
+        },
+        {
+          "name": "乌镇蓝印花",
+          "hex": "#1F90FF",
+          "rgb": [
+            31,
+            144,
+            255
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "蓝印花布",
+          "description": "乌镇蓝印花布的靛蓝色。"
+        },
+        {
+          "name": "普陀山金",
+          "hex": "#FFD700",
+          "rgb": [
+            255,
+            215,
+            0
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "普陀山寺庙",
+          "description": "普陀山寺庙屋顶的金黄色。"
+        }
+      ]
+    },
+    {
+      "name": "安徽",
+      "code": "340000",
+      "slogan": "徽派山水的黑白灰",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "徽派白",
+          "hex": "#F4F5F5",
+          "rgb": [
+            244,
+            245,
+            245
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "徽派建筑",
+          "description": "徽派民居标志性的粉白墙。"
+        },
+        {
+          "name": "黄山松绿",
+          "hex": "#546B2F",
+          "rgb": [
+            84,
+            107,
+            47
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "黄山迎客松",
+          "description": "黄山松的苍绿色。"
+        },
+        {
+          "name": "文房黑",
+          "hex": "#302F2F",
+          "rgb": [
+            48,
+            47,
+            47
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "徽墨",
+          "description": "徽墨研开后的浓黑色。"
+        },
+        {
+          "name": "宣纸米",
+          "hex": "#FAF0E6",
+          "rgb": [
+            250,
+            240,
+            230
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "宣纸",
+          "description": "宣纸温润的米黄色。"
+        },
+        {
+          "name": "歙砚青",
+          "hex": "#2F4F4F",
+          "rgb": [
+            47,
+            79,
+            79
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "歙砚",
+          "description": "歙砚石材的青黑色。"
+        },
+        {
+          "name": "毛峰茶绿",
+          "hex": "#6B8F23",
+          "rgb": [
+            107,
+            143,
+            35
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "黄山毛峰",
+          "description": "黄山毛峰茶汤的清绿色。"
+        }
+      ]
+    },
+    {
+      "name": "福建",
+      "code": "350000",
+      "slogan": "八闽山海的多彩色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "土楼红",
+          "hex": "#A1522D",
+          "rgb": [
+            161,
+            82,
+            45
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "福建土楼",
+          "description": "福建土楼夯土墙的赤褐色。"
+        },
+        {
+          "name": "武夷绿",
+          "hex": "#238B22",
+          "rgb": [
+            35,
+            139,
+            34
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "武夷山",
+          "description": "武夷山茶园的深绿色。"
+        },
+        {
+          "name": "铁观音茶绿",
+          "hex": "#4F7942",
+          "rgb": [
+            79,
+            121,
+            66
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "铁观音",
+          "description": "铁观音茶叶的墨绿色。"
+        },
+        {
+          "name": "漆器黑",
+          "hex": "#1D1C1C",
+          "rgb": [
+            29,
+            28,
+            28
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "福州脱胎漆器",
+          "description": "福州脱胎漆器光亮如镜的黑色。"
+        },
+        {
+          "name": "惠安女蓝",
+          "hex": "#4169E1",
+          "rgb": [
+            65,
+            105,
+            225
+          ],
+          "category": "costume",
+          "categoryName": "服饰",
+          "source": "惠安女服饰",
+          "description": "惠安女服饰头巾的宝蓝色。"
+        },
+        {
+          "name": "三坊七巷灰",
+          "hex": "#6A6969",
+          "rgb": [
+            106,
+            105,
+            105
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "三坊七巷",
+          "description": "福州三坊七巷的石板灰色。"
+        }
+      ]
+    },
+    {
+      "name": "江西",
+      "code": "360000",
+      "slogan": "瓷都青花的蓝白色",
+      "colorCount": 5,
+      "colors": [
+        {
+          "name": "青花蓝",
+          "hex": "#1D90FF",
+          "rgb": [
+            29,
+            144,
+            255
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "景德镇青花瓷",
+          "description": "景德镇青花瓷钴料的幽蓝色。"
+        },
+        {
+          "name": "瓷白",
+          "hex": "#F1F8FF",
+          "rgb": [
+            241,
+            248,
+            255
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "景德镇白瓷",
+          "description": "景德镇白瓷如玉的洁白色。"
+        },
+        {
+          "name": "庐山雾白",
+          "hex": "#F5F6F5",
+          "rgb": [
+            245,
+            246,
+            245
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "庐山云雾",
+          "description": "庐山云雾的朦胧白色。"
+        },
+        {
+          "name": "婺源油菜黄",
+          "hex": "#FED700",
+          "rgb": [
+            254,
+            215,
+            0
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "婺源油菜花",
+          "description": "婺源油菜花海的明亮黄色。"
+        },
+        {
+          "name": "赣南脐橙橙",
+          "hex": "#FF8C00",
+          "rgb": [
+            255,
+            140,
+            0
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "赣南脐橙",
+          "description": "赣南脐橙饱满的橙色。"
+        }
+      ]
+    },
+    {
+      "name": "山东",
+      "code": "370000",
+      "slogan": "齐鲁大地的礼乐色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "泰山青",
+          "hex": "#304F4F",
+          "rgb": [
+            48,
+            79,
+            79
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "泰山",
+          "description": "泰山石壁的青黑色。"
+        },
+        {
+          "name": "孔庙红",
+          "hex": "#B32222",
+          "rgb": [
+            179,
+            34,
+            34
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "曲阜孔庙",
+          "description": "孔庙宫墙的朱红色。"
+        },
+        {
+          "name": "青岛海蓝",
+          "hex": "#1E91FF",
+          "rgb": [
+            30,
+            145,
+            255
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "青岛海湾",
+          "description": "青岛海湾的湛蓝色。"
+        },
+        {
+          "name": "煎饼黄",
+          "hex": "#D1B48C",
+          "rgb": [
+            209,
+            180,
+            140
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "山东煎饼",
+          "description": "山东煎饼的麦黄色。"
+        },
+        {
+          "name": "胶东花馍粉",
+          "hex": "#FEB6C1",
+          "rgb": [
+            254,
+            182,
+            193
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "胶东花馍",
+          "description": "胶东花馍常用的粉红色。"
+        },
+        {
+          "name": "泰山石褐",
+          "hex": "#8A4513",
+          "rgb": [
+            138,
+            69,
+            19
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "泰山石",
+          "description": "泰山石经风化后的黄褐色。"
+        }
+      ]
+    },
+    {
+      "name": "河南",
+      "code": "410000",
+      "slogan": "中原文明的厚重色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "龙门石窟灰",
+          "hex": "#7F8080",
+          "rgb": [
+            127,
+            128,
+            128
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "龙门石窟",
+          "description": "龙门石窟石灰岩的灰色。"
+        },
+        {
+          "name": "少林僧衣棕",
+          "hex": "#8B4613",
+          "rgb": [
+            139,
+            70,
+            19
+          ],
+          "category": "costume",
+          "categoryName": "服饰",
+          "source": "少林寺僧衣",
+          "description": "少林僧衣的赭石棕色。"
+        },
+        {
+          "name": "洛阳牡丹红",
+          "hex": "#C71585",
+          "rgb": [
+            199,
+            21,
+            133
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "洛阳牡丹",
+          "description": "洛阳牡丹娇艳的深粉红色。"
+        },
+        {
+          "name": "钧瓷紫",
+          "hex": "#9370DB",
+          "rgb": [
+            147,
+            112,
+            219
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "钧瓷",
+          "description": "钧瓷窑变产生的玫瑰紫色。"
+        },
+        {
+          "name": "胡辣汤棕",
+          "hex": "#664321",
+          "rgb": [
+            102,
+            67,
+            33
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "河南胡辣汤",
+          "description": "胡辣汤浓郁的深棕色。"
+        },
+        {
+          "name": "殷墟土黄",
+          "hex": "#D2B58C",
+          "rgb": [
+            210,
+            181,
+            140
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "殷墟",
+          "description": "殷墟遗址的黄土色。"
+        }
+      ]
+    },
+    {
+      "name": "湖北",
+      "code": "420000",
+      "slogan": "荆楚风云的编钟色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "黄鹤楼黄",
+          "hex": "#FFD800",
+          "rgb": [
+            255,
+            216,
+            0
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "黄鹤楼",
+          "description": "黄鹤楼屋顶的金黄色。"
+        },
+        {
+          "name": "武当绿",
+          "hex": "#6B8D23",
+          "rgb": [
+            107,
+            141,
+            35
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "武当山",
+          "description": "武当山道教圣地的苍绿色。"
+        },
+        {
+          "name": "编钟青",
+          "hex": "#5F9FA0",
+          "rgb": [
+            95,
+            159,
+            160
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "曾侯乙编钟",
+          "description": "曾侯乙编钟青铜的绿锈色。"
+        },
+        {
+          "name": "洪湖莲红",
+          "hex": "#DC143C",
+          "rgb": [
+            220,
+            20,
+            60
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "洪湖荷花",
+          "description": "洪湖荷塘莲花的艳红色。"
+        },
+        {
+          "name": "热干面黄",
+          "hex": "#DAA620",
+          "rgb": [
+            218,
+            166,
+            32
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "武汉热干面",
+          "description": "武汉热干面芝麻酱香的金黄色。"
+        },
+        {
+          "name": "三峡江灰",
+          "hex": "#6F8090",
+          "rgb": [
+            111,
+            128,
+            144
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "长江三峡",
+          "description": "三峡江面雾气弥漫的灰蓝色。"
+        }
+      ]
+    },
+    {
+      "name": "湖南",
+      "code": "430000",
+      "slogan": "潇湘大地的辣椒红",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "岳麓红",
+          "hex": "#B12222",
+          "rgb": [
+            177,
+            34,
+            34
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "岳麓山红叶",
+          "description": "岳麓山深秋红叶的火红色。"
+        },
+        {
+          "name": "湘绣红",
+          "hex": "#DD143C",
+          "rgb": [
+            221,
+            20,
+            60
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "湘绣",
+          "description": "湘绣丝线鲜艳的绯红色。"
+        },
+        {
+          "name": "张家界白",
+          "hex": "#F4F5DC",
+          "rgb": [
+            244,
+            245,
+            220
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "张家界",
+          "description": "张家界石英砂岩峰林的灰白色。"
+        },
+        {
+          "name": "剁椒红",
+          "hex": "#C83D3C",
+          "rgb": [
+            200,
+            61,
+            60
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "湖南剁椒",
+          "description": "湖南剁椒热烈的鲜红色。"
+        },
+        {
+          "name": "凤凰古城青",
+          "hex": "#2E4F4F",
+          "rgb": [
+            46,
+            79,
+            79
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "凤凰古城",
+          "description": "凤凰古城吊脚楼的青灰色。"
+        },
+        {
+          "name": "安化黑茶褐",
+          "hex": "#3E2B1F",
+          "rgb": [
+            62,
+            43,
+            31
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "安化黑茶",
+          "description": "安化黑茶陈年的深褐色。"
+        }
+      ]
+    },
+    {
+      "name": "广东",
+      "code": "440000",
+      "slogan": "岭南风物的繁彩色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "岭南红",
+          "hex": "#C83B3C",
+          "rgb": [
+            200,
+            59,
+            60
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "岭南建筑",
+          "description": "岭南建筑镬耳屋与红墙的热烈红色。"
+        },
+        {
+          "name": "醒狮黄",
+          "hex": "#FFD600",
+          "rgb": [
+            255,
+            214,
+            0
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "广东醒狮",
+          "description": "醒狮狮头的金黄色。"
+        },
+        {
+          "name": "广绣金",
+          "hex": "#DAA420",
+          "rgb": [
+            218,
+            164,
+            32
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "广绣",
+          "description": "广绣丝线华丽的金色。"
+        },
+        {
+          "name": "早茶白",
+          "hex": "#F5F6DC",
+          "rgb": [
+            245,
+            246,
+            220
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "广式早茶",
+          "description": "广式早茶点心蒸笼与虾饺的乳白色。"
+        },
+        {
+          "name": "珠江夜游蓝",
+          "hex": "#1A1970",
+          "rgb": [
+            26,
+            25,
+            112
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "珠江",
+          "description": "珠江夜游灯光倒映的深蓝色。"
+        },
+        {
+          "name": "骑楼灰",
+          "hex": "#808180",
+          "rgb": [
+            128,
+            129,
+            128
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "广州骑楼",
+          "description": "广州骑楼建筑的灰色调。"
+        }
+      ]
+    },
+    {
+      "name": "广西",
+      "code": "450000",
+      "slogan": "桂北山水的喀斯特色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "桂林山水绿",
+          "hex": "#6B8E24",
+          "rgb": [
+            107,
+            142,
+            36
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "桂林山水",
+          "description": "桂林漓江两岸山水的青绿色。"
+        },
+        {
+          "name": "壮锦蓝",
+          "hex": "#4269E1",
+          "rgb": [
+            66,
+            105,
+            225
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "壮锦",
+          "description": "壮族织锦中常用的宝蓝色。"
+        },
+        {
+          "name": "螺蛳粉棕",
+          "hex": "#8B4413",
+          "rgb": [
+            139,
+            68,
+            19
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "柳州螺蛳粉",
+          "description": "柳州螺蛳粉汤底的棕褐色。"
+        },
+        {
+          "name": "龙脊梯田金",
+          "hex": "#DAA521",
+          "rgb": [
+            218,
+            165,
+            33
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "龙脊梯田",
+          "description": "龙脊梯田秋收的金黄色。"
+        },
+        {
+          "name": "北海银滩白",
+          "hex": "#F5F4F5",
+          "rgb": [
+            245,
+            244,
+            245
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "北海银滩",
+          "description": "北海银滩细腻的银白色。"
+        },
+        {
+          "name": "铜鼓青",
+          "hex": "#2F504F",
+          "rgb": [
+            47,
+            80,
+            79
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "壮族铜鼓",
+          "description": "壮族铜鼓青铜的墨绿色。"
+        }
+      ]
+    },
+    {
+      "name": "海南",
+      "code": "460000",
+      "slogan": "热带海岛的椰风色",
+      "colorCount": 5,
+      "colors": [
+        {
+          "name": "椰树绿",
+          "hex": "#6B8E22",
+          "rgb": [
+            107,
+            142,
+            34
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "椰子树",
+          "description": "海南椰树的热带绿色。"
+        },
+        {
+          "name": "沙滩黄",
+          "hex": "#F5DEB3",
+          "rgb": [
+            245,
+            222,
+            179
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "三亚沙滩",
+          "description": "三亚沙滩的细腻米黄色。"
+        },
+        {
+          "name": "海洋蓝",
+          "hex": "#00BFFF",
+          "rgb": [
+            0,
+            191,
+            255
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "南海",
+          "description": "南海海水的清澈蓝色。"
+        },
+        {
+          "name": "槟榔红",
+          "hex": "#C83C3D",
+          "rgb": [
+            200,
+            60,
+            61
+          ],
+          "category": "specialty",
+          "categoryName": "特产",
+          "source": "槟榔",
+          "description": "槟榔果实的鲜红色。"
+        },
+        {
+          "name": "黎锦彩",
+          "hex": "#FF6347",
+          "rgb": [
+            255,
+            99,
+            71
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "黎族织锦",
+          "description": "黎族织锦中常用的橙红色。"
+        }
+      ]
+    },
+    {
+      "name": "重庆",
+      "code": "500000",
+      "slogan": "山城雾都的火锅红",
+      "colorCount": 5,
+      "colors": [
+        {
+          "name": "火锅红",
+          "hex": "#C91F37",
+          "rgb": [
+            201,
+            31,
+            55
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "重庆火锅",
+          "description": "重庆火锅底料的炽红色。"
+        },
+        {
+          "name": "山城雾灰",
+          "hex": "#B0B0B0",
+          "rgb": [
+            176,
+            176,
+            176
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "山城雾霭",
+          "description": "重庆两江交汇雾气的灰白色。"
+        },
+        {
+          "name": "吊脚楼棕",
+          "hex": "#8B4514",
+          "rgb": [
+            139,
+            69,
+            20
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "洪崖洞吊脚楼",
+          "description": "洪崖洞吊脚楼的木质棕色。"
+        },
+        {
+          "name": "小面黄",
+          "hex": "#DAA51F",
+          "rgb": [
+            218,
+            165,
+            31
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "重庆小面",
+          "description": "重庆小面麻辣金黄的油亮色泽。"
+        },
+        {
+          "name": "武隆绿",
+          "hex": "#6D8E23",
+          "rgb": [
+            109,
+            142,
+            35
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "武隆喀斯特",
+          "description": "武隆天生三桥的苍翠绿色。"
+        }
+      ]
+    },
+    {
+      "name": "四川",
+      "code": "510000",
+      "slogan": "巴山蜀水的锦绣色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "熊猫黑白",
+          "hex": "#000000",
+          "rgb": [
+            0,
+            0,
+            0
+          ],
+          "category": "animal",
+          "categoryName": "动物",
+          "source": "",
+          "description": "大熊猫标志性的黑白色，代表四川最萌的符号。",
+          "palette": [
+            "#000000",
+            "#FFFFFF"
+          ]
+        },
+        {
+          "name": "辣椒红",
+          "hex": "#CA1F37",
+          "rgb": [
+            202,
+            31,
+            55
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "川菜",
+          "description": "川菜辣椒与豆瓣酱的鲜红色。"
+        },
+        {
+          "name": "蜀绣彩",
+          "hex": "#C81585",
+          "rgb": [
+            200,
+            21,
+            133
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "蜀绣",
+          "description": "蜀绣丝线丰富的玫红色。"
+        },
+        {
+          "name": "竹海绿",
+          "hex": "#218B22",
+          "rgb": [
+            33,
+            139,
+            34
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "蜀南竹海",
+          "description": "蜀南竹海无边无际的翠绿色。"
+        },
+        {
+          "name": "峨眉金",
+          "hex": "#FFD701",
+          "rgb": [
+            255,
+            215,
+            1
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "峨眉山金顶",
+          "description": "峨眉山金顶佛像的金色。"
+        },
+        {
+          "name": "盖碗茶褐",
+          "hex": "#8B4512",
+          "rgb": [
+            139,
+            69,
+            18
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "四川盖碗茶",
+          "description": "四川盖碗茶与茶馆的褐色。"
+        }
+      ]
+    },
+    {
+      "name": "贵州",
+      "code": "520000",
+      "slogan": "苗岭高原的蜡染蓝",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "苗绣蓝",
+          "hex": "#4069E1",
+          "rgb": [
+            64,
+            105,
+            225
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "苗族蜡染",
+          "description": "苗族蜡染靛蓝的蓝色。"
+        },
+        {
+          "name": "黄果树白",
+          "hex": "#EFF8FF",
+          "rgb": [
+            239,
+            248,
+            255
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "黄果树瀑布",
+          "description": "黄果树瀑布飞流的白练色。"
+        },
+        {
+          "name": "茅台酱褐",
+          "hex": "#8D4513",
+          "rgb": [
+            141,
+            69,
+            19
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "茅台酒",
+          "description": "茅台酒陶坛的酱褐色。"
+        },
+        {
+          "name": "侗寨青",
+          "hex": "#2F4E4F",
+          "rgb": [
+            47,
+            78,
+            79
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "侗族鼓楼",
+          "description": "侗族鼓楼与风雨桥的青黑色。"
+        },
+        {
+          "name": "杜鹃花红",
+          "hex": "#C83C3B",
+          "rgb": [
+            200,
+            60,
+            59
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "百里杜鹃",
+          "description": "毕节百里杜鹃的艳红色。"
+        },
+        {
+          "name": "刺梨黄",
+          "hex": "#FDD700",
+          "rgb": [
+            253,
+            215,
+            0
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "刺梨",
+          "description": "贵州刺梨果实的金黄色。"
+        }
+      ]
+    },
+    {
+      "name": "云南",
+      "code": "530000",
+      "slogan": "彩云之南的孔雀色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "孔雀蓝",
+          "hex": "#00CED1",
+          "rgb": [
+            0,
+            206,
+            209
+          ],
+          "category": "animal",
+          "categoryName": "动物",
+          "source": "孔雀",
+          "description": "绿孔雀羽毛的宝石蓝色。"
+        },
+        {
+          "name": "普洱茶褐",
+          "hex": "#644321",
+          "rgb": [
+            100,
+            67,
+            33
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "普洱茶",
+          "description": "普洱茶熟茶饼的深褐色。"
+        },
+        {
+          "name": "扎染蓝",
+          "hex": "#1E8FFF",
+          "rgb": [
+            30,
+            143,
+            255
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "大理扎染",
+          "description": "大理白族扎染的靛蓝色。"
+        },
+        {
+          "name": "红土地红",
+          "hex": "#B22322",
+          "rgb": [
+            178,
+            35,
+            34
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "东川红土地",
+          "description": "东川红土地的赤红色。"
+        },
+        {
+          "name": "鲜花粉",
+          "hex": "#FF69B4",
+          "rgb": [
+            255,
+            105,
+            180
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "云南鲜花",
+          "description": "斗南花市玫瑰的粉红色。"
+        },
+        {
+          "name": "玉龙雪山白",
+          "hex": "#FEFAFA",
+          "rgb": [
+            254,
+            250,
+            250
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "玉龙雪山",
+          "description": "玉龙雪山终年积雪的雪白色。"
+        }
+      ]
+    },
+    {
+      "name": "西藏",
+      "code": "540000",
+      "slogan": "雪域高原的圣洁色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "布达拉宫红",
+          "hex": "#B22122",
+          "rgb": [
+            178,
+            33,
+            34
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "布达拉宫",
+          "description": "布达拉宫宫墙的朱红色。"
+        },
+        {
+          "name": "哈达白",
+          "hex": "#FEFFFF",
+          "rgb": [
+            254,
+            255,
+            255
+          ],
+          "category": "costume",
+          "categoryName": "服饰",
+          "source": "哈达",
+          "description": "象征纯洁的洁白哈达。"
+        },
+        {
+          "name": "高原蓝",
+          "hex": "#1E90FE",
+          "rgb": [
+            30,
+            144,
+            254
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "西藏天空",
+          "description": "西藏高原澄澈的湛蓝色。"
+        },
+        {
+          "name": "经幡五彩",
+          "hex": "#416AE1",
+          "rgb": [
+            65,
+            106,
+            225
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "经幡",
+          "description": "藏传佛教经幡的蓝白红绿黄五色，象征天地水火云。",
+          "palette": [
+            "#416AE1",
+            "#C83C3C",
+            "#228B22",
+            "#FFD700",
+            "#FFFFFF"
+          ]
+        },
+        {
+          "name": "唐卡金",
+          "hex": "#FFD900",
+          "rgb": [
+            255,
+            217,
+            0
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "唐卡",
+          "description": "唐卡绘制使用的矿物金色。"
+        },
+        {
+          "name": "牦牛黑",
+          "hex": "#1B1C1C",
+          "rgb": [
+            27,
+            28,
+            28
+          ],
+          "category": "animal",
+          "categoryName": "动物",
+          "source": "牦牛",
+          "description": "高原牦牛沉稳的黑色。"
+        }
+      ]
+    },
+    {
+      "name": "陕西",
+      "code": "610000",
+      "slogan": "三秦大地的黄土色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "兵马俑土黄",
+          "hex": "#D2B38C",
+          "rgb": [
+            210,
+            179,
+            140
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "秦兵马俑",
+          "description": "秦始皇兵马俑陶俑的黄土色。"
+        },
+        {
+          "name": "西安城墙灰",
+          "hex": "#686969",
+          "rgb": [
+            104,
+            105,
+            105
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "西安城墙",
+          "description": "西安古城墙砖石的深灰色。"
+        },
+        {
+          "name": "华山石青",
+          "hex": "#2F4F50",
+          "rgb": [
+            47,
+            79,
+            80
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "华山",
+          "description": "华山花岗岩的青黑色。"
+        },
+        {
+          "name": "肉夹馍褐",
+          "hex": "#894513",
+          "rgb": [
+            137,
+            69,
+            19
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "肉夹馍",
+          "description": "腊汁肉夹馍浓郁的肉褐色。"
+        },
+        {
+          "name": "安塞剪纸红",
+          "hex": "#CA3C3C",
+          "rgb": [
+            202,
+            60,
+            60
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "安塞剪纸",
+          "description": "安塞剪纸鲜艳的中国红。"
+        },
+        {
+          "name": "秦岭绿",
+          "hex": "#228C22",
+          "rgb": [
+            34,
+            140,
+            34
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "秦岭",
+          "description": "秦岭山脉的深绿色。"
+        }
+      ]
+    },
+    {
+      "name": "甘肃",
+      "code": "620000",
+      "slogan": "丝路敦煌的壁画色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "敦煌土黄",
+          "hex": "#D2B48D",
+          "rgb": [
+            210,
+            180,
+            141
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "敦煌莫高窟",
+          "description": "敦煌沙漠与崖壁的土黄色。"
+        },
+        {
+          "name": "莫高窟红",
+          "hex": "#9F522D",
+          "rgb": [
+            159,
+            82,
+            45
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "莫高窟",
+          "description": "莫高窟崖壁砂岩的赭红色。"
+        },
+        {
+          "name": "祁连雪白",
+          "hex": "#FFFBFA",
+          "rgb": [
+            255,
+            251,
+            250
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "祁连山",
+          "description": "祁连山终年积雪的雪白色。"
+        },
+        {
+          "name": "飞天青绿",
+          "hex": "#5F9DA0",
+          "rgb": [
+            95,
+            157,
+            160
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "敦煌壁画",
+          "description": "敦煌壁画飞天服饰的石青绿。"
+        },
+        {
+          "name": "兰州拉面黄",
+          "hex": "#DCA520",
+          "rgb": [
+            220,
+            165,
+            32
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "兰州拉面",
+          "description": "兰州拉面汤清面亮的金黄色。"
+        },
+        {
+          "name": "麦积山烟霞",
+          "hex": "#C1C0C0",
+          "rgb": [
+            193,
+            192,
+            192
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "麦积山",
+          "description": "麦积山烟雨中的银灰色。"
+        }
+      ]
+    },
+    {
+      "name": "青海",
+      "code": "630000",
+      "slogan": "青藏高原的湖蓝色",
+      "colorCount": 5,
+      "colors": [
+        {
+          "name": "青海湖蓝",
+          "hex": "#2090FF",
+          "rgb": [
+            32,
+            144,
+            255
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "青海湖",
+          "description": "青海湖如宝石般的湛蓝色。"
+        },
+        {
+          "name": "塔尔寺金",
+          "hex": "#FFD500",
+          "rgb": [
+            255,
+            213,
+            0
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "塔尔寺",
+          "description": "塔尔寺金顶的金黄色。"
+        },
+        {
+          "name": "盐湖白",
+          "hex": "#FFFEFF",
+          "rgb": [
+            255,
+            254,
+            255
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "茶卡盐湖",
+          "description": "茶卡盐湖天空之镜的纯白色。"
+        },
+        {
+          "name": "藏毯红",
+          "hex": "#C63C3C",
+          "rgb": [
+            198,
+            60,
+            60
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "青海藏毯",
+          "description": "青海藏毯常用的艳丽红色。"
+        },
+        {
+          "name": "青稞金黄",
+          "hex": "#D8A520",
+          "rgb": [
+            216,
+            165,
+            32
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "青稞",
+          "description": "青稞成熟时的金黄色。"
+        }
+      ]
+    },
+    {
+      "name": "宁夏",
+      "code": "640000",
+      "slogan": "塞上江南的枸杞红",
+      "colorCount": 5,
+      "colors": [
+        {
+          "name": "枸杞红",
+          "hex": "#B22223",
+          "rgb": [
+            178,
+            34,
+            35
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "中宁枸杞",
+          "description": "宁夏中宁枸杞的鲜红色。"
+        },
+        {
+          "name": "西夏王陵黄",
+          "hex": "#D2B48B",
+          "rgb": [
+            210,
+            180,
+            139
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "西夏王陵",
+          "description": "西夏王陵夯土台的土黄色。"
+        },
+        {
+          "name": "贺兰山红",
+          "hex": "#A0532D",
+          "rgb": [
+            160,
+            83,
+            45
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "贺兰山",
+          "description": "贺兰山岩画山体的赤褐色。"
+        },
+        {
+          "name": "滩羊皮白",
+          "hex": "#F5F5F6",
+          "rgb": [
+            245,
+            245,
+            246
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "滩羊二毛皮",
+          "description": "宁夏滩羊二毛皮柔滑的白色。"
+        },
+        {
+          "name": "沙湖青",
+          "hex": "#5F9EA1",
+          "rgb": [
+            95,
+            158,
+            161
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "沙湖",
+          "description": "沙湖沙漠与湖水交映的青碧色。"
+        }
+      ]
+    },
+    {
+      "name": "新疆",
+      "code": "650000",
+      "slogan": "西域丝路的绚烂色",
+      "colorCount": 6,
+      "colors": [
+        {
+          "name": "天山雪白",
+          "hex": "#FFF9FA",
+          "rgb": [
+            255,
+            249,
+            250
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "天山",
+          "description": "天山博格达峰终年积雪的雪白色。"
+        },
+        {
+          "name": "沙漠金",
+          "hex": "#D4B48C",
+          "rgb": [
+            212,
+            180,
+            140
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "塔克拉玛干沙漠",
+          "description": "塔克拉玛干沙漠的金黄色沙海。"
+        },
+        {
+          "name": "葡萄紫",
+          "hex": "#800080",
+          "rgb": [
+            128,
+            0,
+            128
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "吐鲁番葡萄",
+          "description": "吐鲁番葡萄成熟的深紫色。"
+        },
+        {
+          "name": "艾德莱斯彩",
+          "hex": "#FF1493",
+          "rgb": [
+            255,
+            20,
+            147
+          ],
+          "category": "heritage",
+          "categoryName": "非遗",
+          "source": "艾德莱斯绸",
+          "description": "维吾尔族艾德莱斯绸艳丽的玫瑰红色。",
+          "palette": [
+            "#FF1493",
+            "#FFD700",
+            "#1E90FF"
+          ]
+        },
+        {
+          "name": "和田玉青",
+          "hex": "#5F9E9F",
+          "rgb": [
+            95,
+            158,
+            159
+          ],
+          "category": "craft",
+          "categoryName": "器物",
+          "source": "和田玉",
+          "description": "和田玉青玉的温润青色。"
+        },
+        {
+          "name": "胡杨金黄",
+          "hex": "#DAA720",
+          "rgb": [
+            218,
+            167,
+            32
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "胡杨林",
+          "description": "塔里木胡杨林秋天的金黄色。"
+        }
+      ]
+    },
+    {
+      "name": "中国台湾",
+      "code": "710000",
+      "slogan": "宝岛东岸的山海色",
+      "colorCount": 5,
+      "colors": [
+        {
+          "name": "阿里山红桧",
+          "hex": "#A0512D",
+          "rgb": [
+            160,
+            81,
+            45
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "阿里山红桧",
+          "description": "阿里山红桧木质的赤褐色。"
+        },
+        {
+          "name": "太平洋蓝",
+          "hex": "#1C90FF",
+          "rgb": [
+            28,
+            144,
+            255
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "太平洋",
+          "description": "台湾东岸太平洋的深蓝色。"
+        },
+        {
+          "name": "夜市霓虹彩",
+          "hex": "#FE1493",
+          "rgb": [
+            254,
+            20,
+            147
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "台湾夜市",
+          "description": "台湾夜市霓虹灯与美食的绚丽色彩。",
+          "palette": [
+            "#FE1493",
+            "#FFD700",
+            "#00BFFF"
+          ]
+        },
+        {
+          "name": "乌龙茶青",
+          "hex": "#698E23",
+          "rgb": [
+            105,
+            142,
+            35
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "台湾乌龙茶",
+          "description": "高山乌龙茶茶叶的青绿色。"
+        },
+        {
+          "name": "垦丁沙白",
+          "hex": "#F5F4DC",
+          "rgb": [
+            245,
+            244,
+            220
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "垦丁沙滩",
+          "description": "垦丁沙滩的米白色。"
+        }
+      ],
+      "siteName": "台湾"
+    },
+    {
+      "name": "中国香港",
+      "code": "810000",
+      "slogan": "东方之珠的霓虹色",
+      "colorCount": 5,
+      "colors": [
+        {
+          "name": "维港蓝",
+          "hex": "#181970",
+          "rgb": [
+            24,
+            25,
+            112
+          ],
+          "category": "nature",
+          "categoryName": "自然",
+          "source": "维多利亚港",
+          "description": "维多利亚港夜景的深蓝色。"
+        },
+        {
+          "name": "霓虹红",
+          "hex": "#FF0000",
+          "rgb": [
+            255,
+            0,
+            0
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "霓虹招牌",
+          "description": "香港街头霓虹招牌的红色。"
+        },
+        {
+          "name": "茶餐厅绿",
+          "hex": "#016400",
+          "rgb": [
+            1,
+            100,
+            0
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "港式茶餐厅",
+          "description": "港式茶餐厅常见的复古绿色。"
+        },
+        {
+          "name": "港式奶茶棕",
+          "hex": "#8B4713",
+          "rgb": [
+            139,
+            71,
+            19
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "港式奶茶",
+          "description": "丝袜奶茶的浓郁棕色。"
+        },
+        {
+          "name": "中环灰",
+          "hex": "#696A69",
+          "rgb": [
+            105,
+            106,
+            105
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "中环高楼",
+          "description": "中环摩天大楼的冷灰色。"
+        }
+      ],
+      "siteName": "香港"
+    },
+    {
+      "name": "中国澳门",
+      "code": "820000",
+      "slogan": "濠江葡韵的瓷砖色",
+      "colorCount": 5,
+      "colors": [
+        {
+          "name": "大三巴金",
+          "hex": "#FFD702",
+          "rgb": [
+            255,
+            215,
+            2
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "大三巴牌坊",
+          "description": "大三巴牌坊在夕阳下的金黄色。"
+        },
+        {
+          "name": "葡式瓷砖蓝",
+          "hex": "#4168E1",
+          "rgb": [
+            65,
+            104,
+            225
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "葡式瓷砖画",
+          "description": "澳门街道葡式瓷砖画的蓝色。"
+        },
+        {
+          "name": "赌场红",
+          "hex": "#B22221",
+          "rgb": [
+            178,
+            34,
+            33
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "澳门赌场",
+          "description": "澳门赌场地毯常用的大红色。"
+        },
+        {
+          "name": "杏仁饼黄",
+          "hex": "#D0B48C",
+          "rgb": [
+            208,
+            180,
+            140
+          ],
+          "category": "food",
+          "categoryName": "美食",
+          "source": "澳门杏仁饼",
+          "description": "澳门杏仁饼的酥黄色。"
+        },
+        {
+          "name": "妈阁庙绿",
+          "hex": "#6B9023",
+          "rgb": [
+            107,
+            144,
+            35
+          ],
+          "category": "architecture",
+          "categoryName": "建筑",
+          "source": "妈阁庙",
+          "description": "妈阁庙屋瓦的深绿色。"
+        }
+      ],
+      "siteName": "澳门"
+    }
+  ]
+}

@@ -442,6 +442,18 @@ export class ReaderPanel {
      *  3) 写设置并通知界面 -> 4) 把图以 data URL 发给 webview 采样亮度(自动决定深色/浅色文字)
      */
     private async _pickCustomTheme(): Promise<void> {
+        try {
+            await this._applyCustomTheme();
+        } catch (err) {
+            // 不允许再出现"点了没反应": 任何失败都要给用户明确提示
+            void vscode.window.showErrorMessage(
+                `应用自定义背景失败: ${err instanceof Error ? err.message : String(err)}`
+            );
+        }
+    }
+
+    /** 选图并应用(异常由 _pickCustomTheme 统一兜底提示) */
+    private async _applyCustomTheme(): Promise<void> {
         const picked = await vscode.window.showOpenDialog({
             canSelectMany: false,
             openLabel: '用作阅读背景',
@@ -474,7 +486,9 @@ export class ReaderPanel {
         this._postSettings(next);
         ReaderPanel.onDidChangeSettings?.(next);
 
-        // 亮度采样: 超过 8MB 的图跳过(避免 postMessage 传超大字符串)
+        // 亮度采样: 小图用 data URL(绝对可靠); 大图用 webview URI(不传输大字符串, 同源可直接读像素)
+        const uri = this._customBgUri();
+        let dataUrl: string | undefined;
         try {
             const buf = await fs.promises.readFile(target);
             if (buf.length <= 8 * 1024 * 1024) {
@@ -484,14 +498,13 @@ export class ReaderPanel {
                     : ext === 'webp' ? 'image/webp'
                     : ext === 'bmp' ? 'image/bmp'
                     : 'image/jpeg';
-                this._panel.webview.postMessage({
-                    type: 'probeCustomBg',
-                    dataUrl: `data:${mime};base64,${buf.toString('base64')}`,
-                });
+                dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
             }
         } catch {
-            // 采样失败: 保持原有明暗判定, 不影响功能
+            // 读文件失败: 走 URI 采样
         }
+        this._panel.webview.postMessage({ type: 'probeCustomBg', dataUrl, uri });
+        void vscode.window.setStatusBarMessage('$(check) 已应用自定义阅读背景', 3000);
     }
 
     private _postChapter(): void {
@@ -515,6 +528,8 @@ export class ReaderPanel {
 
     private _getHtml(settings: ReadingSettings): string {
         const nonce = crypto.randomBytes(16).toString('hex');
+        // 首帧配色: 自定义主题按图片明暗选色板, 避免先闪一下错误配色
+        const themeForFirstFrame = themeById(settings.theme, !!settings.customBgDark);
 
                 // webview 外壳: Vue 产物(dist-webview)内联 + 静态主题变量初值(防首帧闪白)
         // UI 全部由 webview/reader/ 的 Vue 3 源码构建而来(npm run build:webview)
@@ -527,22 +542,22 @@ export class ReaderPanel {
 <title>小说阅读</title>
 <style>
   :root {
-    --bg: ${themeById(settings.theme).bg};
-    --fg: ${themeById(settings.theme).fg};
-    --page-bg: ${themeById(settings.theme).pageBg};
-    --chrome-bg: ${themeById(settings.theme).chromeBg};
-    --chrome-fg: ${themeById(settings.theme).fg};
-    --chrome-border: ${themeById(settings.theme).chromeBorder};
-    --accent: ${themeById(settings.theme).accent};
-    --accent-fg: ${themeById(settings.theme).accentFg};
+    --bg: ${themeForFirstFrame.bg};
+    --fg: ${themeForFirstFrame.fg};
+    --page-bg: ${themeForFirstFrame.pageBg};
+    --chrome-bg: ${themeForFirstFrame.chromeBg};
+    --chrome-fg: ${themeForFirstFrame.fg};
+    --chrome-border: ${themeForFirstFrame.chromeBorder};
+    --accent: ${themeForFirstFrame.accent};
+    --accent-fg: ${themeForFirstFrame.accentFg};
     /* 悬浮球(起点风格): 面板同色底 + 主题色图标/描边(来自 THEMES 变量) */
-    --fab-bg: ${themeById(settings.theme).chromeBg};
-    --fab-fg: ${themeById(settings.theme).accent};
-    --fab-border: ${themeById(settings.theme).chromeBorder};
-    --btn-hover: ${themeById(settings.theme).accent};
-    --input-bg: ${themeById(settings.theme).bg};
-    --input-fg: ${themeById(settings.theme).fg};
-    --input-border: ${themeById(settings.theme).chromeBorder};
+    --fab-bg: ${themeForFirstFrame.chromeBg};
+    --fab-fg: ${themeForFirstFrame.accent};
+    --fab-border: ${themeForFirstFrame.chromeBorder};
+    --btn-hover: ${themeForFirstFrame.accent};
+    --input-bg: ${themeForFirstFrame.bg};
+    --input-fg: ${themeForFirstFrame.fg};
+    --input-border: ${themeForFirstFrame.chromeBorder};
     /* 排版初值(实际值由 Vue store.applyThemeVars 按当前设置实时维护) */
     --font-size: ${settings.fontSize}px;
     --font-family: ${fontStackById(settings.fontFamily)};
