@@ -280,6 +280,10 @@ export class ReaderPanel {
             case 'ready':
                 this._ready = true;
                 this._postInit();
+                // 正在用「每日一色」时, 打开阅读页顺带检查是否跨天(跨天自动换色)
+                if (this._settings.theme === 'daily') {
+                    void this._ensureDaily();
+                }
                 // 补发视图就绪前的抽屉打开请求
                 if (ReaderPanel._pendingDrawer) {
                     const tab = ReaderPanel._pendingDrawer;
