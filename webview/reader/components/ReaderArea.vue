@@ -89,7 +89,8 @@ function endWidthDrag(e: PointerEvent): void {
     getComputedStyle(document.documentElement).getPropertyValue('--content-width')
   );
   if (isFinite(finalW) && finalW > 0) {
-    persistSettings({ contentWidth: Math.round(finalW) });
+    // 拖拽 = 自定义像素宽度: 同时关掉比例档, 否则会被比例覆盖
+    persistSettings({ contentWidth: Math.round(finalW), widthRatio: 0 });
   }
   widthDrag = null;
 }

@@ -154,10 +154,10 @@
   .sp-seg-btn:hover { border-color: var(--sp-accent); }
   .sp-seg-btn.active { border-color: var(--sp-accent); color: var(--sp-accent); }
   /* 自定义页面宽度: 数字输入 + 单位 + 应用 */
-  .sp-row-custom { margin-top: -4px; margin-bottom: 4px; }
-  .sp-width-custom { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; }
+  /* 自定义宽度: 独占一行, 输入框直接可编辑 */
+  .sp-row-custom { margin-top: -2px; }
   .sp-width-input {
-    width: 92px; padding: 3px 8px; font-family: inherit;
+    width: 104px; padding: 4px 8px; font-family: inherit;
     font-size: clamp(12px, calc(var(--font-size) * 0.8), 15px);
     font-variant-numeric: tabular-nums;
     background: var(--input-bg); color: var(--input-fg);
@@ -167,10 +167,6 @@
   .sp-width-input::-webkit-inner-spin-button,
   .sp-width-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   .sp-width-unit { font-size: clamp(11px, calc(var(--font-size) * 0.72), 14px); color: var(--sp-muted); }
-  .sp-width-tip {
-    margin: -4px 0 12px 78px; line-height: 1.5;
-    font-size: clamp(11px, calc(var(--font-size) * 0.7), 14px); color: var(--sp-muted);
-  }
   .sp-step { display: flex; align-items: stretch; border: 1px solid var(--sp-border); border-radius: 4px; overflow: hidden; }  .sp-step-btn {
     border: none; background: var(--sp-control-bg); color: var(--sp-fg); cursor: pointer;
     padding: 4px 10px; font-family: inherit;

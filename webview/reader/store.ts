@@ -79,11 +79,32 @@ export function applyThemeVars(s: ReadingSettings): void {
   root.style.setProperty('--font-family', FONT_STACKS[s.fontFamily] || FONT_STACKS.system);
   root.style.setProperty('--line-height', String(s.lineHeight));
   root.style.setProperty('--para-spacing', s.paragraphSpacing + 'em');
-  root.style.setProperty('--content-width', s.contentWidth + 'px');
-  // 栏宽模式: 预设档跟随窗口收缩; 自定义/拖拽值允许超出视口 -> 文档横向滚动
-  root.dataset.widthMode = CONTENT_WIDTH.steps.indexOf(s.contentWidth) >= 0 ? 'preset' : 'custom';
+  applyContentWidth(s);
   syncXScrollbar();
 }
+
+/**
+ * 写入栏宽:
+ *  - widthRatio > 0 -> 预设比例档, 宽度 = 视口宽 × 比例(跟随窗口变化)
+ *  - widthRatio = 0 -> 自定义像素(contentWidth), 超出视口时文档横向滚动
+ */
+function applyContentWidth(s: ReadingSettings): void {
+  const root = document.documentElement;
+  const ratio = Number(s.widthRatio) || 0;
+  const vw = root.clientWidth || window.innerWidth || 0;
+  const w = ratio > 0 && vw > 0
+    ? Math.round(vw * ratio)
+    : Math.round(Number(s.contentWidth) || 720);
+  root.style.setProperty('--content-width', w + 'px');
+  root.dataset.widthMode = ratio > 0 ? 'preset' : 'custom';
+}
+
+// 比例档需要跟随窗口: 尺寸变化时只重算栏宽(不重跑整套主题变量)
+window.addEventListener('resize', function () {
+  if (!state.settings) { return; }
+  if ((Number(state.settings.widthRatio) || 0) > 0) { applyContentWidth(state.settings); }
+  syncXScrollbar();
+});
 
 let xSbPending = false;
 /**
@@ -119,10 +140,12 @@ export function persistSettings(patch: Partial<ReadingSettings>): void {
   state.nextCombo = parseShortcut(state.settings.shortcutNext);
   pendingPatch = Object.assign(pendingPatch, patch);
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-  // 主题切换 / 状态栏显隐 是离散操作 -> 立即提交, 不吃防抖延迟
+  // 主题切换 / 状态栏显隐 / 栏宽档位 是离散操作 -> 立即提交, 不吃防抖延迟
   const immediate =
     Object.prototype.hasOwnProperty.call(patch, 'theme') ||
-    Object.prototype.hasOwnProperty.call(patch, 'showStatusBar');
+    Object.prototype.hasOwnProperty.call(patch, 'showStatusBar') ||
+    Object.prototype.hasOwnProperty.call(patch, 'widthRatio') ||
+    Object.prototype.hasOwnProperty.call(patch, 'contentWidth');
   if (immediate) {
     const sending = pendingPatch;
     pendingPatch = {};

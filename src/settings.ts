@@ -19,7 +19,8 @@ import { SOLAR_TERMS, DEFAULT_TERM_ID } from "./solarTerms";
 export const CONTENT_WIDTH = {
   min: 480,
   max: 4000,
-  steps: [640, 800, 1000, 1200],
+  /** 预设档 = 视口宽度的比例(33.33% / 55.55% / 66.66% / 77.77%), 随窗口大小自适应 */
+  ratios: [0.3333, 0.5555, 0.6666, 0.7777],
 };
 
 export interface ReadingSettings {
@@ -44,6 +45,8 @@ export interface ReadingSettings {
   shortcutNext: string;
   /** 是否显示底部状态栏(默认显示; 由侧边菜单「状态栏」项切换) */
   showStatusBar: boolean;
+  /** 正文栏宽: 视口宽度比例(0 = 关闭, 使用 contentWidth 的像素值) */
+  widthRatio: number;
   /** 地域色彩主题: 省级行政区代码(见 provinceColors.ts), theme=province 时生效 */
   province: string;
   /** 廿四节气主题: 节气 id(见 solarTerms.ts), theme=term 时生效 */
@@ -215,6 +218,7 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
   shortcutNext: "alt+arrowright",
   showStatusBar: true,
 
+  widthRatio: 0,
   province: DEFAULT_PROVINCE_CODE,
   term: DEFAULT_TERM_ID,
 };
@@ -233,6 +237,7 @@ const SETTING_KEYS: (keyof ReadingSettings)[] = [
   "shortcutNext",
   "showStatusBar",
 
+  "widthRatio",
   "province",
   "term",
 ];
@@ -284,6 +289,7 @@ function configDefaults(): ReadingSettings {
     ),
     showStatusBar: DEFAULT_SETTINGS.showStatusBar,
 
+    widthRatio: 0,
     province: DEFAULT_SETTINGS.province,
     term: DEFAULT_SETTINGS.term,
   };
@@ -323,6 +329,10 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
   // 主题白名单: 6 个预设 + province(地域色彩, 不在 THEMES 里但合法)
   if (typeof s.theme === "string" && (s.theme === "province" || s.theme === "term" || THEMES.some((t) => t.id === s.theme))) {
     out.theme = s.theme;
+  }
+  if (typeof s.widthRatio === "number" && isFinite(s.widthRatio) && s.widthRatio >= 0 && s.widthRatio <= 1) {
+    // 只接受预设比例或 0(自定义像素)
+    out.widthRatio = CONTENT_WIDTH.ratios.indexOf(s.widthRatio) >= 0 ? s.widthRatio : (s.widthRatio === 0 ? 0 : out.widthRatio || 0);
   }
   if (typeof s.province === "string" && PROVINCES.some((p) => p.code === s.province)) {
     out.province = s.province;

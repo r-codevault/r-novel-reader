@@ -3,7 +3,7 @@
  * SettingsPanel.vue — 设置面板(起点风格)
  * 面板定位(贴合悬浮球)由 App 协调, 本组件暴露根元素
  */
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { state, THEMES, PROVINCES, SOLAR_TERMS, CONTENT_WIDTH, persistSettings, previewTheme, restoreTheme, stepFontSize, stepSetting, resetSettings } from '../store';
 import { shortcutLabel } from '../composables/shortcut';
 
@@ -92,50 +92,53 @@ function chooseProvince(code: string): void {
   persistSettings({ province: code, theme: 'province' });
 }
 
-const widthSteps = CONTENT_WIDTH.steps;
 const fontOptions = [
   { id: 'heiti', name: '黑体' },
   { id: 'songti', name: '宋体' },
   { id: 'kaiti', name: '楷体' },
 ];
 
-/* ---------- 页面宽度: 预设档 + 自定义(可超出窗口, 横向滚动) ---------- */
-const customOpen = ref(false);
-const customValue = ref('');
+/* ---------- 页面宽度: 视口比例档(33.33% 起) + 自定义像素(独占一行) ---------- */
 const customInputRef = ref<HTMLInputElement | null>(null);
 
-/** 当前值不在预设档内 -> 视为自定义 */
-const isPresetWidth = computed(function () {
-  const s = state.settings;
-  return !!s && widthSteps.indexOf(Number(s.contentWidth)) >= 0;
+/** 当前生效的比例档(0 = 自定义像素) */
+const curRatio = computed(function () {
+  return Number(state.settings ? state.settings.widthRatio : 0) || 0;
 });
 
-function openCustomWidth(): void {
-  const cur = state.settings ? Number(state.settings.contentWidth) : widthSteps[0];
-  customValue.value = String(Math.round(cur));
-  customOpen.value = true;
-  nextTick(function () {
-    if (customInputRef.value) { customInputRef.value.focus(); customInputRef.value.select(); }
-  });
+/** 比例 -> 百分比文案: 0.3333 -> 33.33% */
+function pctText(r: number): string {
+  return (r * 100).toFixed(2) + '%';
 }
 
-function applyCustomWidth(): void {
-  if (!customOpen.value) { return; }
-  const n = Math.round(Number(customValue.value));
-  customOpen.value = false;
+/** 自定义输入框显示值: 比例档时显示换算后的实际像素 */
+const customValue = computed(function () {
+  const s = state.settings;
+  if (!s) { return ''; }
+  if (curRatio.value > 0) {
+    const vw = document.documentElement.clientWidth || window.innerWidth || 0;
+    return String(Math.round(vw * curRatio.value));
+  }
+  return String(Math.round(Number(s.contentWidth) || 0));
+});
+
+/** 聚焦即全选, 直接输入即可覆盖 */
+function onCustomFocus(e: FocusEvent): void {
+  const el = e.target as HTMLInputElement;
+  requestAnimationFrame(function () { el.select(); });
+}
+
+/** 失焦/回车时应用自定义像素宽度 */
+function applyCustomWidth(e: Event): void {
+  const el = e.target as HTMLInputElement;
+  const n = Math.round(Number(el.value));
   if (!isFinite(n) || n <= 0) { return; }
   const v = Math.min(CONTENT_WIDTH.max, Math.max(CONTENT_WIDTH.min, n));
-  customValue.value = String(v);
-  persistSettings({ contentWidth: v });
+  el.value = String(v);
+  if (v !== Math.round(Number(state.settings ? state.settings.contentWidth : 0)) || curRatio.value !== 0) {
+    persistSettings({ contentWidth: v, widthRatio: 0 });
+  }
 }
-
-/** 估读每行汉字数: 扣掉纸面左右内边距(34×2)与 0.02em 字距 */
-const customChars = computed(function () {
-  const s = state.settings;
-  if (!s) { return 0; }
-  const w = Number(customValue.value) || Number(s.contentWidth);
-  return Math.max(1, Math.floor((w - 68) / (s.fontSize * 1.02)));
-});
 
 const settings = computed(() => state.settings);
 const shortcutHintText = computed(function () {
@@ -243,26 +246,21 @@ const shortcutHintText = computed(function () {
     <div class="sp-row">
       <span class="sp-label">页面宽度</span>
       <div class="sp-seg">
-        <button v-for="w in widthSteps" :key="w" class="sp-seg-btn"
-          :class="{ active: settings && Number(settings.contentWidth) === w }"
-          @click="customOpen = false; persistSettings({ contentWidth: w })">{{ w }}</button>
-        <button class="sp-seg-btn" :class="{ active: !isPresetWidth || customOpen }"
-          @click="openCustomWidth">自定义</button>
+        <button v-for="r in CONTENT_WIDTH.ratios" :key="r" class="sp-seg-btn"
+          :class="{ active: curRatio === r }"
+          :title="'视口宽度的 ' + pctText(r)"
+          @click="persistSettings({ widthRatio: r })">{{ pctText(r) }}</button>
       </div>
     </div>
-    <div class="sp-row sp-row-custom" v-if="customOpen">
-      <span class="sp-label">自定义宽度</span>
-      <div class="sp-width-custom">
-        <input ref="customInputRef" v-model="customValue" class="sp-width-input" type="number"
-          :min="CONTENT_WIDTH.min" :max="CONTENT_WIDTH.max" step="10"
-          @keydown.enter.prevent="applyCustomWidth" @keydown.esc.prevent="customOpen = false"
-          @blur="applyCustomWidth" />
-        <span class="sp-width-unit">px</span>
-        <button class="sp-seg-btn" @click="applyCustomWidth">应用</button>
-      </div>
-    </div>
-    <div class="sp-width-tip" v-if="customOpen">
-      {{ CONTENT_WIDTH.min }}–{{ CONTENT_WIDTH.max }}px · 约 {{ customChars }} 字/行 · 超出窗口时横向滚动
+    <!-- 自定义宽度: 独占一行, 聚焦即可直接输入(无需额外的输入区/应用按钮) -->
+    <div class="sp-row sp-row-custom">
+      <span class="sp-label">自定义</span>
+      <input ref="customInputRef" class="sp-width-input" type="number" inputmode="numeric"
+        :value="customValue" :min="CONTENT_WIDTH.min" :max="CONTENT_WIDTH.max" step="10"
+        :title="CONTENT_WIDTH.min + '–' + CONTENT_WIDTH.max + 'px, 回车或失焦生效'"
+        @focus="onCustomFocus" @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
+        @blur="applyCustomWidth" />
+      <span class="sp-width-unit">px</span>
     </div>
     <button class="sp-reset" @click="resetSettings">恢复默认设置</button>
     <div class="settings-hint">{{ shortcutHintText }}</div>

@@ -382,6 +382,44 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(widthUpdate.patch.contentWidth <= 4000, '拖宽不应超过 4000 上限(自定义宽度已放开)');
   console.log('正文宽度拖拽(手柄/持久化/放宽上限): 通过');
 
+  // 页面宽度档位: 视口比例(33.33%~77.77%) + 自定义独占一行(聚焦即输入)
+  {
+    document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    const widthRow = Array.from(document.querySelectorAll('#settingsPanel .sp-row'))
+      .find((r) => (r.querySelector('.sp-label') || {}).textContent === '页面宽度');
+    assert(widthRow, '应有「页面宽度」行');
+    const ratioLabels = Array.from(widthRow.querySelectorAll('.sp-seg-btn')).map((b) => (b.textContent || '').trim());
+    assert(
+      ratioLabels.join(',') === '33.33%,55.55%,66.66%,77.77%',
+      '页面宽度应为 4 个视口比例档, 实际: ' + ratioLabels.join(',')
+    );
+    posted.length = 0;
+    widthRow.querySelectorAll('.sp-seg-btn')[1].dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    assert(
+      posted.some((m) => m.type === 'updateSettings' && m.patch && m.patch.widthRatio === 0.5555),
+      '点比例档应保存 widthRatio(0.5555)'
+    );
+
+    // 自定义: 独占一行, 只有输入框(无「应用」按钮/无提示块)
+    const customRow = document.querySelector('#settingsPanel .sp-row-custom');
+    assert(customRow, '应有独立的「自定义」行');
+    assert(customRow.querySelector('.sp-width-input'), '自定义行应有数字输入框');
+    assert(
+      Array.from(customRow.querySelectorAll('button')).length === 0,
+      '自定义行不应再有「应用」按钮'
+    );
+    assert(!document.querySelector('#settingsPanel .sp-width-tip'), '不应再有宽度提示块');
+    assert(
+      (customRow.querySelector('.sp-label') || {}).textContent === '自定义',
+      '自定义行标签应为「自定义」'
+    );
+    document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    console.log('页面宽度(视口比例档/自定义独立行): 通过');
+  }
+
   // 快捷键 Alt+ArrowRight 下一章
   const nextCountBefore = posted.filter((m) => m.type === 'getChapter').length;
   document.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true }));
