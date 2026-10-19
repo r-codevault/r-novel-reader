@@ -5,7 +5,6 @@
  */
 import { computed, ref, watch } from 'vue';
 import { state, THEMES, PROVINCES, SOLAR_TERMS, CONTENT_WIDTH, persistSettings, previewTheme, restoreTheme, stepFontSize, stepSetting, resetSettings } from '../store';
-import { normalizeHex } from '../../../src/themePaint';
 import { shortcutLabel } from '../composables/shortcut';
 
 const rootRef = ref<HTMLElement | null>(null);
@@ -92,68 +91,6 @@ function chooseProvince(code: string): void {
   if (!code) { return; }
   persistSettings({ province: code, theme: 'province' });
 }
-
-/* ---------- 自定义主题色(与地域色彩/廿四节气互斥, 共用同一套色板推导) ---------- */
-
-/** 当前已保存的代表色(归一化后; 非法值回退默认灰) */
-const savedHex = computed(function () {
-  return normalizeHex(state.settings ? state.settings.customHex : '') || '#8A8A8A';
-});
-
-/** 输入框显示值: 正在使用时显示真实色值, 未使用/非法时给占位提示 */
-const hexInput = computed(function () {
-  if (!state.settings || state.settings.theme !== 'custom') { return ''; }
-  return normalizeHex(state.settings.customHex) || '';
-});
-
-/** 输入框的实时文本(允许用户输入中间态, 如 "#1a2" 尚未输完) */
-const hexDraft = ref('');
-const hexInputRef = ref<HTMLInputElement | null>(null);
-
-/** 拖色盘实时预览: 跟随指针即时套用色板(不落盘) */
-function onPaletteInput(e: Event): void {
-  const hex = (e.target as HTMLInputElement).value;
-  hexDraft.value = hex;
-  if (!normalizeHex(hex)) { return; }
-  // 直接预览: 只改CSS 变量, 不动 state.settings -> 天然不落盘
-  previewTheme({ theme: 'custom', customHex: hex });
-}
-
-/** 拖动结束/关闭面板时提交, 避免拖动过程中疯狂写设置 */
-function commitPalette(): void {
-  const hex = normalizeHex(hexDraft.value || savedHex.value);
-  if (!hex) { return; }
-  restoreTheme();
-  if (hex !== savedHex.value) {
-    persistSettings({ customHex: hex, theme: 'custom' });
-  }
-}
-
-/** 粘贴/键入颜色: 回车或失焦生效; 输入非法时恢复为上次有效值 */
-function applyHexText(): void {
-  const raw = hexDraft.value.trim();
-  const hex = normalizeHex(raw);
-  if (!hex) {
-    // 非法输入: 静默回退, 不弹提示打断阅读
-    hexDraft.value = state.settings && state.settings.theme === 'custom' ? hexInput.value : '';
-    restoreTheme();
-    return;
-  }
-  restoreTheme();
-  persistSettings({ customHex: hex, theme: 'custom' });
-  hexDraft.value = hex;
-}
-
-/** 悬浮预览: 键盘聚焦时也能看到效果 */
-function previewCustom(): void {
-  const hex = normalizeHex(hexDraft.value || savedHex.value);
-  if (hex) { previewTheme({ theme: 'custom', customHex: hex }); }
-}
-
-// 面板关闭时结束任何残留预览
-watch(function () { return state.settingsOpen; }, function (open) {
-  if (!open) { hexDraft.value = ''; restoreTheme(); }
-});
 
 const fontOptions = [
   { id: 'heiti', name: '黑体' },
@@ -270,25 +207,6 @@ const shortcutHintText = computed(function () {
               @mouseenter="previewTerm(t.id)" @focus="previewTerm(t.id)"
               @click="chooseTerm(t.id)">{{ t.name }}</button>
           </div>
-        </div>
-        <!-- 第三行: 自定义主题色 —— 左边原生色盘(拖动实时预览), 右边粘贴/键入色值 -->
-        <div class="sp-custom-row" @mouseleave="endPreview()">
-          <span class="sp-custom-label">自定义色</span>
-          <label class="sp-color-well" :class="{ active: settings && settings.theme === 'custom' }"
-            :title="'当前代表色 ' + savedHex + ' —— 点击/拖动选取颜色'">
-            <input type="color" :value="savedHex"
-              @input="onPaletteInput" @change="commitPalette" @blur="commitPalette" />
-          </label>
-          <input ref="hexInputRef" class="sp-hex-input" type="text" spellcheck="false"
-            autocomplete="off" placeholder="#1A2847 或 rgb(26,40,71)"
-            :value="hexDraft || hexInput"
-            :title="'粘贴或键入颜色值(#rgb / #rrggbb / rgb(r,g,b)), 回车或失焦生效'"
-            @focus="previewCustom"
-            @input="hexDraft = ($event.target as HTMLInputElement).value"
-            @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
-            @blur="applyHexText" />
-          <span class="sp-hex-preview" :style="{ background: normalizeHex(hexDraft || savedHex) || 'transparent' }"
-            aria-hidden="true"></span>
         </div>
         </div>
       </div>

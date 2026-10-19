@@ -10,19 +10,6 @@
 import * as vscode from "vscode";
 import { PROVINCES, DEFAULT_PROVINCE_CODE } from "./provinceColors";
 import { SOLAR_TERMS, DEFAULT_TERM_ID } from "./solarTerms";
-// 色板推导是纯函数, 抽到 themePaint.ts 供 webview 端共用(自定义色需运行时推导)
-import {
-  paintTheme,
-  customTheme,
-  normalizeHex,
-  contrastRatio,
-  ensureContrast,
-  pickRepresentative,
-  hslToHex,
-  rgbToHsl,
-  hexToRgbTriple,
-  type ThemeDef,
-} from "./themePaint";
 
 /**
  * 正文栏宽(px): 预设档位 + 合法区间。
@@ -66,8 +53,31 @@ export interface ReadingSettings {
   province: string;
   /** 廿四节气主题: 节气 id(见 solarTerms.ts), theme=term 时生效 */
   term: string;
-  /** 自定义主题代表色(#rrggbb), theme=custom 时生效; 只借色相, 明度由算法锁定保证可读 */
-  customHex: string;
+}
+
+export interface ThemeDef {
+  id: string;
+  name: string;
+  /** 阅读区背景色 */
+  bg: string;
+  /** 正文文字色 */
+  fg: string;
+  /** 留白区域底色(正文"纸面"四周, 与 bg 区分出层次) */
+  pageBg: string;
+  /** 面板/状态栏底色(设置面板、目录面板、悬浮球等) */
+  chromeBg: string;
+  /** 面板/状态栏边框色 */
+  chromeBorder: string;
+  /** 主题主色(悬浮球、进度条、当前章高亮) */
+  accent: string;
+  /** 主色上的文字色 */
+  accentFg: string;
+  /** 次要文字色(设置面板标签/说明文字) */
+  muted: string;
+  /** 设置面板强调色(选中态描边、当前主题对勾等) */
+  panelAccent: string;
+  /** 面板悬停态底色 */
+  panelHover: string;
 }
 
 export interface FontDef {
@@ -216,7 +226,6 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
   widthRatio: 0,
   province: DEFAULT_PROVINCE_CODE,
   term: DEFAULT_TERM_ID,
-  customHex: "#8A8A8A",
 };
 
 const STORAGE_KEY = "novelReader.settings";
@@ -237,7 +246,6 @@ const SETTING_KEYS: (keyof ReadingSettings)[] = [
   "widthRatio",
   "province",
   "term",
-  "customHex",
 ];
 
 function clamp(n: number, min: number, max: number, fallback: number): number {
@@ -291,7 +299,6 @@ function configDefaults(): ReadingSettings {
     widthRatio: 0,
     province: DEFAULT_SETTINGS.province,
     term: DEFAULT_SETTINGS.term,
-    customHex: DEFAULT_SETTINGS.customHex,
   };
 }
 
@@ -342,13 +349,6 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
   }
   if (typeof s.term === "string" && SOLAR_TERMS.some((t) => t.id === s.term)) {
     out.term = s.term;
-  }
-  if (typeof s.customHex === "string") {
-    // 只接受能归一化成 #rrggbb 的值; 非法则保留原值(不让脏数据污染设置)
-    const hex = normalizeHex(s.customHex);
-    if (hex) {
-      out.customHex = hex;
-    }
   }
   if (typeof s.contentWidth === "number") {
     out.contentWidth = clamp(
@@ -435,15 +435,12 @@ export class SettingsStore {
   }
 }
 
-export function themeById(id: string, provinceCode?: string, termId?: string, customHex?: string): ThemeDef {
+export function themeById(id: string, provinceCode?: string, termId?: string): ThemeDef {
   if (id === "province") {
     return provinceTheme(provinceCode);
   }
   if (id === "term") {
     return termTheme(termId);
-  }
-  if (id === "custom") {
-    return customTheme(customHex);
   }
   return THEMES.find((t) => t.id === id) ?? THEMES[0];
 }
@@ -457,20 +454,167 @@ export function themeById(id: string, provinceCode?: string, termId?: string, cu
 //   - 强调色: 原色若与纸面对比不足 4.5:1 则逐步压暗, 保证图标/当前章可辨认
 // 这样 34 个省都能得到"有地域色相但可长时间阅读"的配色。
 
-// 色板推导(hexToRgbTriple / paintTheme / customTheme 等)已抽到 themePaint.ts:
-// webview 端需要**运行时**按用户输入推导自定义色色板, 故必须共用同一份纯函数源码。
-export {
-  paintTheme,
-  customTheme,
-  normalizeHex,
-  contrastRatio,
-  ensureContrast,
-  pickRepresentative,
-  hslToHex,
-  rgbToHsl,
-  hexToRgbTriple,
-  type ThemeDef,
-};
+function hexToRgbTriple(hex: string): [number, number, number] {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) {
+    return [0, 0, 0];
+  }
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** rgb -> {h:0~360, s:0~1, l:0~1} */
+function rgbToHsl([r, g, b]: [number, number, number]): { h: number; s: number; l: number } {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  const d = max - min;
+  if (d === 0) {
+    return { h: 0, s: 0, l };
+  }
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h: number;
+  if (max === rn) {
+    h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6;
+  } else if (max === gn) {
+    h = ((bn - rn) / d + 2) / 6;
+  } else {
+    h = ((rn - gn) / d + 4) / 6;
+  }
+  return { h: h * 360, s, l };
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const hue = ((h % 360) + 360) % 360;
+  const sat = Math.min(1, Math.max(0, s));
+  const lig = Math.min(1, Math.max(0, l));
+  const c = (1 - Math.abs(2 * lig - 1)) * sat;
+  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const m = lig - c / 2;
+  let rgb: [number, number, number];
+  if (hue < 60) {
+    rgb = [c, x, 0];
+  } else if (hue < 120) {
+    rgb = [x, c, 0];
+  } else if (hue < 180) {
+    rgb = [0, c, x];
+  } else if (hue < 240) {
+    rgb = [0, x, c];
+  } else if (hue < 300) {
+    rgb = [x, 0, c];
+  } else {
+    rgb = [c, 0, x];
+  }
+  const to = (v: number) => Math.round((v + m) * 255).toString(16).padStart(2, "0");
+  return `#${to(rgb[0])}${to(rgb[1])}${to(rgb[2])}`;
+}
+
+/** WCAG 相对亮度 */
+function relativeLuminance(hex: string): number {
+  const [r, g, b] = hexToRgbTriple(hex).map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** 对比度(1~21) */
+export function contrastRatio(fg: string, bg: string): number {
+  const a = relativeLuminance(fg);
+  const b = relativeLuminance(bg);
+  const hi = Math.max(a, b);
+  const lo = Math.min(a, b);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * 取该省"代表色"作为色相来源。
+ * 优先用色卡首项(数据按"最具代表性"排序, 如北京=故宫红), 但首项若是近白/近黑
+ * 则色相不可靠, 退而取饱和度最高且明度适中的那个。
+ */
+function pickRepresentative(colors: { hex: string }[]): { hex: string } {
+  const first = colors[0];
+  if (first) {
+    const hsl = rgbToHsl(hexToRgbTriple(first.hex));
+    if (hsl.s >= 0.12 && hsl.l >= 0.15 && hsl.l <= 0.82) {
+      return first;
+    }
+  }
+  let best: { hex: string } | null = null;
+  let bestScore = -1;
+  for (const c of colors) {
+    const hsl = rgbToHsl(hexToRgbTriple(c.hex));
+    if (hsl.l < 0.15 || hsl.l > 0.82) {
+      continue;
+    }
+    const score = hsl.s;
+    if (score > bestScore) {
+      bestScore = score;
+      best = c;
+    }
+  }
+  return best || first || { hex: "#8A8A8A" };
+}
+
+/** 把强调色压暗到与纸面对比度达标(默认 4.5:1, 正文级) */
+function ensureContrast(fg: string, bg: string, target: number): string {
+  if (contrastRatio(fg, bg) >= target) {
+    return fg;
+  }
+  const hsl = rgbToHsl(hexToRgbTriple(fg));
+  let l = hsl.l;
+  for (let i = 0; i < 40 && l > 0.06; i += 1) {
+    l -= 0.02;
+    const next = hslToHex(hsl.h, hsl.s, l);
+    if (contrastRatio(next, bg) >= target) {
+      return next;
+    }
+  }
+  return hslToHex(hsl.h, hsl.s, 0.12);
+}
+
+/**
+ * 按省份推导完整的阅读色板。
+ * @param provinceCode 省级行政区代码(如 110000); 缺省用北京
+ */
+/**
+ * 由"一个代表色 + 主题名"生成完整阅读色板(地域色彩 / 廿四节气共用)。
+ * 只借色相, 明度饱和度由算法锁定; 强调色对比度不足则自动压暗。
+ */
+function paintTheme(repHex: string, name: string, id: string): ThemeDef {
+  const h = rgbToHsl(hexToRgbTriple(repHex)).h;
+  // 纸面/留白/面板: 同一色相不同明度(层次可辨), 饱和度取到"看得出地域色、又不喧宾夺主"
+  // 注: 明度不能太高(>0.96 时不同色相在 8bit 下会被量化成同一个颜色, 省份之间就没区别了);
+  //     地域辨识度主要由留白区(pageBg)承担, 纸面保持偏白的"纸感"
+  const bg = hslToHex(h, 0.26, 0.925);
+  const pageBg = hslToHex(h, 0.3, 0.85);
+  const chromeBg = hslToHex(h, 0.24, 0.915);
+  const chromeBorder = hslToHex(h, 0.32, 0.76);
+  // 正文/次要文字: 深色。次要文字同样要过对比度门槛(4.5:1), 不够就自动加暗
+  const fg = hslToHex(h, 0.32, 0.16);
+  const muted = ensureContrast(hslToHex(h, 0.12, 0.44), bg, 4.5);
+  // 强调色: 代表色压暗到达标(与纸面同色相, 整体协调)
+  const rawPrimary = repHex;
+  const accent = ensureContrast(rawPrimary, bg, 4.5);
+  const accentFg = contrastRatio("#ffffff", accent) >= 3 ? "#ffffff" : "#1a1a1a";
+  return {
+    id,
+    name,
+    bg,
+    fg,
+    pageBg,
+    chromeBg,
+    chromeBorder,
+    accent,
+    accentFg,
+    muted,
+    panelAccent: ensureContrast(rawPrimary, chromeBg, 3),
+    panelHover: hslToHex(h, 0.18, 0.9),
+  };
+}
 
 export function provinceTheme(provinceCode?: string): ThemeDef {
   const region =

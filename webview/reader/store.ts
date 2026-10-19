@@ -3,8 +3,6 @@
  */
 import { reactive } from 'vue';
 import type { ReadingSettings, ThemeDef } from '../../src/settings';
-//色板推导纯函数与扩展端共用同一份源码(自定义色是运行时输入, 必须端上现算)
-import { customTheme } from '../../src/themePaint';
 import { state, send, saveRestoreState, type ChapterPayload } from './composables/vscode';
 import { parseShortcut } from './composables/shortcut';
 
@@ -14,20 +12,14 @@ export { THEMES, FONT_STACKS, DEFAULT_SETTINGS, CONTENT_WIDTH, PROVINCES, PROVIN
 
 export { state };
 
-export function themeOf(id: string, province?: string, term?: string, customHex?: string): ThemeDef {
+export function themeOf(id: string, province?: string, term?: string): ThemeDef {
   if (id === 'province') {
     // 地域色彩主题: 色板在构建期按 34 个省算好(vite.config), 端上直接查表
-    return PROVINCES.length && PROVINCE_THEMES[province || '']
-      ? PROVINCE_THEMES[province || '']
-      : PROVINCE_THEMES['110000'] || THEMES[0];
+    return PROVINCE_THEMES[province || ''] || PROVINCE_THEMES['110000'] || THEMES[0];
   }
   if (id === 'term') {
     // 廿四节气主题: 同样构建期算好 24 套色板
     return TERM_THEMES[term || ''] || TERM_THEMES['lichun'] || THEMES[0];
-  }
-  if (id === 'custom') {
-    // 自定义色: 运行时用户输入, 只能端上现算(与扩展端共用 themePaint.paintTheme)
-    return customTheme(customHex);
   }
   for (const t of THEMES) { if (t.id === id) { return t; } }
   return THEMES[0];
@@ -50,7 +42,7 @@ export function restoreTheme(): void {
 }
 
 export function applyThemeVars(s: ReadingSettings): void {
-  const t = themeOf(s.theme, s.province, s.term, s.customHex);
+  const t = themeOf(s.theme, s.province, s.term);
   const root = document.documentElement;
   // 暴露主题 id 供 CSS 按主题分支(如 logo 放射线在浅色/黑夜用不同颜色)
   root.dataset.theme = t.id;
@@ -148,10 +140,9 @@ export function persistSettings(patch: Partial<ReadingSettings>): void {
   state.nextCombo = parseShortcut(state.settings.shortcutNext);
   pendingPatch = Object.assign(pendingPatch, patch);
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-  // 主题切换 / 自定义色 / 状态栏显隐 / 栏宽档位 是离散操作 -> 立即提交, 不吃防抖延迟
+  // 主题切换 / 状态栏显隐 / 栏宽档位 是离散操作 -> 立即提交, 不吃防抖延迟
   const immediate =
     Object.prototype.hasOwnProperty.call(patch, 'theme') ||
-    Object.prototype.hasOwnProperty.call(patch, 'customHex') ||
     Object.prototype.hasOwnProperty.call(patch, 'showStatusBar') ||
     Object.prototype.hasOwnProperty.call(patch, 'widthRatio') ||
     Object.prototype.hasOwnProperty.call(patch, 'contentWidth');
