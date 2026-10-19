@@ -11,6 +11,7 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { Novel, parseNovel } from './novelParser';
+import { decodeBuffer } from './encoding';
 import { readWebviewAsset } from './webviewAssets';
 
 import { ReadingSettings, SettingsStore, THEMES, fontStackById, themeById } from './settings';
@@ -211,8 +212,14 @@ export class ReaderPanel {
 
     /**
      * VS Code 重开窗口时反序列化阅读页。
-     * - 开关关闭(默认)或状态无效: 直接丢弃这个恢复出来的 Tab, 不打扰启动
-     * - 开关开启: 重新解析小说并接管该面板, 还原章节与章内位置
+     *
+     * 触发前提: 上次退出时这个面板**确实开着**(VS Code 只恢复已存在的 Tab),
+     * 因此默认行为是"原样恢复"—— 上次看到哪一章、章内滚到哪, 重开后都一样。
+     *
+     * - 开关被用户显式关闭 / 状态无效 / 源文件已不在: 才丢弃这个恢复出来的 Tab
+     * - 注意: 全新开VS Code(上次没开过阅读页)时 VS Code 根本没有 Tab 要恢复,
+     *   压根不会调用这里 —— 所以"启动时自动弹窗"与本方法无关,
+     *   那由 activate 里不开面板保证(见 extension.ts 启动段)。
      */
     static async restore(
         panel: vscode.WebviewPanel,
@@ -225,8 +232,14 @@ export class ReaderPanel {
             return false;
         }
         try {
-            const raw = await vscode.workspace.fs.readFile(vscode.Uri.file(state.filePath));
-            const novel = parseNovel(Buffer.from(raw).toString('utf-8'), state.filePath);
+            const raw = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.file(state.filePath)));
+            // 必须走编码识别: 站点下载的 txt 常为 GB18030, 硬解UTF-8 会乱码
+            const { text, encoding } = decodeBuffer(raw);
+            const novel = parseNovel(text, state.filePath, encoding);
+            if (novel.chapters.length === 0) {
+                panel.dispose();
+                return false;
+            }
             const idx = Math.min(Math.max(0, state.chapterIndex || 0), Math.max(0, novel.chapters.length - 1));
             ReaderPanel.current = new ReaderPanel(panel, novel, idx, state.scrollRatio || 0, store);
             return true;

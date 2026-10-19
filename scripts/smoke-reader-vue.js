@@ -960,7 +960,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     );
     console.log('扩展清单(无活动栏入口/状态栏常驻/命令齐备): 通过');
 
-  // 窗口重开恢复: 默认关闭(不自动弹出阅读页), 开启时可还原
+  // 窗口重开恢复: 上次开着的阅读页原样恢复(默认开启), 显式关闭才丢弃
   {
     const extSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
     const panelSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'readerPanel.ts'), 'utf8');
@@ -969,14 +969,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     assert(/registerWebviewPanelSerializer/.test(extSrc), '应注册 WebviewPanelSerializer 以接管窗口恢复');
     assert(/static async restore\(/.test(panelSrc), 'ReaderPanel 应提供 restore 反序列化入口');
     assert(/!restoreOnStartup[\s\S]{0,80}panel\.dispose\(\)/.test(panelSrc),
-      '开关关闭时必须直接 dispose 恢复出来的面板(否则仍会自动打开)');
-    assert(/restoreOnStartup: false/.test(settingsSrc2), 'restoreOnStartup 默认应为 false');
+      '开关关闭时必须直接 dispose 恢复出来的面板');
+    assert(/restoreOnStartup: true/.test(settingsSrc2), 'restoreOnStartup 默认应为 true(上次开着就原样恢复)');
     assert(/saveRestoreState\(/.test(storeSrc2), 'webview 应写入恢复信息(webview state)');
+    // 恢复时必须走编码识别, 否则 GB18030 的书会乱码
+    assert(
+      /decodeBuffer\(/.test(panelSrc) && !/toString\(['"]utf-8['"]\)/.test(panelSrc),
+      '窗口恢复时必须复用 decodeBuffer 识别编码(站点下载的 txt 常为 GB18030)'
+    );
     const pkgJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
     const prop = pkgJson.contributes.configuration.properties['novelReader.restoreOnStartup'];
     assert(prop, '清单应声明 novelReader.restoreOnStartup 设置项');
-    assert(prop.default === false, '该设置默认应为 false');
-    console.log('窗口重开恢复(开关默认关闭/关闭即丢弃/可还原): 通过');
+    assert(prop.default === true, '该设置默认应为 true');
+    console.log('窗口重开恢复(默认原样恢复/可显式关闭/编码识别): 通过');
   }
 
   // 启动绝不自动弹出: activate 里预载书架不得 openPanel:true

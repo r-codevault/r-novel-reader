@@ -220,7 +220,9 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
   shortcutNext: "alt+arrowright",
   showStatusBar: true,
 
-  restoreOnStartup: false,
+  // 默认 true: 上次退出时阅读页开着, 重开窗口就原样恢复(章节+章内位置)。
+  // 与"启动自动弹窗"无关 —— 全新窗口没有可恢复的 Tab, 压根不会走恢复流程。
+  restoreOnStartup: true,
   widthRatio: 0,
   province: DEFAULT_PROVINCE_CODE,
   term: DEFAULT_TERM_ID,

@@ -19,26 +19,7 @@ import { ensureInLibrary, isInsideDir } from './library';
 import { shelfBookKey, planDuplicateRemoval } from './shelfMaintenance';
 import { moveToTrash } from './trash';
 import { ReadingSettings, SettingsStore } from './settings';
-
-/** 读取文件字节并识别编码(站点下载的 txt 常为 GB18030) */
-function decodeBuffer(buf: Buffer): { text: string; encoding: string } {
-    if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
-        return { text: buf.toString('utf8'), encoding: 'utf8-bom' };
-    }
-    if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
-        return { text: buf.toString('utf16le'), encoding: 'utf16le' };
-    }
-    if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
-        const swapped = Buffer.from(buf);
-        swapped.swap16();
-        return { text: swapped.toString('utf16le'), encoding: 'utf16be' };
-    }
-    const utf8 = buf.toString('utf8');
-    if (!utf8.includes('\uFFFD')) {
-        return { text: utf8, encoding: 'utf8' };
-    }
-    return { text: new TextDecoder('gb18030').decode(buf), encoding: 'gb18030' };
-}
+import { decodeBuffer } from './encoding';
 
 interface LoadOptions {
     chapterIndex?: number;

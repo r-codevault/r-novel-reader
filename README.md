@@ -59,7 +59,7 @@
 - 条目显示「读至 第 N 章 / 共 M 章」，当前打开的书用绿色标记
 - 悬停条目右侧出现 ✕ 可从书架移除（有二次确认，不会删除文件）
 - **文件被移动/改名后**：打开该书会提示，可「重新选择文件」并**保留原阅读进度**，或直接从书架移除
-- 启动 VS Code 时**自动延续上一次阅读状态**，无需手动恢复
+- 上次退出时阅读页开着的话，重开 VS Code 会**原样恢复**（章节 + 章内位置）；若上次没开阅读页，启动时不会弹出阅读页，点状态栏「小说阅读」或命令 `小说阅读器: 回到当前阅读章节` 进入
 
 ### 存储位置（书库目录）
 
@@ -209,7 +209,7 @@ npm run compile
 | `novelReader.fontFamily` | string | `system` | `system` / `songti` / `heiti` / `kaiti` / `fangsong` / `yahei` |
 | `novelReader.lineHeight` | number | `1.8` | 1.2–2.8 |
 | `novelReader.paragraphSpacing` | number | `0.8` | 0–2（em） |
-| `novelReader.restoreOnStartup` | boolean | `false` | 重开 VS Code 时是否恢复上次阅读页（默认关闭，避免自动弹出阅读页） |
+| `novelReader.restoreOnStartup` | boolean | `true` | 上次退出时阅读页开着，重开 VS Code 就原样恢复（章节 + 章内滚动位置）。设为 `false` 则丢弃该页签 |
 | `novelReader.contentWidth` | number | `720` | 480–4000（像素）；面板提供视口比例档 33.33%/55.55%/66.66%/77.77%（随窗口自适应）或自定义像素，超出窗口时横向滚动 |
 | `novelReader.theme` | string | `sepia` | `white` / `beige` / `sepia` / `green` / `blue` / `dark` |
 | `novelReader.shortcutPrevChapter` | string | `alt+arrowleft` | 阅读页内「上一章」快捷键，如 `ctrl+shift+p`；留空禁用 |
@@ -269,7 +269,7 @@ npm run package      # 打包 vsix（脚本内已固化 Gitee 相对链接所需
 A：插件已自动尝试 UTF-8 / UTF-16 / GB18030。若仍乱码，通常是罕见的混合编码文件，请先用编辑器「另存为 UTF-8」后再打开。
 
 **Q：换书后阅读进度会丢吗？**
-A：不会。每本书的进度分别记录在书架里，切换回来看会从上次的章节和位置继续；即使关闭 VS Code，下次启动也会自动延续上次那本书的状态。
+A：不会。每本书的进度分别记录在书架里，切换回来看会从上次的章节和位置继续。关闭 VS Code 后，若退出时阅读页开着，重开会原样回到那一章那一位置；若想随时接着读，点状态栏「小说阅读」即可。
 
 **Q：导入的文件存在哪里？可以指定存储位置吗？**
 A：默认**原位引用**——插件不复制不搬动文件，只记录路径，你放哪就在哪读（移动/删除会导致书架条目失效）。想统一收纳时，点侧边栏标题栏 **⚙ 设置** → **选择书库目录**，之后导入的小说会自动复制到该目录并从副本读取。阅读进度、书架清单这些**数据**存在 VS Code 用户数据目录的 `globalState` 中（Windows：`%APPDATA%\Code\User\globalStorage\state.vscdb`），由 VS Code 托管，不随书库设置变化。
