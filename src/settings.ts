@@ -40,8 +40,10 @@ export interface ReadingSettings {
   dailyHex?: string;
   /** 每日一色: 该颜色对应的日期(yyyy-mm-dd), 跨天自动刷新 */
   dailyDate?: string;
-  /** 每日一色: 取色来源 local=本地轮换(默认, 离线可用) / remote=官网每日推荐 */
-  dailySource: string;
+  /** 每日一色: 上次抓取页面的内容哈希(识别 CDN 缓存未更新) */
+  dailyHash?: string;
+  /** 每日一色: 该颜色来自 remote=官网 / local=本地(界面标注用) */
+  dailyFrom?: string;
 }
 
 export interface ThemeDef {
@@ -211,7 +213,6 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
 
   province: DEFAULT_PROVINCE_CODE,
 
-  dailySource: "local",
 };
 
 const STORAGE_KEY = "novelReader.settings";
@@ -235,8 +236,9 @@ const SETTING_KEYS: (keyof ReadingSettings)[] = [
   "dailyHex",
 
   "dailyDate",
+  "dailyHash",
+  "dailyFrom",
 
-  "dailySource",
 ];
 
 function clamp(n: number, min: number, max: number, fallback: number): number {
@@ -288,7 +290,6 @@ function configDefaults(): ReadingSettings {
 
     province: DEFAULT_SETTINGS.province,
 
-    dailySource: DEFAULT_SETTINGS.dailySource,
   };
 }
 
@@ -336,8 +337,11 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
   if (typeof s.dailyDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.dailyDate)) {
     out.dailyDate = s.dailyDate;
   }
-  if (s.dailySource === "local" || s.dailySource === "remote") {
-    out.dailySource = s.dailySource;
+  if (typeof s.dailyHash === "string" && /^[0-9a-f]{8,64}$/.test(s.dailyHash)) {
+    out.dailyHash = s.dailyHash;
+  }
+  if (s.dailyFrom === "remote" || s.dailyFrom === "local") {
+    out.dailyFrom = s.dailyFrom;
   }
   if (typeof s.province === "string" && PROVINCES.some((p) => p.code === s.province)) {
     out.province = s.province;

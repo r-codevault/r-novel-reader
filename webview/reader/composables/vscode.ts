@@ -49,7 +49,7 @@ export const state = reactive({
   /** 每日一色的推导色板(扩展下发) */
   dailyTheme: null as import('../../../src/settings').ThemeDef | null,
   /** 今日色原始信息(色名 + 原始色值, 界面展示用) */
-  dailyInfo: null as { name: string; hex: string } | null,
+  dailyInfo: null as { name: string; hex: string; from?: string } | null,
   catReverse: false,
   catCollapsed: [] as string[],
   prevCombo: null as ShortcutCombo | null,

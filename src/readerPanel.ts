@@ -39,7 +39,7 @@ interface InitPayload {
     /** 每日一色的推导色板(theme=daily 时 webview 直接使用) */
     dailyTheme?: import('./settings').ThemeDef;
     /** 今日色原始信息(色名/原始色值, 界面展示用) */
-    dailyInfo?: { name: string; hex: string };
+    dailyInfo?: { name: string; hex: string; from?: string };
 }
 
 interface ChapterPayload {
@@ -68,7 +68,7 @@ type WebviewMessage =
     | { type: 'refreshLibrary' }
     // 每日一色
     | { type: 'applyDaily' }
-    | { type: 'setDailySource'; source: 'local' | 'remote' };
+    | { type: 'dailyRefresh' };
 
 /** 书架条目(抽屉「书架」页渲染用) */
 export interface ShelfItemView {
@@ -280,10 +280,8 @@ export class ReaderPanel {
             case 'ready':
                 this._ready = true;
                 this._postInit();
-                // 正在用「每日一色」时, 打开阅读页顺带检查是否跨天(跨天自动换色)
-                if (this._settings.theme === 'daily') {
-                    void this._ensureDaily();
-                }
+                // 每天首次打开阅读页时同步一次今日色(之后是空操作, 不重复请求); 跨天自动换色
+                void this._ensureDaily();
                 // 补发视图就绪前的抽屉打开请求
                 if (ReaderPanel._pendingDrawer) {
                     const tab = ReaderPanel._pendingDrawer;
@@ -373,14 +371,9 @@ export class ReaderPanel {
                     ReaderPanel.onDidChangeSettings?.(next);
                 });
                 break;
-            case 'setDailySource':
-                void this._store
-                    .update({ dailySource: msg.source === 'remote' ? 'remote' : 'local', dailyDate: '' })
-                    .then((next) => {
-                        this._settings = next;
-                        // 切来源后立即重取今日色(remote 会去抓官网)
-                        return this._ensureDaily();
-                    });
+            case 'dailyRefresh':
+                // 打开阅读设置时触发: 当天已取过色则直接返回, 保证"每天只请求一次"
+                void this._ensureDaily();
                 break;
         }
     }
@@ -420,6 +413,7 @@ export class ReaderPanel {
             dailyTheme: themeById('daily', undefined, this._settings.dailyName, this._settings.dailyHex),
             dailyInfo: {
                 name: this._settings.dailyName || localDailyColor().name,
+                from: this._settings.dailyFrom || 'local',
                 hex: this._settings.dailyHex || localDailyColor().hex,
             },
         };
@@ -435,7 +429,7 @@ export class ReaderPanel {
             payload: {
                 ...next,
                 dailyTheme: themeById('daily', undefined, next.dailyName, next.dailyHex),
-                dailyInfo: { name: next.dailyName || localDailyColor().name, hex: next.dailyHex || localDailyColor().hex },
+                dailyInfo: { name: next.dailyName || localDailyColor().name, hex: next.dailyHex || localDailyColor().hex, from: next.dailyFrom || 'local' },
             },
         });
     }
@@ -453,18 +447,19 @@ export class ReaderPanel {
             return cur;
         }
         const local = localDailyColor(today);
-        let hit: { name: string; hex: string } | null = null;
-        if (cur.dailySource === 'remote') {
-            hit = await fetchDailyColor();
-        }
+        // 每天首次(本地还没有当日缓存)尝试一次官网同步; 失败/超时/改版一律静默回退本地色。
+        // 额外守卫: 官网走 CDN, 可能多日返回同一份缓存页(实测 Age 可达数天),
+        // 若页面哈希与上次抓到的完全相同 -> 判定为未更新, 直接用本地色, 避免把旧色当今日色。
+        const hit = await fetchDailyColor();
+        const stale = !!(hit && hit.hash && cur.dailyHash && hit.hash === cur.dailyHash);
+        const useRemote = !!hit && !stale;
         const next = await this._store.update({
             dailyDate: today,
-            dailyName: hit ? hit.name : local.name,
-            dailyHex: hit ? hit.hex : local.hex,
+            dailyName: useRemote && hit ? hit.name : local.name,
+            dailyHex: useRemote && hit ? hit.hex : local.hex,
+            dailyHash: hit && hit.hash ? hit.hash : cur.dailyHash,
+            dailyFrom: useRemote ? 'remote' : 'local',
         });
-        if (cur.dailySource === 'remote' && !hit) {
-            void vscode.window.setStatusBarMessage('$(warning) 官网取色失败，已使用本地每日色', 4000);
-        }
         this._postSettings(next);
         ReaderPanel.onDidChangeSettings?.(next);
         return next;

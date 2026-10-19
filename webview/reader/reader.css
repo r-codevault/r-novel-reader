@@ -568,3 +568,14 @@
     color: var(--sp-muted); border-color: var(--sp-border);
     cursor: default;
   }
+
+  /* 今日色来源标签(官网/本地) */
+  .sp-daily-from {
+    font-size: clamp(10px, calc(var(--font-size) * .64), 12px);
+    color: var(--sp-muted);
+    border: 1px solid var(--sp-border);
+    border-radius: 4px;
+    padding: 0 4px;
+    line-height: 1.5;
+    flex: none;
+  }

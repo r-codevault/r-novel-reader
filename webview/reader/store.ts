@@ -30,9 +30,9 @@ export function applyDailyTheme(): void {
   send({ type: 'applyDaily' });
 }
 
-/** 切换每日一色的取色来源: local=本地轮换 / remote=官网每日推荐 */
-export function setDailySource(source: 'local' | 'remote'): void {
-  send({ type: 'setDailySource', source });
+/** 请求扩展检查/刷新今日色(每天只真正请求一次; 已取过则无副作用) */
+export function requestDailyRefresh(): void {
+  send({ type: 'dailyRefresh' });
 }
 
 /** 把主题色写到 :root CSS 变量(与旧 applySettings 一致) */

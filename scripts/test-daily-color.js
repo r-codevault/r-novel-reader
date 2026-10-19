@@ -32,6 +32,12 @@ assert(parsed, '应能解析出今日色');
 assert.strictEqual(parsed.name, '法翠', '色名应为法翠');
 assert.strictEqual(parsed.hex, '#108B96', '色值应为 #108B96');
 
+// 结构差异: 卡片距「今日之色」很远(线上缓存版本就是这种), 也要能以色名为锚点解析
+const farFixture = '<a href="/color/花青" style="background-color:#1A2847">' +
+  'x'.repeat(5000) + '</p></p>今日之色</p><p class="serif-cn">花青</p>';
+const farHit = parseDailyColor(farFixture);
+assert(farHit && farHit.name === '花青' && farHit.hex === '#1A2847', '卡片较远时应以色名锚点解析: ' + JSON.stringify(farHit));
+
 // 异常输入不应抛错, 一律返回 null(调用方回退本地)
 assert.strictEqual(parseDailyColor('<html>nothing</html>'), null, '无标记应返回 null');
 assert.strictEqual(parseDailyColor('<div style="background-color:#123456"></div>今日之色'), null, '缺色名应返回 null');
@@ -101,11 +107,9 @@ assert.strictEqual(themeById('daily', undefined, '法翠', '#108B96').name, '法
   assert.strictEqual(next.dailyName, '法翠', '色名应保存');
   assert.strictEqual(next.dailyHex, '#108B96', '色值应保存');
   assert.strictEqual(next.dailyDate, '2026-10-19', '日期应保存');
-  assert.strictEqual(next.dailySource, 'remote', '来源应保存');
 
   // 非法来源/色值应被忽略
-  const bad = await store.update({ dailySource: 'whatever', dailyHex: 'red' });
-  assert.strictEqual(bad.dailySource, 'remote', '非法来源应被忽略');
+  const bad = await store.update({ dailyHex: 'red' });
   assert.strictEqual(bad.dailyHex, '#108B96', '非法色值应被忽略');
 
   console.log(`每日一色测试全部通过 ✔ (今日本地色 ${a1.name} ${a1.hex}, 10 天 ${week.size} 色)`);
