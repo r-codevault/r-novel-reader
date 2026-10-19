@@ -46,8 +46,6 @@ export const state = reactive({
   chapters: [] as { index: number; title: string }[],
   shelf: [] as ShelfItemView[],
   libraryPath: '',
-  /** 自定义图片主题的背景图 URI(由扩展下发; 非自定义主题为空) */
-  customBgUri: '',
   catReverse: false,
   catCollapsed: [] as string[],
   prevCombo: null as ShortcutCombo | null,

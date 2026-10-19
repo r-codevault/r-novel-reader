@@ -13,3 +13,4 @@ vite.config.mjs
 tsconfig.json
 README.md
 media/**/*.json
+media/**/*.json

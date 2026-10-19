@@ -132,10 +132,7 @@ assert(
 );
 assert(/::-webkit-scrollbar[^{]*\{[^}]*width:\s*6px/.test(capturedHtml), '弹窗滚动条应为 6px 细条');
 assert(!/\.popup-backdrop/.test(capturedHtml), '磨砂玻璃背景层应已移除');
-assert(
-  !/\.popup-backdrop[^{]*\{[^}]*backdrop-filter/.test(capturedHtml),
-  '弹窗不应再有磨砂玻璃背景(自定义主题的遮罩模糊除外)'
-);
+assert(!/backdrop-filter/.test(capturedHtml), '不应再有 backdrop-filter(玻璃效果)');
 assert(
   /#shelfPopup[^{]*\{[^}]*width:\s*max-content/.test(capturedHtml),
   '书架/存储弹窗应随内容撑开(width: max-content)'
@@ -278,7 +275,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert($('#settingsPanel').classList.contains('open'), 'openSettings 消息应打开设置面板');
   // 主题圆点数量
   const dots = document.querySelectorAll('#settingsPanel .sp-dot');
-  assert(dots.length === 7, '应有 6 个预设主题 + 1 个自定义色块(实际 ' + dots.length + ')');
+  assert(dots.length === 6, '应有 6 个主题圆点(实际 ' + dots.length + ')');
   // 切主题: 点黑夜 -> 应立即发出 updateSettings(不吃 250ms 防抖, 侧边栏要即时跟随)
   const darkDot = Array.from(dots).find((d) => d.dataset.theme === 'dark');
   darkDot.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
@@ -491,32 +488,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   document.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   await sleep(30);
   assert(document.activeElement !== focusTarget, 'Esc 后应清掉焦点(避免残留焦点框)');
-
-  // 自定义图片主题: 主题行多一个「＋」色块, 点击应请求扩展弹选图框
-  document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(40);
-  const customDot = document.querySelector('.sp-themes .sp-dot[data-theme="custom"]');
-  assert(customDot, '主题行应有「自定义」色块');
-  assert((customDot.textContent || '').trim() === '＋', '自定义色块应显示＋(表示可选图)');
-  assert(document.querySelectorAll('.sp-themes .sp-dot').length === 7, '主题色块应为 6 预设 + 1 自定义');
-  posted.length = 0;
-  customDot.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(30);
-  assert(posted.some((m) => m.type === 'pickCustomTheme'), '点击自定义色块应发 pickCustomTheme 请求');
-  document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(30);
-  // 层叠与可读性样式(图片 + 遮罩 + 半透明纸面)
-  assert(/:root\[data-theme=["']?custom["']?\] #reader[^{]*\{[^}]*background-image:\s*var\(--custom-img/.test(capturedHtml), '自定义主题应把图片铺到阅读区');
-  assert(/:root\[data-theme=["']?custom["']?\] #reader::?before[^{]*\{[^}]*background:\s*var\(--custom-scrim/.test(capturedHtml), '图片上应有可调遮罩层');
-  assert(/:root\[data-theme=["']?custom["']?\] #content[^{]*\{[^}]*background:\s*var\(--custom-paper/.test(capturedHtml), '纸面应改为半透明(保证正文可读)');
-  assert(/backdrop-filter:\s*blur\(var\(--custom-blur/.test(capturedHtml), '遮罩应支持模糊(把照片变成纹理)');
-  // 扩展侧: CSP 放行图片, 选图/亮度消息已接线
-  const panelSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'readerPanel.ts'), 'utf8');
-  assert(/img-src/.test(panelSrc), 'CSP 应放行 img-src(否则背景图被拦)');
-  assert(/case 'pickCustomTheme'/.test(panelSrc), '应处理 pickCustomTheme');
-  assert(/case 'customBgLuminance'/.test(panelSrc), '应处理亮度回写');
-  assert(/_pickCustomTheme\(\)/.test(panelSrc) && /asWebviewUri/.test(panelSrc), '选图后应用 asWebviewUri 生成可访问地址');
-  console.log('自定义图片主题(色块/请求/样式/接线): 通过');
 
   console.log('侧边菜单(占位布局/展开收起/4 功能项): 通过');
 

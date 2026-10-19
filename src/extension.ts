@@ -54,8 +54,6 @@ export function activate(context: vscode.ExtensionContext): void {
     // 书架/目录/存储 已并入阅读面板左抽屉; 面板未打开时用状态栏按钮或命令面板进入
     ReaderPanel.getShelf = () => shelfItems();
     ReaderPanel.getLibrary = () => getLibraryPath();
-    // 自定义主题背景图存放目录(globalStorage)
-    ReaderPanel.storageDir = context.globalStorageUri.fsPath;
 
     // 状态栏入口(活动栏侧边栏移除后的常驻入口)
     const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
