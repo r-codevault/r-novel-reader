@@ -555,6 +555,30 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await sleep(30);
     console.log('地域色彩悬浮预览(实时套用/不落盘/移出还原): 通过');
   }
+
+  // 预设主题色块也要能悬浮预览
+  {
+    const root = document.documentElement;
+    const bgOf = () => root.style.getPropertyValue('--bg').trim();
+    document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    const baseBg = bgOf();
+    const darkDot = document.querySelector('#settingsPanel .sp-dot[data-theme="dark"]');
+    assert(darkDot, '应有黑夜主题色块');
+    posted.length = 0;
+    darkDot.dispatchEvent(new win.MouseEvent('mouseenter', { bubbles: false }));
+    await sleep(30);
+    assert(bgOf() !== baseBg, '悬浮预设色块应实时预览该主题(实际未变化)');
+    assert(root.dataset.theme === 'dark', '预览黑夜应把 data-theme 切到 dark');
+    assert(posted.length === 0, '预设预览不应触发持久化');
+    const row = document.querySelector('#settingsPanel .sp-themes');
+    row.dispatchEvent(new win.MouseEvent('mouseleave', { bubbles: false }));
+    await sleep(30);
+    assert(bgOf() === baseBg, '移出色块行应还原原主题');
+    document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    console.log('预设主题悬浮预览(实时套用/不落盘/移出还原): 通过');
+  }
   document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   // 地域色板必须由构建期注入(34 套), 不能端上现算

@@ -46,6 +46,17 @@ watch(provinceOpen, function (open) {
   }
 });
 
+/** 悬浮预览预设主题(不落盘) */
+function previewPreset(themeId: string): void {
+  previewTheme({ theme: themeId });
+}
+
+/** 选中预设主题: 先清预览, 再持久化 */
+function choosePreset(themeId: string): void {
+  restoreTheme();
+  persistSettings({ theme: themeId });
+}
+
 /** 悬浮预览: 不落盘, 只看色板效果 */
 function previewProvince(code: string): void {
   previewTheme({ theme: 'province', province: code });
@@ -91,11 +102,12 @@ const shortcutHintText = computed(function () {
     </div>
     <div class="sp-row">
       <span class="sp-label">阅读主题</span>
-      <div class="sp-themes">
+      <div class="sp-themes" @mouseleave="endPreview()">
         <span v-for="t in THEMES" :key="t.id" class="sp-dot" :data-theme="t.id" :title="t.name"
           :style="{ background: t.id === 'dark' ? '#1c1c1c' : t.bg, color: t.fg, '--sp-check': t.fg }"
           :class="{ active: settings && settings.theme === t.id }"
-          @click="persistSettings({ theme: t.id })"></span>
+          @mouseenter="previewPreset(t.id)" @focus="previewPreset(t.id)"
+          @click="choosePreset(t.id)"></span>
       </div>
     </div>
     <!-- 地域色彩: 34 个省级区域, 按该省色卡推导"可长时间阅读"的色板
