@@ -47,11 +47,19 @@ export function activate(context: vscode.ExtensionContext): void {
                 state: unknown
             ): Promise<void> {
                 const enabled = store.get().restoreOnStartup;
+                // 书架进度(主进程 Memento)是更可靠的真相源, 优先于 webview state
+                const shelved = (filePath: string) => {
+                    const b = shelf.get(filePath);
+                    return b && b.chapterIndex >= 0
+                        ? { chapterIndex: b.chapterIndex, scrollRatio: b.scrollRatio }
+                        : undefined;
+                };
                 await ReaderPanel.restore(
                     panel,
                     state as ReaderPanelState | undefined,
                     store,
-                    enabled
+                    enabled,
+                    shelved
                 );
             },
         })

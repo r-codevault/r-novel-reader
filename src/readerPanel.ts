@@ -216,7 +216,11 @@ export class ReaderPanel {
      * 触发前提: 上次退出时这个面板**确实开着**(VS Code 只恢复已存在的 Tab),
      * 因此默认行为是"原样恢复"—— 上次看到哪一章、章内滚到哪, 重开后都一样。
      *
-     * - 开关被用户显式关闭 / 状态无效 / 源文件已不在: 才丢弃这个恢复出来的 Tab
+     * 进度来源优先级: **书架记录(扩展侧 Memento) > webview state**。
+     * 书架记录由扩展主进程在收到 saveProgress 时写入, 与 webview 生命周期解耦,
+     * 是可靠真相源; webview 的 setState 随时序可能只留下最后一帧, 不可单独依赖。
+     *
+     * - 开关被用户显式关闭 / 状态无效 / 源文件已不在: 丢弃这个恢复出来的 Tab
      * - 注意: 全新开VS Code(上次没开过阅读页)时 VS Code 根本没有 Tab 要恢复,
      *   压根不会调用这里 —— 所以"启动时自动弹窗"与本方法无关,
      *   那由 activate 里不开面板保证(见 extension.ts 启动段)。
@@ -225,7 +229,9 @@ export class ReaderPanel {
         panel: vscode.WebviewPanel,
         state: ReaderPanelState | undefined,
         store: SettingsStore,
-        restoreOnStartup: boolean
+        restoreOnStartup: boolean,
+        /** 书架进度查询(可选): 有则作为优先真相源 */
+        shelfProgress?: (filePath: string) => { chapterIndex: number; scrollRatio: number } | undefined
     ): Promise<boolean> {
         if (!restoreOnStartup || !state || !state.filePath) {
             panel.dispose();
@@ -240,8 +246,13 @@ export class ReaderPanel {
                 panel.dispose();
                 return false;
             }
-            const idx = Math.min(Math.max(0, state.chapterIndex || 0), Math.max(0, novel.chapters.length - 1));
-            ReaderPanel.current = new ReaderPanel(panel, novel, idx, state.scrollRatio || 0, store);
+            // 优先用书架进度: 章节号取两者较大值(书架是主进程写的, 更可信),
+            // 章内滚动位置取书架值
+            const shelved = shelfProgress?.(state.filePath);
+            const chapterIndex = Math.max(0, state.chapterIndex || 0, shelved?.chapterIndex ?? -1);
+            const scrollRatio = shelved && shelved.chapterIndex >= 0 ? shelved.scrollRatio : state.scrollRatio || 0;
+            const idx = Math.min(chapterIndex, Math.max(0, novel.chapters.length - 1));
+            ReaderPanel.current = new ReaderPanel(panel, novel, idx, scrollRatio || 0, store);
             return true;
         } catch {
             // 源文件被移动/删除: 不静默留一个坏面板

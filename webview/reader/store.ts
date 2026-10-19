@@ -185,8 +185,11 @@ export function sendProgress(immediate: boolean): void {
     if (!state.chapter) { return; }
     const max = document.body.scrollHeight - window.innerHeight;
     const ratio = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+    // 同步回state, 供切章时作为章内位置使用
+    state.chapter.scrollRatio = ratio;
     send({ type: 'saveProgress', chapterIndex: state.chapter.index, scrollRatio: ratio });
-    // 同步写"窗口重开恢复信息"(webview state), 扩展在 restoreOnStartup 开启时据此还原
+    // 同步写"窗口重开恢复信息"(webview state); 注意这只是辅助来源,
+    // 真正可靠的是扩展主进程按saveProgress 写入的书架进度(见 readerPanel.restore)
     if (state.novel && state.novel.filePath) {
       saveRestoreState({ filePath: state.novel.filePath, chapterIndex: state.chapter.index, scrollRatio: ratio });
     }

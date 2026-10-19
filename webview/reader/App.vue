@@ -102,7 +102,13 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.catReverse = false;
       state.catCollapsed = [];
       applySettings(p.settings as ReadingSettings);
-      saveRestoreState({ filePath: (p.filePath as string) || '', chapterIndex: 0, scrollRatio: 0 });
+      // 恢复信息必须用**本次真实载入的章节**, 不能写死 0:
+      // 否则刚恢复好的第 N 章会被立刻覆盖成第 0 章, 下次重开窗口就回到开头
+      saveRestoreState({
+        filePath: (p.filePath as string) || '',
+        chapterIndex: (p.chapterIndex as number) || 0,
+        scrollRatio: (p.scrollRatio as number) || 0,
+      });
       state.chapter = {
         index: p.chapterIndex as number,
         title: p.chapterTitle as string,
@@ -149,6 +155,20 @@ watch(function () { return state.chapter; }, function (ch) {
 });
 
 // ---------------------------------------------------------------- 全局事件
+
+/** 滚动上报(节流 600ms, 内部已有debounce); 只在已载入章节时上报 */
+function onScroll(): void {
+  if (!state.chapter) { return; }
+  sendProgress(false);
+}
+
+/** 页面转入后台/关闭前立即上报一次, 防止最后一段滚动位置丢失 */
+function onVisibilityChange(): void {
+  if (document.visibilityState === 'hidden') {
+    sendProgress(true);
+  }
+}
+
 function onDocMouseDown(e: MouseEvent): void {
   if (!anyPopupOpen()) { return; }
   const target = e.target as Node;
@@ -227,6 +247,10 @@ onMounted(function () {
   window.addEventListener('resize', function () {
     readerRef.value?.positionHandles();
   });
+  // 滚动上报(节流): 不然章内滚动位置永远存不住, 重开窗口只会回到章首
+  window.addEventListener('scroll', onScroll, { passive: true });
+  // 页面隐藏/关闭前补一次上报, 避免最后一次滚动丢失
+  document.addEventListener('visibilitychange', onVisibilityChange);
   if (typeof ResizeObserver !== 'undefined') {
     new ResizeObserver(function () { readerRef.value?.positionHandles(); }).observe(document.body);
   }

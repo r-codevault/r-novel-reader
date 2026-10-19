@@ -984,6 +984,40 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     console.log('窗口重开恢复(默认原样恢复/可显式关闭/编码识别): 通过');
   }
 
+  // 恢复进度必须以「书架记录」为准, 且不能被 init 写死0 覆盖
+  {
+    const panelSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'readerPanel.ts'), 'utf8');
+    const appSrc = fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'App.vue'), 'utf8');
+    const storeSrc3 = fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'store.ts'), 'utf8');
+    const extSrc3 = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
+
+    assert(
+      /shelfProgress/.test(panelSrc) && /shelved\?\.chapterIndex/.test(panelSrc),
+      'restore 应以书架进度为优先真相源(webview setState 不可靠)'
+    );
+    assert(
+      /shelf\.get\(filePath\)/.test(extSrc3) && /shelved/.test(extSrc3),
+      'extension 应把书架进度查询传给 restore'
+    );
+    assert(
+      /chapterIndex: \(p\.chapterIndex as number\)/.test(appSrc),
+      'init 时写回恢复信息必须用真实章节号, 不能写死 0(会把刚恢复的进度抹掉)'
+    );
+    assert(
+      /addEventListener\('scroll', onScroll/.test(appSrc) && /function onScroll/.test(appSrc),
+      '滚动时必须上报进度, 否则章内位置永远存不住'
+    );
+    assert(
+      /visibilitychange/.test(appSrc),
+      '页面隐藏时应补一次上报, 避免最后一段滚动丢失'
+    );
+    assert(
+      /state\.chapter\.scrollRatio = ratio/.test(storeSrc3),
+      '上报时应同步 scrollRatio 供切章恢复使用'
+    );
+    console.log('恢复进度优先级(书架为准/init 不写死0/滚动上报): 通过');
+  }
+
   // 启动绝不自动弹出: activate 里预载书架不得 openPanel:true
   {
     const extSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
