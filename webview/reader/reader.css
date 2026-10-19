@@ -131,7 +131,12 @@
     flex: none; width: 68px; white-space: nowrap;
     font-size: clamp(12px, calc(var(--font-size) * 0.8), 16px); color: var(--sp-muted);
   }
-  .sp-themes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  /* 阅读主题行: 第一行预设色块, 第二行两个选择器(地域色彩/廿四节气) */
+  .sp-row-theme { align-items: flex-start; }
+  .sp-row-theme > .sp-label { padding-top: 3px; }
+  .sp-themes { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .sp-theme-dots { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .sp-theme-extra { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .sp-dot {
     width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
     border: 1px solid var(--sp-border);
@@ -570,3 +575,11 @@
 }
 *::-webkit-scrollbar-thumb:hover { background: var(--sp-accent, rgba(128, 128, 128, .7)); background-clip: content-box; }
 *::-webkit-scrollbar-corner { background: transparent; }
+
+  /* 廿四节气菜单: 6 列 4 行(24 项全展开), 条目左侧用节气色做细色条 */
+  .sp-term-menu { grid-template-columns: repeat(6, auto); }
+  .sp-term-menu .sp-province-item {
+    border-left: 3px solid transparent;
+    padding-left: 5px;
+    text-align: left;
+  }

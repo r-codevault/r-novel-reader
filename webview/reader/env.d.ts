@@ -11,6 +11,10 @@ declare module 'virtual:novel-constants' {
   export const PROVINCES: { code: string; name: string; slogan: string; colors: { name: string; hex: string }[] }[];
   /** 省份代码 -> 已推导好的阅读色板(构建期算好, 端上零计算) */
   export const PROVINCE_THEMES: Record<string, import('../../src/settings').ThemeDef>;
+  /** 廿四节气列表(下拉选项) */
+  export const SOLAR_TERMS: { id: string; name: string; color: string; hex: string; season: string }[];
+  /** 节气 id -> 已推导好的阅读色板 */
+  export const TERM_THEMES: Record<string, import('../../src/settings').ThemeDef>;
 }
 
 /** VS Code webview 注入的 API */

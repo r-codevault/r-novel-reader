@@ -9,6 +9,7 @@
 
 import * as vscode from "vscode";
 import { PROVINCES, DEFAULT_PROVINCE_CODE } from "./provinceColors";
+import { SOLAR_TERMS, DEFAULT_TERM_ID } from "./solarTerms";
 
 export interface ReadingSettings {
   /** 正文字号(px) */
@@ -34,6 +35,8 @@ export interface ReadingSettings {
   showStatusBar: boolean;
   /** 地域色彩主题: 省级行政区代码(见 provinceColors.ts), theme=province 时生效 */
   province: string;
+  /** 廿四节气主题: 节气 id(见 solarTerms.ts), theme=term 时生效 */
+  term: string;
 }
 
 export interface ThemeDef {
@@ -202,6 +205,7 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
   showStatusBar: true,
 
   province: DEFAULT_PROVINCE_CODE,
+  term: DEFAULT_TERM_ID,
 };
 
 const STORAGE_KEY = "novelReader.settings";
@@ -219,6 +223,7 @@ const SETTING_KEYS: (keyof ReadingSettings)[] = [
   "showStatusBar",
 
   "province",
+  "term",
 ];
 
 function clamp(n: number, min: number, max: number, fallback: number): number {
@@ -269,6 +274,7 @@ function configDefaults(): ReadingSettings {
     showStatusBar: DEFAULT_SETTINGS.showStatusBar,
 
     province: DEFAULT_SETTINGS.province,
+    term: DEFAULT_SETTINGS.term,
   };
 }
 
@@ -304,11 +310,14 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
     );
   }
   // 主题白名单: 6 个预设 + province(地域色彩, 不在 THEMES 里但合法)
-  if (typeof s.theme === "string" && (s.theme === "province" || THEMES.some((t) => t.id === s.theme))) {
+  if (typeof s.theme === "string" && (s.theme === "province" || s.theme === "term" || THEMES.some((t) => t.id === s.theme))) {
     out.theme = s.theme;
   }
   if (typeof s.province === "string" && PROVINCES.some((p) => p.code === s.province)) {
     out.province = s.province;
+  }
+  if (typeof s.term === "string" && SOLAR_TERMS.some((t) => t.id === s.term)) {
+    out.term = s.term;
   }
   if (typeof s.contentWidth === "number") {
     out.contentWidth = clamp(
@@ -395,9 +404,12 @@ export class SettingsStore {
   }
 }
 
-export function themeById(id: string, provinceCode?: string): ThemeDef {
+export function themeById(id: string, provinceCode?: string, termId?: string): ThemeDef {
   if (id === "province") {
     return provinceTheme(provinceCode);
+  }
+  if (id === "term") {
+    return termTheme(termId);
   }
   return THEMES.find((t) => t.id === id) ?? THEMES[0];
 }
@@ -537,14 +549,12 @@ function ensureContrast(fg: string, bg: string, target: number): string {
  * 按省份推导完整的阅读色板。
  * @param provinceCode 省级行政区代码(如 110000); 缺省用北京
  */
-export function provinceTheme(provinceCode?: string): ThemeDef {
-  const region =
-    PROVINCES.find((p) => p.code === provinceCode) ??
-    PROVINCES.find((p) => p.code === DEFAULT_PROVINCE_CODE) ??
-    PROVINCES[0];
-  const colors = region && region.colors.length > 0 ? region.colors : [{ hex: "#8A8A8A" }];
-  const rep = pickRepresentative(colors);
-  const h = rgbToHsl(hexToRgbTriple(rep.hex)).h;
+/**
+ * 由"一个代表色 + 主题名"生成完整阅读色板(地域色彩 / 廿四节气共用)。
+ * 只借色相, 明度饱和度由算法锁定; 强调色对比度不足则自动压暗。
+ */
+function paintTheme(repHex: string, name: string, id: string): ThemeDef {
+  const h = rgbToHsl(hexToRgbTriple(repHex)).h;
   // 纸面/留白/面板: 同一色相不同明度(层次可辨), 饱和度取到"看得出地域色、又不喧宾夺主"
   // 注: 明度不能太高(>0.96 时不同色相在 8bit 下会被量化成同一个颜色, 省份之间就没区别了);
   //     地域辨识度主要由留白区(pageBg)承担, 纸面保持偏白的"纸感"
@@ -556,12 +566,12 @@ export function provinceTheme(provinceCode?: string): ThemeDef {
   const fg = hslToHex(h, 0.32, 0.16);
   const muted = ensureContrast(hslToHex(h, 0.12, 0.44), bg, 4.5);
   // 强调色: 代表色压暗到达标(与纸面同色相, 整体协调)
-  const rawPrimary = rep.hex;
+  const rawPrimary = repHex;
   const accent = ensureContrast(rawPrimary, bg, 4.5);
   const accentFg = contrastRatio("#ffffff", accent) >= 3 ? "#ffffff" : "#1a1a1a";
   return {
-    id: "province",
-    name: region ? region.name : "地域色彩",
+    id,
+    name,
     bg,
     fg,
     pageBg,
@@ -573,6 +583,24 @@ export function provinceTheme(provinceCode?: string): ThemeDef {
     panelAccent: ensureContrast(rawPrimary, chromeBg, 3),
     panelHover: hslToHex(h, 0.18, 0.9),
   };
+}
+
+export function provinceTheme(provinceCode?: string): ThemeDef {
+  const region =
+    PROVINCES.find((p) => p.code === provinceCode) ??
+    PROVINCES.find((p) => p.code === DEFAULT_PROVINCE_CODE) ??
+    PROVINCES[0];
+  const colors = region && region.colors.length > 0 ? region.colors : [{ hex: "#8A8A8A" }];
+  return paintTheme(pickRepresentative(colors).hex, region ? region.name : "地域色彩", "province");
+}
+
+/** 廿四节气主题: 用该节气的代表色推导色板 */
+export function termTheme(termId?: string): ThemeDef {
+  const term =
+    SOLAR_TERMS.find((t) => t.id === termId) ??
+    SOLAR_TERMS.find((t) => t.id === DEFAULT_TERM_ID) ??
+    SOLAR_TERMS[0];
+  return paintTheme(term ? term.hex : "#8A8A8A", term ? term.name : "二十四节气", "term");
 }
 
 export function fontStackById(id: string): string {

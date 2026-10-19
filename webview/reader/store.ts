@@ -7,15 +7,19 @@ import { state, send, type ChapterPayload } from './composables/vscode';
 import { parseShortcut } from './composables/shortcut';
 
 /** 由构建期注入的常量(虚拟模块, 见 vite.config.mjs; 单一来源 src/settings.ts) */
-import { THEMES, FONT_STACKS, DEFAULT_SETTINGS, PROVINCES, PROVINCE_THEMES } from 'virtual:novel-constants';
-export { THEMES, FONT_STACKS, DEFAULT_SETTINGS, PROVINCES, PROVINCE_THEMES };
+import { THEMES, FONT_STACKS, DEFAULT_SETTINGS, PROVINCES, PROVINCE_THEMES, SOLAR_TERMS, TERM_THEMES } from 'virtual:novel-constants';
+export { THEMES, FONT_STACKS, DEFAULT_SETTINGS, PROVINCES, PROVINCE_THEMES, SOLAR_TERMS, TERM_THEMES };
 
 export { state };
 
-export function themeOf(id: string, province?: string): ThemeDef {
+export function themeOf(id: string, province?: string, term?: string): ThemeDef {
   if (id === 'province') {
     // 地域色彩主题: 色板在构建期按 34 个省算好(vite.config), 端上直接查表
     return PROVINCE_THEMES[province || ''] || PROVINCE_THEMES['110000'] || THEMES[0];
+  }
+  if (id === 'term') {
+    // 廿四节气主题: 同样构建期算好 24 套色板
+    return TERM_THEMES[term || ''] || TERM_THEMES['lichun'] || THEMES[0];
   }
   for (const t of THEMES) { if (t.id === id) { return t; } }
   return THEMES[0];
@@ -38,7 +42,7 @@ export function restoreTheme(): void {
 }
 
 export function applyThemeVars(s: ReadingSettings): void {
-  const t = themeOf(s.theme, s.province);
+  const t = themeOf(s.theme, s.province, s.term);
   const root = document.documentElement;
   // 暴露主题 id 供 CSS 按主题分支(如 logo 放射线在浅色/黑夜用不同颜色)
   root.dataset.theme = t.id;

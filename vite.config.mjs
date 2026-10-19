@@ -37,6 +37,15 @@ const PROVINCE_THEMES = Object.fromEntries(
   provinceColors.PROVINCES.map((p) => [p.code, settings.provinceTheme(p.code)])
 );
 
+// 廿四节气: 同样是构建期算好色板
+const solarTerms = require2(path.join(__dirname, 'dist', 'solarTerms.js'));
+const SOLAR_TERMS = solarTerms.SOLAR_TERMS.map((t) => ({
+  id: t.id, name: t.name, color: t.color, hex: t.hex, season: t.season,
+}));
+const TERM_THEMES = Object.fromEntries(
+  solarTerms.SOLAR_TERMS.map((t) => [t.id, settings.termTheme(t.id)])
+);
+
 /**
  * 虚拟模块 'virtual:novel-constants' — 把 settings.ts 的常量注入 webview。
  * 用虚拟模块而非 vite define: define 在 dev(esbuild 路径) 下不可靠, 虚拟模块 dev/build 行为一致。
@@ -55,6 +64,8 @@ const virtualConstants = {
       'export const DEFAULT_SETTINGS = ' + JSON.stringify(settings.DEFAULT_SETTINGS) + ';',
       'export const PROVINCES = ' + JSON.stringify(PROVINCES) + ';',
       'export const PROVINCE_THEMES = ' + JSON.stringify(PROVINCE_THEMES) + ';',
+      'export const SOLAR_TERMS = ' + JSON.stringify(SOLAR_TERMS) + ';',
+      'export const TERM_THEMES = ' + JSON.stringify(TERM_THEMES) + ';',
     ].join('\n');
   },
 };

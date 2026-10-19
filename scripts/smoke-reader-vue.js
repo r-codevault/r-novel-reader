@@ -602,9 +602,47 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const storeSrc = fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'store.ts'), 'utf8');
   assert(/PROVINCE_THEMES\[province/.test(storeSrc), 'webview themeOf 应从省份色板查表');
   const settingsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'settings.ts'), 'utf8');
-  assert(/s\.theme === "province" \|\| THEMES\.some/.test(settingsSrc), '主题白名单必须放行 province(否则会静默丢弃)');
+  assert(
+    /s\.theme === "province"[^;]*s\.theme === "term"[^;]*THEMES\.some/.test(settingsSrc),
+    '主题白名单必须放行 province 与 term(否则会静默丢弃)'
+  );
+  assert(/TERM_THEMES\[term/.test(storeSrc), 'webview themeOf 应从节气色板查表');
   assert(/ensureContrast\(/.test(settingsSrc), '色板推导必须做过对比度校正');
   assert(/\*::-webkit-scrollbar\s*\{[^}]*width:\s*8px/.test(capturedHtml), '全局滚动条应收细到 8px');
+  // 廿四节气: 与地域色彩同一行(阅读主题的第二行), 24 项, 悬浮可预览
+  {
+    const row = document.querySelector('#settingsPanel .sp-row-theme');
+    assert(row, '阅读主题行应存在');
+    assert(row.querySelectorAll('.sp-theme-extra .sp-province-btn').length === 2,
+      '阅读主题第二行应有 2 个选择器(地域色彩/廿四节气)');
+    const termBtn = row.querySelector('.sp-province-picker[data-kind="term"] .sp-province-btn');
+    assert(termBtn, '应有廿四节气选择器');
+    assert((termBtn.textContent || '').trim() === '廿四节气', '未启用节气主题时应显示占位「廿四节气」');
+    termBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    const termItems = document.querySelectorAll('#settingsPanel .sp-term-menu .sp-province-item');
+    assert(termItems.length === 24, '节气列表应有 24 项(实际 ' + termItems.length + ')');
+    const root = document.documentElement;
+    const before = root.style.getPropertyValue('--bg').trim();
+    posted.length = 0;
+    const daxue = Array.from(termItems).find((el) => (el.textContent || '').trim() === '大雪');
+    assert(daxue, '节气列表应包含「大雪」');
+    daxue.dispatchEvent(new win.MouseEvent('mouseenter', { bubbles: false }));
+    await sleep(30);
+    assert(root.style.getPropertyValue('--bg').trim() !== before, '悬浮节气应实时预览色板');
+    assert(root.dataset.theme === 'term', '预览节气应把 data-theme 切到 term');
+    assert(posted.length === 0, '节气预览不应触发持久化');
+    daxue.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    assert(
+      posted.some((m) => m.type === 'updateSettings' && m.patch && m.patch.theme === 'term' && m.patch.term === 'daxue'),
+      '选节气应保存 term 并切到 term 主题'
+    );
+    assert(!document.querySelector('#settingsPanel .sp-term-menu'), '选中后节气列表应收起');
+    document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    console.log('廿四节气主题(同行/24项/悬浮预览/落盘): 通过');
+  }
   console.log('地域色彩主题(自绘下拉/色卡/切换/构建期色板) + 细滚动条: 通过');
 
   console.log('侧边菜单(占位布局/展开收起/4 功能项): 通过');

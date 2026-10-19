@@ -4,7 +4,7 @@
  * 面板定位(贴合悬浮球)由 App 协调, 本组件暴露根元素
  */
 import { computed, ref, watch } from 'vue';
-import { state, THEMES, PROVINCES, persistSettings, previewTheme, restoreTheme, stepFontSize, stepSetting, resetSettings } from '../store';
+import { state, THEMES, PROVINCES, SOLAR_TERMS, persistSettings, previewTheme, restoreTheme, stepFontSize, stepSetting, resetSettings } from '../store';
 import { shortcutLabel } from '../composables/shortcut';
 
 const rootRef = ref<HTMLElement | null>(null);
@@ -16,8 +16,9 @@ const provinceCode = computed(function () {
   return s ? s.province : '110000';
 });
 
-/** 省份列表是否展开(自绘下拉, 避免原生 select 的粗滚动条) */
+/** 省份/节气列表展开状态(自绘下拉, 避免原生 select 的粗滚动条) */
 const provinceOpen = ref(false);
+const termOpen = ref(false);
 
 /** 按钮文案: 只有正在使用地域主题时才显示省份名, 否则显示占位「地域色彩」 */
 const provinceName = computed(function () {
@@ -55,6 +56,26 @@ function choosePreset(themeId: string): void {
 /** 悬浮预览: 不落盘, 只看色板效果 */
 function previewProvince(code: string): void {
   previewTheme({ theme: 'province', province: code });
+}
+
+/** 节气按钮文案: 仅在正在使用节气主题时显示节气名, 否则为占位「廿四节气」 */
+const termName = computed(function () {
+  if (!state.settings || state.settings.theme !== 'term') { return '廿四节气'; }
+  const found = SOLAR_TERMS.find(function (t) { return t.id === state.settings!.term; });
+  return found ? found.name : '廿四节气';
+});
+
+/** 悬浮预览节气 */
+function previewTerm(id: string): void {
+  previewTheme({ theme: 'term', term: id });
+}
+
+/** 选择节气 */
+function chooseTerm(id: string): void {
+  termOpen.value = false;
+  restoreTheme();
+  if (!id) { return; }
+  persistSettings({ term: id, theme: 'term' });
 }
 
 /** 结束预览, 还原当前真实主题 */
@@ -95,19 +116,22 @@ const shortcutHintText = computed(function () {
       <span class="spacer"></span>
       <button class="popup-close" @click.stop="state.settingsOpen = false">关闭</button>
     </div>
-    <div class="sp-row">
+    <div class="sp-row sp-row-theme">
       <span class="sp-label">阅读主题</span>
       <div class="sp-themes" @mouseleave="endPreview()">
-        <span v-for="t in THEMES" :key="t.id" class="sp-dot" :data-theme="t.id" :title="t.name"
-          :style="{ background: t.id === 'dark' ? '#1c1c1c' : t.bg, color: t.fg, '--sp-check': t.fg }"
-          :class="{ active: settings && settings.theme === t.id }"
-          @mouseenter="previewPreset(t.id)" @focus="previewPreset(t.id)"
-          @click="choosePreset(t.id)"></span>
-        <!-- 地域色彩: 与预设色块同一行(不再单独占一行, 也不显示色卡圆点) -->
+        <div class="sp-theme-dots">
+          <span v-for="t in THEMES" :key="t.id" class="sp-dot" :data-theme="t.id" :title="t.name"
+            :style="{ background: t.id === 'dark' ? '#1c1c1c' : t.bg, color: t.fg, '--sp-check': t.fg }"
+            :class="{ active: settings && settings.theme === t.id }"
+            @mouseenter="previewPreset(t.id)" @focus="previewPreset(t.id)"
+            @click="choosePreset(t.id)"></span>
+        </div>
+        <!-- 第二行: 地域色彩 / 廿四节气 两个选择器(仍归属于「阅读主题」行) -->
+        <div class="sp-theme-extra">
         <div class="sp-province-picker">
           <button class="sp-province-btn" :class="{ open: provinceOpen }"
             :title="settings && settings.theme === 'province' ? '当前使用地域色彩主题' : '选择省份后自动切换到地域色彩主题'"
-            @click.stop="provinceOpen = !provinceOpen">
+            @click.stop="provinceOpen = !provinceOpen; termOpen = false">
             <span>{{ provinceName }}</span>
             <svg class="sp-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -121,6 +145,26 @@ const shortcutHintText = computed(function () {
               @mouseenter="previewProvince(p.code)" @focus="previewProvince(p.code)"
               @click="chooseProvince(p.code)">{{ p.name }}</button>
           </div>
+        </div>
+        <!-- 廿四节气: 与地域色彩同一行 -->
+        <div class="sp-province-picker" data-kind="term">
+          <button class="sp-province-btn" :class="{ open: termOpen }"
+            :title="settings && settings.theme === 'term' ? '当前使用廿四节气主题' : '选择节气后自动切换到廿四节气主题'"
+            @click.stop="termOpen = !termOpen; provinceOpen = false">
+            <span>{{ termName }}</span>
+            <svg class="sp-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+          <div v-if="termOpen" class="sp-province-menu sp-term-menu" @mouseleave="endPreview()">
+            <button v-for="t in SOLAR_TERMS" :key="t.id" class="sp-province-item"
+              :class="{ active: settings && settings.theme === 'term' && settings.term === t.id }"
+              :style="{ borderLeftColor: t.hex }" :title="t.name + ' · ' + t.color + ' ' + t.hex"
+              @mouseenter="previewTerm(t.id)" @focus="previewTerm(t.id)"
+              @click="chooseTerm(t.id)">{{ t.name }}</button>
+          </div>
+        </div>
         </div>
       </div>
     </div>
