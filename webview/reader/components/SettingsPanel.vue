@@ -125,7 +125,7 @@ const customValue = computed(function () {
 /** 聚焦即全选, 直接输入即可覆盖 */
 function onCustomFocus(e: FocusEvent): void {
   const el = e.target as HTMLInputElement;
-  requestAnimationFrame(function () { el.select(); });
+  el.select();
 }
 
 /** 失焦/回车时应用自定义像素宽度 */
@@ -243,24 +243,27 @@ const shortcutHintText = computed(function () {
         <button class="sp-step-btn" @click="stepSetting('paragraphSpacing', 0.1, 0, 2)">＋</button>
       </div>
     </div>
-    <div class="sp-row">
+    <!-- 页面宽度: 与「阅读主题」同构 —— 第一行比例档, 第二行自定义输入(标签只占第一行) -->
+    <div class="sp-row sp-row-stack">
       <span class="sp-label">页面宽度</span>
-      <div class="sp-seg">
-        <button v-for="r in CONTENT_WIDTH.ratios" :key="r" class="sp-seg-btn"
-          :class="{ active: curRatio === r }"
-          :title="'视口宽度的 ' + pctText(r)"
-          @click="persistSettings({ widthRatio: r })">{{ pctText(r) }}</button>
+      <div class="sp-stack-box">
+        <div class="sp-seg">
+          <button v-for="r in CONTENT_WIDTH.ratios" :key="r" class="sp-seg-btn"
+            :class="{ active: curRatio === r }"
+            :title="'视口宽度的 ' + pctText(r)"
+            @click="persistSettings({ widthRatio: r })">{{ pctText(r) }}</button>
+        </div>
+        <div class="sp-width-custom">
+          <!-- 用 text + inputmode=numeric 而非 number: number 输入框不支持 select(), 聚焦无法全选 -->
+          <input ref="customInputRef" class="sp-width-input" type="text" inputmode="numeric"
+            pattern="[0-9]*" autocomplete="off"
+            :value="customValue" :min="CONTENT_WIDTH.min" :max="CONTENT_WIDTH.max" step="10"
+            :title="'自定义 ' + CONTENT_WIDTH.min + '–' + CONTENT_WIDTH.max + 'px, 聚焦后直接输入, 回车或失焦生效'"
+            @focus="onCustomFocus" @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
+            @blur="applyCustomWidth" />
+          <span class="sp-width-unit">px</span>
+        </div>
       </div>
-    </div>
-    <!-- 自定义宽度: 独占一行, 聚焦即可直接输入(无需额外的输入区/应用按钮) -->
-    <div class="sp-row sp-row-custom">
-      <span class="sp-label">自定义</span>
-      <input ref="customInputRef" class="sp-width-input" type="number" inputmode="numeric"
-        :value="customValue" :min="CONTENT_WIDTH.min" :max="CONTENT_WIDTH.max" step="10"
-        :title="CONTENT_WIDTH.min + '–' + CONTENT_WIDTH.max + 'px, 回车或失焦生效'"
-        @focus="onCustomFocus" @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
-        @blur="applyCustomWidth" />
-      <span class="sp-width-unit">px</span>
     </div>
     <button class="sp-reset" @click="resetSettings">恢复默认设置</button>
     <div class="settings-hint">{{ shortcutHintText }}</div>

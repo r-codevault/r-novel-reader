@@ -402,19 +402,26 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       '点比例档应保存 widthRatio(0.5555)'
     );
 
-    // 自定义: 独占一行, 只有输入框(无「应用」按钮/无提示块)
-    const customRow = document.querySelector('#settingsPanel .sp-row-custom');
-    assert(customRow, '应有独立的「自定义」行');
-    assert(customRow.querySelector('.sp-width-input'), '自定义行应有数字输入框');
+    // 自定义输入: 归入「页面宽度」行的第二行(与阅读主题同构), 无独立标签/应用按钮/提示块
+    const stackRow = document.querySelector('#settingsPanel .sp-row-stack');
+    assert(stackRow, '「页面宽度」应为两行结构行');
     assert(
-      Array.from(customRow.querySelectorAll('button')).length === 0,
-      '自定义行不应再有「应用」按钮'
+      Array.from(stackRow.querySelectorAll('.sp-label')).map((e) => (e.textContent || '').trim()).join('') === '页面宽度',
+      '该行只应有「页面宽度」一个标签'
+    );
+    const customInput = stackRow.querySelector('.sp-width-custom .sp-width-input');
+    assert(customInput, '第二行应有自定义宽度输入框');
+    assert(
+      Array.from(stackRow.querySelectorAll('.sp-width-custom button')).length === 0,
+      '自定义输入不应再有「应用」按钮'
     );
     assert(!document.querySelector('#settingsPanel .sp-width-tip'), '不应再有宽度提示块');
-    assert(
-      (customRow.querySelector('.sp-label') || {}).textContent === '自定义',
-      '自定义行标签应为「自定义」'
-    );
+    const allLabels = Array.from(document.querySelectorAll('#settingsPanel .sp-label'))
+      .map((e) => (e.textContent || '').trim());
+    assert(allLabels.indexOf('自定义') < 0, '不应再有「自定义」标签, 实际: ' + allLabels.join('/'));
+    // text + inputmode=numeric: number 输入框不支持 select(), 聚焦无法全选
+    assert(customInput.getAttribute('type') === 'text', '宽度输入框应为 type=text(支持聚焦全选)');
+    assert(customInput.getAttribute('inputmode') === 'numeric', '宽度输入框应有 inputmode=numeric');
     document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
     await sleep(30);
     console.log('页面宽度(视口比例档/自定义独立行): 通过');
