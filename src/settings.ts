@@ -34,16 +34,6 @@ export interface ReadingSettings {
   showStatusBar: boolean;
   /** 地域色彩主题: 省级行政区代码(见 provinceColors.ts), theme=province 时生效 */
   province: string;
-  /** 每日一色: 今日色名(theme=daily 时生效; 官网同步或本地轮换得到) */
-  dailyName?: string;
-  /** 每日一色: 今日色值 #rrggbb */
-  dailyHex?: string;
-  /** 每日一色: 该颜色对应的日期(yyyy-mm-dd), 跨天自动刷新 */
-  dailyDate?: string;
-  /** 每日一色: 上次抓取页面的内容哈希(识别 CDN 缓存未更新) */
-  dailyHash?: string;
-  /** 每日一色: 该颜色来自 remote=官网 / local=本地(界面标注用) */
-  dailyFrom?: string;
 }
 
 export interface ThemeDef {
@@ -212,7 +202,6 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
   showStatusBar: true,
 
   province: DEFAULT_PROVINCE_CODE,
-
 };
 
 const STORAGE_KEY = "novelReader.settings";
@@ -230,15 +219,6 @@ const SETTING_KEYS: (keyof ReadingSettings)[] = [
   "showStatusBar",
 
   "province",
-
-  "dailyName",
-
-  "dailyHex",
-
-  "dailyDate",
-  "dailyHash",
-  "dailyFrom",
-
 ];
 
 function clamp(n: number, min: number, max: number, fallback: number): number {
@@ -289,7 +269,6 @@ function configDefaults(): ReadingSettings {
     showStatusBar: DEFAULT_SETTINGS.showStatusBar,
 
     province: DEFAULT_SETTINGS.province,
-
   };
 }
 
@@ -325,23 +304,8 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
     );
   }
   // 主题白名单: 6 个预设 + province(地域色彩, 不在 THEMES 里但合法)
-  if (typeof s.theme === "string" && (s.theme === "province" || s.theme === "daily" || THEMES.some((t) => t.id === s.theme))) {
+  if (typeof s.theme === "string" && (s.theme === "province" || THEMES.some((t) => t.id === s.theme))) {
     out.theme = s.theme;
-  }
-  if (typeof s.dailyName === "string" && s.dailyName) {
-    out.dailyName = s.dailyName;
-  }
-  if (typeof s.dailyHex === "string" && /^#[0-9a-fA-F]{6}$/.test(s.dailyHex)) {
-    out.dailyHex = s.dailyHex;
-  }
-  if (typeof s.dailyDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.dailyDate)) {
-    out.dailyDate = s.dailyDate;
-  }
-  if (typeof s.dailyHash === "string" && /^[0-9a-f]{8,64}$/.test(s.dailyHash)) {
-    out.dailyHash = s.dailyHash;
-  }
-  if (s.dailyFrom === "remote" || s.dailyFrom === "local") {
-    out.dailyFrom = s.dailyFrom;
   }
   if (typeof s.province === "string" && PROVINCES.some((p) => p.code === s.province)) {
     out.province = s.province;
@@ -431,19 +395,9 @@ export class SettingsStore {
   }
 }
 
-export function themeById(
-  id: string,
-  provinceCode?: string,
-  dailyName?: string,
-  dailyHex?: string,
-): ThemeDef {
+export function themeById(id: string, provinceCode?: string): ThemeDef {
   if (id === "province") {
     return provinceTheme(provinceCode);
-  }
-  if (id === "daily") {
-    // 每日一色: 由缓存的今日色推导; 没有缓存时回退本地当日色
-    const fallback = localDailyColor();
-    return colorTheme(dailyName || fallback.name, dailyHex || fallback.hex);
   }
   return THEMES.find((t) => t.id === id) ?? THEMES[0];
 }
@@ -583,12 +537,14 @@ function ensureContrast(fg: string, bg: string, target: number): string {
  * 按省份推导完整的阅读色板。
  * @param provinceCode 省级行政区代码(如 110000); 缺省用北京
  */
-/**
- * 由"一个代表色 + 主题名"生成完整阅读色板(地域色彩 / 每日一色共用同一套规则)。
- * 只借色相, 明度与饱和度由算法锁定; 强调色对比度不足则自动压暗。
- */
-function paintTheme(repHex: string, name: string, id: string): ThemeDef {
-  const h = rgbToHsl(hexToRgbTriple(repHex)).h;
+export function provinceTheme(provinceCode?: string): ThemeDef {
+  const region =
+    PROVINCES.find((p) => p.code === provinceCode) ??
+    PROVINCES.find((p) => p.code === DEFAULT_PROVINCE_CODE) ??
+    PROVINCES[0];
+  const colors = region && region.colors.length > 0 ? region.colors : [{ hex: "#8A8A8A" }];
+  const rep = pickRepresentative(colors);
+  const h = rgbToHsl(hexToRgbTriple(rep.hex)).h;
   // 纸面/留白/面板: 同一色相不同明度(层次可辨), 饱和度取到"看得出地域色、又不喧宾夺主"
   // 注: 明度不能太高(>0.96 时不同色相在 8bit 下会被量化成同一个颜色, 省份之间就没区别了);
   //     地域辨识度主要由留白区(pageBg)承担, 纸面保持偏白的"纸感"
@@ -600,12 +556,12 @@ function paintTheme(repHex: string, name: string, id: string): ThemeDef {
   const fg = hslToHex(h, 0.32, 0.16);
   const muted = ensureContrast(hslToHex(h, 0.12, 0.44), bg, 4.5);
   // 强调色: 代表色压暗到达标(与纸面同色相, 整体协调)
-  const rawPrimary = repHex;
+  const rawPrimary = rep.hex;
   const accent = ensureContrast(rawPrimary, bg, 4.5);
   const accentFg = contrastRatio("#ffffff", accent) >= 3 ? "#ffffff" : "#1a1a1a";
   return {
-    id,
-    name,
+    id: "province",
+    name: region ? region.name : "地域色彩",
     bg,
     fg,
     pageBg,
@@ -617,49 +573,6 @@ function paintTheme(repHex: string, name: string, id: string): ThemeDef {
     panelAccent: ensureContrast(rawPrimary, chromeBg, 3),
     panelHover: hslToHex(h, 0.18, 0.9),
   };
-}
-
-/** 按省份推导地域色彩主题 */
-export function provinceTheme(provinceCode?: string): ThemeDef {
-  const region =
-    PROVINCES.find((p) => p.code === provinceCode) ??
-    PROVINCES.find((p) => p.code === DEFAULT_PROVINCE_CODE) ??
-    PROVINCES[0];
-  const colors = region && region.colors.length > 0 ? region.colors : [{ hex: "#8A8A8A" }];
-  return paintTheme(pickRepresentative(colors).hex, region ? region.name : "地域色彩", "province");
-}
-
-/** 由任意颜色生成阅读主题(每日一色用) */
-export function colorTheme(name: string, hex: string): ThemeDef {
-  return paintTheme(/^#[0-9a-f]{6}$/i.test(hex) ? hex : "#8A8A8A", name || "每日一色", "daily");
-}
-
-/** 北京时间 yyyy-mm-dd(每日一色的"换色"边界按国内习惯) */
-export function beijingDateKey(date?: Date): string {
-  const base = date ? date.getTime() : Date.now();
-  return new Date(base + 8 * 3600 * 1000).toISOString().slice(0, 10);
-}
-
-/**
- * 本地每日一色: 不依赖网络, 按日期在全部省份色卡(190 色)里轮换, 同一天恒定。
- * 既作为"离线可用"的默认来源, 也作为官网抓取失败时的兜底。
- */
-export function localDailyColor(dateKey?: string): { name: string; hex: string } {
-  const pool: { name: string; hex: string }[] = [];
-  for (const p of PROVINCES) {
-    for (const c of p.colors) {
-      pool.push({ name: p.name + "·" + c.name, hex: c.hex });
-    }
-  }
-  if (pool.length === 0) {
-    return { name: "素灰", hex: "#8A8A8A" };
-  }
-  const key = dateKey || beijingDateKey();
-  let hash = 0;
-  for (let i = 0; i < key.length; i += 1) {
-    hash = (hash * 31 + key.charCodeAt(i)) % 1000000007;
-  }
-  return pool[hash % pool.length];
 }
 
 export function fontStackById(id: string): string {

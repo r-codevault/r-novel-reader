@@ -492,19 +492,26 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // 地域色彩主题: 省份下拉 + 色卡预览 + 选中即切换主题
   document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(40);
-  const provSelect = document.querySelector('#settingsPanel .sp-province .sp-select');
-  assert(provSelect, '设置面板应有「地域色彩」省份下拉');
-  assert(provSelect.querySelectorAll('option').length === 34, '省份下拉应有 34 个省级区域(实际 ' + provSelect.querySelectorAll('option').length + ')');
+  // 自绘下拉(原生 select 的滚动条无法收细, 已替换)
+  const provBtn = document.querySelector('#settingsPanel .sp-province .sp-province-btn');
+  assert(provBtn, '设置面板应有「地域色彩」省份选择器');
+  assert(!document.querySelector('#settingsPanel .sp-province select'), '不应再用原生 select(滚动条无法收细)');
   const chips = document.querySelectorAll('#settingsPanel .sp-color-chip');
   assert(chips.length >= 4, '应展示当前省份的色卡预览(实际 ' + chips.length + ' 个)');
+  provBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  const provItems = document.querySelectorAll('#settingsPanel .sp-province-menu .sp-province-item');
+  assert(provItems.length === 34, '展开后应有 34 个省级区域(实际 ' + provItems.length + ')');
   posted.length = 0;
-  provSelect.value = '440000';
-  provSelect.dispatchEvent(new win.Event('change', { bubbles: true }));
+  const gdItem = Array.from(provItems).find((el) => (el.textContent || '').trim() === '广东');
+  assert(gdItem, '省份列表应包含「广东」');
+  gdItem.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(40);
   assert(
     posted.some((m) => m.type === 'updateSettings' && m.patch && m.patch.theme === 'province' && m.patch.province === '440000'),
     '选省应同时切换地域主题并保存省份代码'
   );
+  assert(!document.querySelector('#settingsPanel .sp-province-menu'), '选中后列表应收起');
   document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   // 地域色板必须由构建期注入(34 套), 不能端上现算
@@ -513,39 +520,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const storeSrc = fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'store.ts'), 'utf8');
   assert(/PROVINCE_THEMES\[province/.test(storeSrc), 'webview themeOf 应从省份色板查表');
   const settingsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'settings.ts'), 'utf8');
-  assert(/s\.theme === "province"[^;]*s\.theme === "daily"[^;]*THEMES\.some/.test(settingsSrc),
-    '主题白名单必须放行 province 与 daily(否则会静默丢弃)'
-  );
+  assert(/s\.theme === "province" \|\| THEMES\.some/.test(settingsSrc), '主题白名单必须放行 province(否则会静默丢弃)');
   assert(/ensureContrast\(/.test(settingsSrc), '色板推导必须做过对比度校正');
-  // 每日一色: 色块/色名/色值 + 应用按钮(来源下拉已去掉, 改为每日自动同步)
-  document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(40);
-  const dailyChip = document.querySelector('#settingsPanel .sp-daily .sp-daily-chip');
-  const dailyApply = document.querySelector('#settingsPanel .sp-daily .sp-daily-apply');
-  assert(dailyChip && dailyApply, '设置面板应有「每日一色」行(色块/色名/应用)');
-  assert(!document.querySelector('#settingsPanel .sp-daily select'), '不应再有来源下拉(改为每日自动同步)');
-  // 打开面板时已发出 dailyRefresh, 必须在清空 posted 之前断言
-  assert(
-    posted.some((m) => m.type === 'dailyRefresh'),
-    '打开阅读设置应自动请求一次今日色同步'
-  );
-  posted.length = 0;
-  dailyApply.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(40);
-  assert(posted.some((m) => m.type === 'applyDaily'), '点应用应请求扩展取今日色并切换主题');
-  document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(30);
-  // 扩展侧接线: 解析器 + 官网抓取 + 兜底
-  const dailySrcTs = fs.readFileSync(path.join(__dirname, '..', 'src', 'dailyColor.ts'), 'utf8');
-  assert(/parseDailyColor/.test(dailySrcTs) && /cncolor\.art\/daily/.test(dailySrcTs), '应实现官网页面解析');
-  assert(/Accept-Encoding'?: '?identity|\\?identity/.test(dailySrcTs) || /identity/.test(dailySrcTs), '请求应要求不压缩(免 gzip 依赖)');
-  assert(/resolve\(null\)/.test(dailySrcTs), '抓取失败必须 resolve(null) 以便回退本地');
-  const panelTs = fs.readFileSync(path.join(__dirname, '..', 'src', 'readerPanel.ts'), 'utf8');
-  assert(/case 'applyDaily'/.test(panelTs) && /case 'dailyRefresh'/.test(panelTs), '面板应处理 applyDaily / dailyRefresh');
-  assert(/_ensureDaily\(\)/.test(panelTs) && /stale/.test(panelTs), '应有当日色缓存 + CDN 未更新守卫');
-  console.log('每日一色(色块/应用/自动同步/官网解析接线): 通过');
-
-  console.log('地域色彩主题(下拉/色卡/切换/构建期色板): 通过');
+  assert(/\*::-webkit-scrollbar\s*\{[^}]*width:\s*8px/.test(capturedHtml), '全局滚动条应收细到 8px');
+  console.log('地域色彩主题(自绘下拉/色卡/切换/构建期色板) + 细滚动条: 通过');
 
   console.log('侧边菜单(占位布局/展开收起/4 功能项): 通过');
 

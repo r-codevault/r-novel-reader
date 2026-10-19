@@ -4,33 +4,11 @@
  * 面板定位(贴合悬浮球)由 App 协调, 本组件暴露根元素
  */
 import { computed, ref, watch } from 'vue';
-import { state, THEMES, PROVINCES, persistSettings, applyDailyTheme, requestDailyRefresh, stepFontSize, stepSetting, resetSettings } from '../store';
+import { state, THEMES, PROVINCES, persistSettings, stepFontSize, stepSetting, resetSettings } from '../store';
 import { shortcutLabel } from '../composables/shortcut';
 
 const rootRef = ref<HTMLElement | null>(null);
 defineExpose({ el: rootRef });
-
-/** 今日色(来自扩展下发的推导色板; 未取过则为空) */
-const dailyColor = computed(function () {
-  // 优先用扩展下发的原始色值(推导后的 accent 会被压暗, 不能当展示色)
-  if (state.dailyInfo) { return state.dailyInfo; }
-  return state.dailyTheme ? { name: state.dailyTheme.name, hex: state.dailyTheme.accent } : null;
-});
-
-/** 当前是否正在使用每日一色 */
-const dailyFromText = computed(function () {
-  const from = state.dailyInfo && state.dailyInfo.from;
-  return from === 'remote' ? '今日色来自官网每日推荐' : '今日色来自本地轮换(官网不可用或未更新)';
-});
-
-const usingDaily = computed(function () {
-  return !!state.settings && state.settings.theme === 'daily';
-});
-
-// 每天首次打开阅读设置时请求一次今日色(扩展侧按日期去重, 当天重复调用不会重复请求)
-watch(function () { return state.settingsOpen; }, function (open) {
-  if (open) { requestDailyRefresh(); }
-});
 
 /** 当前选中省份(未启用地域主题时也回退到已选省, 便于预览) */
 const provinceCode = computed(function () {
@@ -44,9 +22,29 @@ const provinceColors = computed(function () {
   return found ? found.colors : [];
 });
 
-/** 切换省份: 同时切到「地域色彩」主题 */
-function onProvinceChange(e: Event): void {
-  const code = (e.target as HTMLSelectElement).value;
+/** 省份列表是否展开(自绘下拉, 避免原生 select 的粗滚动条) */
+const provinceOpen = ref(false);
+
+/** 当前省份名 */
+const provinceName = computed(function () {
+  const found = PROVINCES.find(function (p) { return p.code === provinceCode.value; });
+  return found ? found.name : '选择省份';
+});
+
+/** 点击面板其他位置时收起省份列表 */
+function closeProvinceMenu(e: MouseEvent): void {
+  const picker = rootRef.value ? rootRef.value.querySelector('.sp-province-picker') : null;
+  if (!picker || !picker.contains(e.target as Node)) { provinceOpen.value = false; }
+}
+
+watch(provinceOpen, function (open) {
+  if (open) { document.addEventListener('mousedown', closeProvinceMenu, true); }
+  else { document.removeEventListener('mousedown', closeProvinceMenu, true); }
+});
+
+/** 选择省份: 同时切到「地域色彩」主题 */
+function chooseProvince(code: string): void {
+  provinceOpen.value = false;
   if (!code) { return; }
   persistSettings({ province: code, theme: 'province' });
 }
@@ -84,32 +82,30 @@ const shortcutHintText = computed(function () {
           @click="persistSettings({ theme: t.id })"></span>
       </div>
     </div>
-    <!-- 地域色彩: 34 个省级区域, 按该省色卡推导"可长时间阅读"的色板 -->
+    <!-- 地域色彩: 34 个省级区域, 按该省色卡推导"可长时间阅读"的色板
+         用自绘列表而非原生 <select>: 原生下拉的滚动条由浏览器绘制, 无法收细 -->
     <div class="sp-row">
       <span class="sp-label">地域色彩</span>
       <div class="sp-province">
-        <select class="sp-select" :value="provinceCode" @change="onProvinceChange"
-          :title="settings && settings.theme === 'province' ? '当前使用地域色彩主题' : '选择省份后自动切换到地域色彩主题'">
-          <option v-for="p in PROVINCES" :key="p.code" :value="p.code">{{ p.name }}</option>
-        </select>
+        <div class="sp-province-picker">
+          <button class="sp-province-btn" :class="{ open: provinceOpen }"
+            :title="settings && settings.theme === 'province' ? '当前使用地域色彩主题' : '选择省份后自动切换到地域色彩主题'"
+            @click.stop="provinceOpen = !provinceOpen">
+            <span>{{ provinceName }}</span>
+            <svg class="sp-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+          <div v-if="provinceOpen" class="sp-province-menu">
+            <button v-for="p in PROVINCES" :key="p.code" class="sp-province-item"
+              :class="{ active: p.code === provinceCode }" @click="chooseProvince(p.code)">{{ p.name }}</button>
+          </div>
+        </div>
         <span class="sp-province-colors">
           <i v-for="c in provinceColors" :key="c.hex + c.name" class="sp-color-chip"
             :style="{ background: c.hex }" :title="c.name + ' ' + c.hex"></i>
         </span>
-      </div>
-    </div>
-    <!-- 每日一色: 每天首次自动同步官网(失败静默用本地), 点应用即用当日色做主题 -->
-    <div class="sp-row">
-      <span class="sp-label">每日一色</span>
-      <div class="sp-daily">
-        <i class="sp-daily-chip" :style="{ background: dailyColor ? dailyColor.hex : 'transparent' }"
-          :title="dailyColor ? dailyColor.name + ' ' + dailyColor.hex : '尚未取色'"></i>
-        <span class="sp-daily-name">{{ dailyColor ? dailyColor.name : '—' }}</span>
-        <span class="sp-daily-hex">{{ dailyColor ? dailyColor.hex : '' }}</span>
-        <span v-if="dailyColor" class="sp-daily-from" :title="dailyFromText">{{ dailyColor.from === 'remote' ? '官网' : '本地' }}</span>
-        <span class="spacer"></span>
-        <button class="sp-daily-apply" :class="{ active: usingDaily }"
-          :disabled="usingDaily" @click="applyDailyTheme()">{{ usingDaily ? '已应用' : '应用' }}</button>
       </div>
     </div>
     <div class="sp-row">
