@@ -10,6 +10,8 @@
 
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import { Novel } from './novelParser';
 import { readWebviewAsset } from './webviewAssets';
 import { ReadingSettings, SettingsStore, THEMES, fontStackById, themeById } from './settings';
@@ -35,6 +37,8 @@ interface InitPayload {
     shelf: ShelfItemView[];
     /** 书库目录(抽屉「存储」页) */
     libraryPath: string;
+    /** 自定义图片主题的背景图(webview 可访问 URI); 非自定义主题时为空 */
+    customBgUri?: string;
 }
 
 interface ChapterPayload {
@@ -60,7 +64,10 @@ type WebviewMessage =
     | { type: 'pickLibrary' }
     | { type: 'clearLibrary' }
     | { type: 'openLibraryFolder' }
-    | { type: 'refreshLibrary' };
+    | { type: 'refreshLibrary' }
+    // 自定义图片主题
+    | { type: 'pickCustomTheme' }
+    | { type: 'customBgLuminance'; dark: boolean };
 
 /** 书架条目(抽屉「书架」页渲染用) */
 export interface ShelfItemView {
@@ -90,6 +97,8 @@ export class ReaderPanel {
     public static getShelf?: () => ShelfItemView[];
     /** 书库目录提供者(插件入口注入) */
     public static getLibrary?: () => string;
+    /** 扩展 globalStorage 目录(插件入口注入): 存放自定义主题背景图 */
+    public static storageDir?: string;
     /** 视图就绪前的抽屉打开请求 */
     private static _pendingDrawer: DrawerTab | null = null;
 
@@ -213,7 +222,8 @@ export class ReaderPanel {
     }
 
     static updateSettings(settings: ReadingSettings): void {
-        ReaderPanel.current?._panel.webview.postMessage({ type: 'settings', payload: settings });
+        const inst = ReaderPanel.current;
+        if (inst) { inst._postSettings(settings); }
     }
 
     /** 推送书架列表(抽屉「书架」页实时刷新) */
@@ -296,14 +306,14 @@ export class ReaderPanel {
                 });
                 void this._store.update(msg.patch).then((next) => {
                     this._settings = next;
-                    this._panel.webview.postMessage({ type: 'settings', payload: next });
+                    this._postSettings(next);
                     ReaderPanel.onDidChangeSettings?.(next);
                 });
                 break;
             case 'resetSettings':
                 void this._store.reset().then((next) => {
                     this._settings = next;
-                    this._panel.webview.postMessage({ type: 'settings', payload: next });
+                    this._postSettings(next);
                     ReaderPanel.onDidChangeSettings?.(next);
                 });
                 break;
@@ -350,6 +360,16 @@ export class ReaderPanel {
                         );
                     });
                 break;
+            case 'pickCustomTheme':
+                void this._pickCustomTheme();
+                break;
+            case 'customBgLuminance':
+                // webview 采样完成: 记住图片明暗(决定用深字还是浅字), 不走防抖, 立即落盘
+                void this._store.update({ customBgDark: !!msg.dark }).then((next) => {
+                    this._postSettings(next);
+                    ReaderPanel.onDidChangeSettings?.(next);
+                });
+                break;
         }
     }
 
@@ -385,9 +405,93 @@ export class ReaderPanel {
             openSettings: this._openSettingsOnLoad,
             shelf: ReaderPanel.getShelf ? ReaderPanel.getShelf() : [],
             libraryPath: ReaderPanel.getLibrary ? ReaderPanel.getLibrary() : '',
+            customBgUri: this._customBgUri(),
         };
         this._openSettingsOnLoad = false;
         this._panel.webview.postMessage({ type: 'init', payload });
+    }
+
+    /** 自定义主题背景图的 webview URI(非自定义主题/文件不存在时为空) */
+    private _customBgUri(): string | undefined {
+        const s = this._settings;
+        if (!s || s.theme !== 'custom' || !s.customBgPath) {
+            return undefined;
+        }
+        try {
+            if (!fs.existsSync(s.customBgPath)) {
+                return undefined;
+            }
+            return this._panel.webview.asWebviewUri(vscode.Uri.file(s.customBgPath)).toString();
+        } catch {
+            return undefined;
+        }
+    }
+
+    /** 下发设置(附带自定义背景 URI, webview 直接拿去当背景) */
+    private _postSettings(next: ReadingSettings): void {
+        this._settings = next;
+        this._panel.webview.postMessage({
+            type: 'settings',
+            payload: { ...next, customBgUri: this._customBgUri() },
+        });
+    }
+
+    /**
+     * 选择自定义主题背景图:
+     *  1) 弹出文件选择框 -> 2) 复制到 globalStorage(避免原图被移动/删除后失效)
+     *  3) 写设置并通知界面 -> 4) 把图以 data URL 发给 webview 采样亮度(自动决定深色/浅色文字)
+     */
+    private async _pickCustomTheme(): Promise<void> {
+        const picked = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            openLabel: '用作阅读背景',
+            filters: { 图片: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] },
+        });
+        if (!picked || picked.length === 0) {
+            return;
+        }
+        const src = picked[0].fsPath;
+        let target = src;
+        const dir = ReaderPanel.storageDir;
+        if (dir) {
+            try {
+                await fs.promises.mkdir(dir, { recursive: true });
+                const ext = (path.extname(src) || '.jpg').toLowerCase();
+                target = path.join(dir, `custom-theme${ext}`);
+                // 清掉换图后残留的旧格式文件
+                for (const name of await fs.promises.readdir(dir)) {
+                    if (name.startsWith('custom-theme.') && path.join(dir, name) !== target) {
+                        await fs.promises.unlink(path.join(dir, name)).catch(() => undefined);
+                    }
+                }
+                await fs.promises.copyFile(src, target);
+            } catch {
+                target = src;
+            }
+        }
+
+        const next = await this._store.update({ customBgPath: target, theme: 'custom' });
+        this._postSettings(next);
+        ReaderPanel.onDidChangeSettings?.(next);
+
+        // 亮度采样: 超过 8MB 的图跳过(避免 postMessage 传超大字符串)
+        try {
+            const buf = await fs.promises.readFile(target);
+            if (buf.length <= 8 * 1024 * 1024) {
+                const ext = path.extname(target).slice(1).toLowerCase();
+                const mime =
+                    ext === 'png' ? 'image/png'
+                    : ext === 'webp' ? 'image/webp'
+                    : ext === 'bmp' ? 'image/bmp'
+                    : 'image/jpeg';
+                this._panel.webview.postMessage({
+                    type: 'probeCustomBg',
+                    dataUrl: `data:${mime};base64,${buf.toString('base64')}`,
+                });
+            }
+        } catch {
+            // 采样失败: 保持原有明暗判定, 不影响功能
+        }
     }
 
     private _postChapter(): void {
@@ -419,7 +523,7 @@ export class ReaderPanel {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${this._panel.webview.cspSource} data:;">
 <title>小说阅读</title>
 <style>
   :root {

@@ -5,7 +5,7 @@
  * 弹窗互斥: 任何时刻最多一个弹窗(目录/阅读设置/书架/存储)
  */
 import { onMounted, nextTick, ref, watch } from 'vue';
-import { state, vscode, gotoChapter, type ChapterPayload, type DrawerTab, type ShelfItemView } from './composables/vscode';
+import { state, vscode, send, gotoChapter, type ChapterPayload, type DrawerTab, type ShelfItemView } from './composables/vscode';
 import { applyThemeVars, DEFAULT_SETTINGS, persistSettings, sendProgress, type ReadingSettings } from './store';
 import { parseShortcut, matchShortcut } from './composables/shortcut';
 import CatalogPanel from './components/CatalogPanel.vue';
@@ -85,6 +85,39 @@ function openTab(tab: DrawerTab | undefined): void {
   else { openOnly('shelfOpen'); }
 }
 
+/**
+ * 采样自定义背景图的平均亮度, 回报扩展(决定正文用深色还是浅色)。
+ * 用 canvas 采样 32×32 缩略图, 够用且极快; data URL 同源, 不会被画布污染。
+ */
+function probeCustomBgLuminance(dataUrl: string): void {
+  if (!dataUrl) { return; }
+  const img = new Image();
+  img.onload = function () {
+    try {
+      const size = 32;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { return; }
+      ctx.drawImage(img, 0, 0, size, size);
+      const data = ctx.getImageData(0, 0, size, size).data;
+      let sum = 0;
+      let count = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        // 感知亮度(ITU-R BT.601)
+        sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        count += 1;
+      }
+      if (!count) { return; }
+      send({ type: 'customBgLuminance', dark: sum / count < 128 });
+    } catch {
+      // 采样失败: 保持现有明暗判定
+    }
+  };
+  img.src = dataUrl;
+}
+
 // ---------------------------------------------------------------- 扩展消息
 function handleExtensionMessage(msg: { type?: string; payload?: Record<string, unknown> }): void {
   if (!msg || !msg.type) { return; }
@@ -101,6 +134,7 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.chapters = (p.chapters as { index: number; title: string }[]) || [];
       state.catReverse = false;
       state.catCollapsed = [];
+      state.customBgUri = (p.customBgUri as string) || '';
       applySettings(p.settings as ReadingSettings);
       state.chapter = {
         index: p.chapterIndex as number,
@@ -118,8 +152,14 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
     case 'chapter':
       state.chapter = msg.payload as unknown as ChapterPayload;
       break;
-    case 'settings':
+    case 'settings': {
+      const raw = (msg.payload || {}) as Record<string, unknown>;
+      state.customBgUri = (raw.customBgUri as string) || '';
       applySettings(msg.payload as unknown as ReadingSettings);
+      break;
+    }
+    case 'probeCustomBg':
+      probeCustomBgLuminance(((msg as { dataUrl?: string }).dataUrl) || '');
       break;
     case 'openSettings':
       openOnly('settingsOpen');

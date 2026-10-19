@@ -4,11 +4,18 @@
  * 面板定位(贴合悬浮球)由 App 协调, 本组件暴露根元素
  */
 import { computed, ref } from 'vue';
-import { state, THEMES, persistSettings, stepFontSize, stepSetting, resetSettings } from '../store';
+import { state, THEMES, persistSettings, pickCustomTheme, stepFontSize, stepSetting, resetSettings } from '../store';
 import { shortcutLabel } from '../composables/shortcut';
 
 const rootRef = ref<HTMLElement | null>(null);
 defineExpose({ el: rootRef });
+
+/** 自定义主题滑块(遮罩浓度/模糊): 输入即生效 */
+function onSlider(key: 'customBgMask' | 'customBgBlur', e: Event): void {
+  const v = Number((e.target as HTMLInputElement).value);
+  if (!Number.isFinite(v)) { return; }
+  persistSettings({ [key]: v } as Record<string, number>);
+}
 
 const widthSteps = [640, 800, 1000, 1200];
 const fontOptions = [
@@ -41,6 +48,28 @@ const shortcutHintText = computed(function () {
           :style="{ background: t.id === 'dark' ? '#1c1c1c' : t.bg, color: t.fg, '--sp-check': t.fg }"
           :class="{ active: settings && settings.theme === t.id }"
           @click="persistSettings({ theme: t.id })"></span>
+        <!-- 自定义: 点一下选一张本地图片当阅读背景 -->
+        <span class="sp-dot sp-dot-custom" data-theme="custom" title="自定义背景图(选择本地图片)"
+          :class="{ active: settings && settings.theme === 'custom' }"
+          @click="pickCustomTheme()">＋</span>
+      </div>
+    </div>
+    <!-- 自定义主题: 遮罩浓度 + 模糊(保证任何图片下正文都看得清) -->
+    <div class="sp-row" v-if="settings && settings.theme === 'custom'">
+      <span class="sp-label">背景调节</span>
+      <div class="sp-sliders">
+        <div class="sp-slider-row">
+          <label>遮罩浓度</label>
+          <input type="range" min="0" max="100" step="5" :value="settings.customBgMask"
+            @input="onSlider('customBgMask', $event)" />
+          <span class="sp-slider-val">{{ settings.customBgMask }}%</span>
+        </div>
+        <div class="sp-slider-row">
+          <label>模糊</label>
+          <input type="range" min="0" max="12" step="1" :value="settings.customBgBlur"
+            @input="onSlider('customBgBlur', $event)" />
+          <span class="sp-slider-val">{{ settings.customBgBlur }}px</span>
+        </div>
       </div>
     </div>
     <div class="sp-row">

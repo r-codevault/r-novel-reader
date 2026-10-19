@@ -31,6 +31,14 @@ export interface ReadingSettings {
   shortcutNext: string;
   /** 是否显示底部状态栏(默认显示; 由侧边菜单「状态栏」项切换) */
   showStatusBar: boolean;
+  /** 自定义图片主题: 图片绝对路径(选中「自定义」后才有) */
+  customBgPath?: string;
+  /** 自定义图片主题: 图片是否偏暗(取色后自动判定, 决定用浅字还是深字) */
+  customBgDark?: boolean;
+  /** 自定义图片主题: 遮罩浓度 0~100(越大文字越清楚, 图越淡); 默认 70 */
+  customBgMask: number;
+  /** 自定义图片主题: 背景模糊半径 0~12px; 默认 4 */
+  customBgBlur: number;
 }
 
 export interface ThemeDef {
@@ -197,6 +205,8 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
   shortcutPrev: "alt+arrowleft",
   shortcutNext: "alt+arrowright",
   showStatusBar: true,
+  customBgMask: 70,
+  customBgBlur: 4,
 };
 
 const STORAGE_KEY = "novelReader.settings";
@@ -212,6 +222,10 @@ const SETTING_KEYS: (keyof ReadingSettings)[] = [
   "shortcutPrev",
   "shortcutNext",
   "showStatusBar",
+  "customBgPath",
+  "customBgDark",
+  "customBgMask",
+  "customBgBlur",
 ];
 
 function clamp(n: number, min: number, max: number, fallback: number): number {
@@ -260,6 +274,8 @@ function configDefaults(): ReadingSettings {
       DEFAULT_SETTINGS.shortcutNext,
     ),
     showStatusBar: DEFAULT_SETTINGS.showStatusBar,
+    customBgMask: DEFAULT_SETTINGS.customBgMask,
+    customBgBlur: DEFAULT_SETTINGS.customBgBlur,
   };
 }
 
@@ -267,6 +283,18 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
   const out: Partial<ReadingSettings> = {};
   if (typeof s.showStatusBar === "boolean") {
     out.showStatusBar = s.showStatusBar;
+  }
+  if (typeof s.customBgPath === "string" && s.customBgPath) {
+    out.customBgPath = s.customBgPath;
+  }
+  if (typeof s.customBgDark === "boolean") {
+    out.customBgDark = s.customBgDark;
+  }
+  if (typeof s.customBgMask === "number") {
+    out.customBgMask = clamp(s.customBgMask, 0, 100, DEFAULT_SETTINGS.customBgMask);
+  }
+  if (typeof s.customBgBlur === "number") {
+    out.customBgBlur = clamp(s.customBgBlur, 0, 12, DEFAULT_SETTINGS.customBgBlur);
   }
   if (typeof s.fontSize === "number") {
     out.fontSize = clamp(s.fontSize, 12, 32, DEFAULT_SETTINGS.fontSize);
@@ -382,7 +410,13 @@ export class SettingsStore {
   }
 }
 
-export function themeById(id: string): ThemeDef {
+export function themeById(id: string, customDark = false): ThemeDef {
+  if (id === 'custom') {
+    // 自定义图片主题: 直接复用一套已验证的色板, 保证 UI/正文对比度不掉档
+    // 图片偏暗 -> 黑夜色板(浅字), 否则 -> 羊皮纸色板(深字)
+    const base = THEMES.find((t) => t.id === (customDark ? 'dark' : 'sepia')) ?? THEMES[0];
+    return { ...base, id: 'custom', name: '自定义' };
+  }
   return THEMES.find((t) => t.id === id) ?? THEMES[0];
 }
 

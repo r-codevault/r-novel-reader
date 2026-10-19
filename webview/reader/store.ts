@@ -12,14 +12,32 @@ export { THEMES, FONT_STACKS, DEFAULT_SETTINGS };
 
 export { state };
 
-export function themeOf(id: string): ThemeDef {
+export function themeOf(id: string, customDark = false): ThemeDef {
+  if (id === 'custom') {
+    // 自定义图片主题: 复用已调好的色板(深图用黑夜色板/浅图用羊皮纸), 保证对比度
+    const base = THEMES.find((t) => t.id === (customDark ? 'dark' : 'sepia')) ?? THEMES[0];
+    return { ...base, id: 'custom', name: '自定义' };
+  }
   for (const t of THEMES) { if (t.id === id) { return t; } }
   return THEMES[0];
 }
 
+/** #rrggbb -> rgba(r,g,b,a); 非法值回退为灰 */
+function hexToRgba(hex: string, alpha: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec((hex || '').trim());
+  if (!m) { return `rgba(128,128,128,${alpha})`; }
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+
+/** 打开系统文件选择框, 选一张图作为阅读背景(自定义主题) */
+export function pickCustomTheme(): void {
+  send({ type: 'pickCustomTheme' });
+}
+
 /** 把主题色写到 :root CSS 变量(与旧 applySettings 一致) */
 export function applyThemeVars(s: ReadingSettings): void {
-  const t = themeOf(s.theme);
+  const t = themeOf(s.theme, !!s.customBgDark);
   const root = document.documentElement;
   // 暴露主题 id 供 CSS 按主题分支(如 logo 放射线在浅色/黑夜用不同颜色)
   root.dataset.theme = t.id;
@@ -57,6 +75,16 @@ export function applyThemeVars(s: ReadingSettings): void {
   root.style.setProperty('--line-height', String(s.lineHeight));
   root.style.setProperty('--para-spacing', s.paragraphSpacing + 'em');
   root.style.setProperty('--content-width', s.contentWidth + 'px');
+
+  // 自定义图片主题: 背景图 + 遮罩浓度 + 模糊 + 半透明纸面
+  // 遮罩用当前色板的纸色, 所以无论图多亮多暗, 正文对比度都受控
+  const isCustom = t.id === 'custom';
+  const mask = Math.min(100, Math.max(0, (s.customBgMask ?? 70))) / 100;
+  const blur = Math.min(12, Math.max(0, (s.customBgBlur ?? 4)));
+  root.style.setProperty('--custom-img', isCustom && state.customBgUri ? 'url("' + state.customBgUri + '")' : 'none');
+  root.style.setProperty('--custom-scrim', hexToRgba(t.bg, isCustom ? mask : 0));
+  root.style.setProperty('--custom-blur', blur + 'px');
+  root.style.setProperty('--custom-paper', isCustom ? hexToRgba(t.bg, 0.82) : t.bg);
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
