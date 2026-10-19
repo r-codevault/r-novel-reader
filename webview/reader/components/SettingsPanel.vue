@@ -143,7 +143,7 @@ const shortcutHintText = computed(function () {
             <button v-for="p in PROVINCES" :key="p.code" class="sp-province-item"
               :class="{ active: settings && settings.theme === 'province' && p.code === provinceCode }"
               :style="{ borderLeftColor: p.colors[0] ? p.colors[0].hex : 'transparent' }"
-              :title="p.name + ' · ' + (p.colors[0] ? p.colors[0].name + ' ' + p.colors[0].hex : '')"
+              :title="p.name + (p.colors[0] ? ' · ' + p.colors[0].name : '')"
               @mouseenter="previewProvince(p.code)" @focus="previewProvince(p.code)"
               @click="chooseProvince(p.code)">{{ p.name }}</button>
           </div>
@@ -162,7 +162,7 @@ const shortcutHintText = computed(function () {
           <div v-if="termOpen" class="sp-province-menu sp-term-menu" @mouseleave="endPreview()">
             <button v-for="t in SOLAR_TERMS" :key="t.id" class="sp-province-item"
               :class="{ active: settings && settings.theme === 'term' && settings.term === t.id }"
-              :style="{ borderLeftColor: t.hex }" :title="t.name + ' · ' + t.color + ' ' + t.hex"
+              :style="{ borderLeftColor: t.hex }" :title="t.name + ' · ' + t.color"
               @mouseenter="previewTerm(t.id)" @focus="previewTerm(t.id)"
               @click="chooseTerm(t.id)">{{ t.name }}</button>
           </div>

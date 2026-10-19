@@ -655,6 +655,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     assert(/\.sp-province-menu \.sp-province-item[^{]*\{[^}]*border-left:\s*3px/.test(capturedHtml),
       '省份条目应有 3px 色条样式');
   }
+  // 悬浮提示只显示「名称 · 色名」, 不带十六进制色值
+  {
+    const provItem = document.querySelector('#settingsPanel .sp-province-menu .sp-province-item');
+    const t1 = provItem ? provItem.getAttribute('title') : '';
+    const termItem = document.querySelector('#settingsPanel .sp-term-menu .sp-province-item');
+    const t2 = termItem ? termItem.getAttribute('title') : '';
+    for (const [label, t] of [['省份', t1], ['节气', t2]]) {
+      if (!t) { continue; }
+      assert(t.indexOf('#') < 0, label + '悬浮提示不应包含色值, 实际: ' + t);
+      assert(t.indexOf(' · ') > 0, label + '悬浮提示应为「名称 · 色名」格式, 实际: ' + t);
+    }
+  }
   console.log('下拉定位(锚定行容器/不越界) + 省份色条: 通过');
   }
   console.log('地域色彩主题(自绘下拉/色卡/切换/构建期色板) + 细滚动条: 通过');
