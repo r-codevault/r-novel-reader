@@ -642,6 +642,20 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
     await sleep(30);
     console.log('廿四节气主题(同行/24项/悬浮预览/落盘): 通过');
+  // 下拉定位与色条: 菜单锚定在第二行容器(而不是各自按钮), 否则会越界被裁
+  {
+    assert(/\.sp-theme-extra[^{]*\{[^}]*position:\s*relative/.test(capturedHtml), '第二行容器应作为菜单定位基准');
+    assert(!/\.sp-province-picker[^{]*\{[^}]*position:\s*relative/.test(capturedHtml),
+      '选择器不应自行定位(否则菜单从按钮处展开会越界)');
+    // 省份条目应有代表色条(与节气一致)
+    const firstProvItem = document.querySelector('#settingsPanel .sp-province-menu .sp-province-item');
+    if (firstProvItem) {
+      assert(firstProvItem.style.borderLeftColor, '省份条目应带左侧代表色条');
+    }
+    assert(/\.sp-province-menu \.sp-province-item[^{]*\{[^}]*border-left:\s*3px/.test(capturedHtml),
+      '省份条目应有 3px 色条样式');
+  }
+  console.log('下拉定位(锚定行容器/不越界) + 省份色条: 通过');
   }
   console.log('地域色彩主题(自绘下拉/色卡/切换/构建期色板) + 细滚动条: 通过');
 

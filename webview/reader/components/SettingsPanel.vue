@@ -142,6 +142,8 @@ const shortcutHintText = computed(function () {
             <!-- 仅在正在使用地域主题时才高亮"当前省", 否则与占位文案语义保持一致 -->
             <button v-for="p in PROVINCES" :key="p.code" class="sp-province-item"
               :class="{ active: settings && settings.theme === 'province' && p.code === provinceCode }"
+              :style="{ borderLeftColor: p.colors[0] ? p.colors[0].hex : 'transparent' }"
+              :title="p.name + ' · ' + (p.colors[0] ? p.colors[0].name + ' ' + p.colors[0].hex : '')"
               @mouseenter="previewProvince(p.code)" @focus="previewProvince(p.code)"
               @click="chooseProvince(p.code)">{{ p.name }}</button>
           </div>

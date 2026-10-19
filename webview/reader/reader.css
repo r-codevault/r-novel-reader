@@ -136,7 +136,7 @@
   .sp-row-theme > .sp-label { padding-top: 3px; }
   .sp-themes { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
   .sp-theme-dots { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .sp-theme-extra { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sp-theme-extra { position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .sp-dot {
     width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
     border: 1px solid var(--sp-border);
@@ -519,7 +519,9 @@
   /* ---------- 地域色彩主题: 省份下拉 + 色卡预览 ---------- */
   .sp-province { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
   /* 自绘省份下拉: 原生 select 的弹出列表滚动条无法收细, 这里全自绘 */
-  .sp-province-picker { position: relative; flex: none; }
+  /* 不设 position: relative —— 让下拉菜单锚定到 .sp-theme-extra(第二行),
+     两个选择器共用同一左缘, 避免菜单从各自按钮处展开而越界 */
+  .sp-province-picker { flex: none; }
   .sp-province-btn {
     display: inline-flex; align-items: center; justify-content: space-between; gap: 6px;
     min-width: 84px;
@@ -537,8 +539,9 @@
   .sp-province-btn.open { border-color: var(--sp-accent); }
   .sp-caret { width: 12px; height: 12px; flex: none; opacity: .7; }
   .sp-province-menu {
-    /* 右对齐向左展开: 触发按钮在行末, left:0 会向右溢出被面板裁掉 */
-    position: absolute; top: calc(100% + 4px); right: 0; left: auto; z-index: 40;
+    /* 相对"第二行容器"左对齐展开: 两个选择器共用同一左缘,
+       宽度由内容撑开且不超过面板内容宽, 因此左右都不会越界被裁 */
+    position: absolute; top: calc(100% + 6px); left: 0; right: auto; z-index: 40;
     /* 宽高都交给内容: 不写死尺寸、不设 max-height/overflow ->
        列表自动撑开(34 省 5 列 7 行), 任何字号下都不会出现下拉自带滚动条 */
     width: max-content;
@@ -576,10 +579,11 @@
 *::-webkit-scrollbar-thumb:hover { background: var(--sp-accent, rgba(128, 128, 128, .7)); background-clip: content-box; }
 *::-webkit-scrollbar-corner { background: transparent; }
 
-  /* 廿四节气菜单: 6 列 4 行(24 项全展开), 条目左侧用节气色做细色条 */
-  .sp-term-menu { grid-template-columns: repeat(6, auto); }
-  .sp-term-menu .sp-province-item {
+  /* 菜单条目统一: 左侧 3px 代表色条(省份用该省首色, 节气用节气色) */
+  .sp-province-menu .sp-province-item {
     border-left: 3px solid transparent;
-    padding-left: 5px;
+    padding: 3px 6px 3px 5px;
     text-align: left;
   }
+  /* 廿四节气菜单: 6 列 4 行(24 项全展开) */
+  .sp-term-menu { grid-template-columns: repeat(6, auto); }
