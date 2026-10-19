@@ -492,12 +492,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // 地域色彩主题: 省份下拉 + 色卡预览 + 选中即切换主题
   document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(40);
-  // 自绘下拉(原生 select 的滚动条无法收细, 已替换)
-  const provBtn = document.querySelector('#settingsPanel .sp-province .sp-province-btn');
-  assert(provBtn, '设置面板应有「地域色彩」省份选择器');
-  assert(!document.querySelector('#settingsPanel .sp-province select'), '不应再用原生 select(滚动条无法收细)');
-  const chips = document.querySelectorAll('#settingsPanel .sp-color-chip');
-  assert(chips.length >= 4, '应展示当前省份的色卡预览(实际 ' + chips.length + ' 个)');
+  // 省份选择器已并入「阅读主题」行(与预设色块同一行), 且不再显示色卡圆点
+  const provBtn = document.querySelector('#settingsPanel .sp-themes .sp-province-btn');
+  assert(provBtn, '「阅读主题」行内应有省份选择器');
+  assert(!document.querySelector('#settingsPanel .sp-province'), '不应再有独立的「地域色彩」行容器');
+  assert(!document.querySelector('#settingsPanel .sp-color-chip'), '不应再显示省份色卡圆点');
+  {
+    const labels = Array.from(document.querySelectorAll('#settingsPanel .sp-label'))
+      .map((el) => (el.textContent || '').trim());
+    assert(labels.indexOf('地域色彩') < 0, '「地域色彩」标签应已移除, 实际: ' + labels.join('/'));
+    assert(labels[0] === '阅读主题', '第一行仍应为「阅读主题」');
+  }
+  assert(!document.querySelector('#settingsPanel .sp-themes select'), '不应再用原生 select(滚动条无法收细)');
   provBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   const provItems = document.querySelectorAll('#settingsPanel .sp-province-menu .sp-province-item');

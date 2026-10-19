@@ -131,7 +131,7 @@
     flex: none; width: 68px; white-space: nowrap;
     font-size: clamp(12px, calc(var(--font-size) * 0.8), 16px); color: var(--sp-muted);
   }
-  .sp-themes { display: flex; gap: 10px; flex-wrap: wrap; }
+  .sp-themes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .sp-dot {
     width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
     border: 1px solid var(--sp-border);
@@ -517,8 +517,9 @@
   .sp-province-picker { position: relative; flex: none; }
   .sp-province-btn {
     display: inline-flex; align-items: center; justify-content: space-between; gap: 6px;
-    min-width: 92px;
-    padding: 5px 8px;
+    min-width: 84px;
+    padding: 2px 8px;
+    line-height: 18px;
     font-family: var(--vscode-font-family, inherit);
     font-size: clamp(11px, calc(var(--font-size) * .72), 14px);
     color: var(--sp-fg);
@@ -555,12 +556,6 @@
   }
   .sp-province-item:hover { background: var(--sp-hover); }
   .sp-province-item.active { background: var(--sp-accent); color: var(--sp-accent-fg, #fff); }
-  .sp-province-colors { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-  .sp-color-chip {
-    width: 12px; height: 12px; border-radius: 50%;
-    border: 1px solid rgba(0, 0, 0, .18);
-    flex: none;
-  }
 
 
 /* ---------- 滚动条统一收细(8px): VS Code 默认注入的约 14px 偏粗 ---------- */

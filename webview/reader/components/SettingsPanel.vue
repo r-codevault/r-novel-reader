@@ -16,12 +16,6 @@ const provinceCode = computed(function () {
   return s ? s.province : '110000';
 });
 
-/** 当前省份的色卡(用于下方小圆点预览) */
-const provinceColors = computed(function () {
-  const found = PROVINCES.find(function (p) { return p.code === provinceCode.value; });
-  return found ? found.colors : [];
-});
-
 /** 省份列表是否展开(自绘下拉, 避免原生 select 的粗滚动条) */
 const provinceOpen = ref(false);
 
@@ -108,13 +102,7 @@ const shortcutHintText = computed(function () {
           :class="{ active: settings && settings.theme === t.id }"
           @mouseenter="previewPreset(t.id)" @focus="previewPreset(t.id)"
           @click="choosePreset(t.id)"></span>
-      </div>
-    </div>
-    <!-- 地域色彩: 34 个省级区域, 按该省色卡推导"可长时间阅读"的色板
-         用自绘列表而非原生 <select>: 原生下拉的滚动条由浏览器绘制, 无法收细 -->
-    <div class="sp-row">
-      <span class="sp-label">地域色彩</span>
-      <div class="sp-province">
+        <!-- 地域色彩: 与预设色块同一行(不再单独占一行, 也不显示色卡圆点) -->
         <div class="sp-province-picker">
           <button class="sp-province-btn" :class="{ open: provinceOpen }"
             :title="settings && settings.theme === 'province' ? '当前使用地域色彩主题' : '选择省份后自动切换到地域色彩主题'"
@@ -132,10 +120,6 @@ const shortcutHintText = computed(function () {
               @click="chooseProvince(p.code)">{{ p.name }}</button>
           </div>
         </div>
-        <span class="sp-province-colors">
-          <i v-for="c in provinceColors" :key="c.hex + c.name" class="sp-color-chip"
-            :style="{ background: c.hex }" :title="c.name + ' ' + c.hex"></i>
-        </span>
       </div>
     </div>
     <div class="sp-row">
