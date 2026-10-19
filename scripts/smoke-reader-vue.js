@@ -522,6 +522,39 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '选省应同时切换地域主题并保存省份代码'
   );
   assert(!document.querySelector('#settingsPanel .sp-province-menu'), '选中后列表应收起');
+
+  // 悬浮预览: 悬浮某省临时套用其色板(不落盘), 移出还原
+  {
+    const root = document.documentElement;
+    const bgOf = () => root.style.getPropertyValue('--bg').trim();
+    const logged = bgOf();
+    // 当前已选中「广东」, 悬浮「新疆」应产生不同色板
+    const baseBg = bgOf();
+    provBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    const items = document.querySelectorAll('#settingsPanel .sp-province-menu .sp-province-item');
+    const xj = Array.from(items).find((el) => (el.textContent || '').trim() === '新疆');
+    assert(xj, '省份列表应包含「新疆」');
+    posted.length = 0;
+    xj.dispatchEvent(new win.MouseEvent('mouseenter', { bubbles: false }));
+    await sleep(30);
+    const hoverBg = bgOf();
+    assert(hoverBg !== baseBg, '悬浮省份应实时预览该省色板(实际未变化)');
+    assert(
+      posted.length === 0,
+      '预览不应触发持久化(悬浮只改 CSS 变量)'
+    );
+    assert(root.dataset.theme === 'province', '预览时主题标记应切到 province');
+    // 移出列表 -> 还原
+    const menuEl = document.querySelector('#settingsPanel .sp-province-menu');
+    menuEl.dispatchEvent(new win.MouseEvent('mouseleave', { bubbles: false }));
+    await sleep(30);
+    assert(bgOf() === baseBg, '移出列表应还原为原主题色板');
+    assert(logged !== undefined, '前置变量应可读');
+    document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    console.log('地域色彩悬浮预览(实时套用/不落盘/移出还原): 通过');
+  }
   document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   // 地域色板必须由构建期注入(34 套), 不能端上现算

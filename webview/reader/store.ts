@@ -22,6 +22,21 @@ export function themeOf(id: string, province?: string): ThemeDef {
 }
 
 /** 把主题色写到 :root CSS 变量(与旧 applySettings 一致) */
+/**
+ * 仅预览(不落盘): 用临时设置覆盖主题变量。
+ * 用于省份列表悬浮预览 —— 只改 CSS 变量, 不动 state.settings, 因此不会触发持久化。
+ */
+export function previewTheme(patch: Partial<ReadingSettings>): void {
+  if (!state.settings) { return; }
+  applyThemeVars(Object.assign({}, state.settings, patch) as ReadingSettings);
+}
+
+/** 结束预览: 还原为当前真实设置对应色板 */
+export function restoreTheme(): void {
+  if (!state.settings) { return; }
+  applyThemeVars(state.settings);
+}
+
 export function applyThemeVars(s: ReadingSettings): void {
   const t = themeOf(s.theme, s.province);
   const root = document.documentElement;

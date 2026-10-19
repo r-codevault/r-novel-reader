@@ -4,7 +4,7 @@
  * 面板定位(贴合悬浮球)由 App 协调, 本组件暴露根元素
  */
 import { computed, ref, watch } from 'vue';
-import { state, THEMES, PROVINCES, persistSettings, stepFontSize, stepSetting, resetSettings } from '../store';
+import { state, THEMES, PROVINCES, persistSettings, previewTheme, restoreTheme, stepFontSize, stepSetting, resetSettings } from '../store';
 import { shortcutLabel } from '../composables/shortcut';
 
 const rootRef = ref<HTMLElement | null>(null);
@@ -38,13 +38,29 @@ function closeProvinceMenu(e: MouseEvent): void {
 }
 
 watch(provinceOpen, function (open) {
-  if (open) { document.addEventListener('mousedown', closeProvinceMenu, true); }
-  else { document.removeEventListener('mousedown', closeProvinceMenu, true); }
+  if (open) {
+    document.addEventListener('mousedown', closeProvinceMenu, true);
+  } else {
+    document.removeEventListener('mousedown', closeProvinceMenu, true);
+    restoreTheme(); // 关闭列表时结束任何预览
+  }
 });
+
+/** 悬浮预览: 不落盘, 只看色板效果 */
+function previewProvince(code: string): void {
+  previewTheme({ theme: 'province', province: code });
+}
+
+/** 结束预览, 还原当前真实主题 */
+function endPreview(): void {
+  restoreTheme();
+}
 
 /** 选择省份: 同时切到「地域色彩」主题 */
 function chooseProvince(code: string): void {
   provinceOpen.value = false;
+  // 先还原预览态, 再交给持久化后的正式设置接管, 避免预览变量残留
+  restoreTheme();
   if (!code) { return; }
   persistSettings({ province: code, theme: 'province' });
 }
@@ -97,9 +113,11 @@ const shortcutHintText = computed(function () {
               <path d="M6 9l6 6 6-6" />
             </svg>
           </button>
-          <div v-if="provinceOpen" class="sp-province-menu">
+          <div v-if="provinceOpen" class="sp-province-menu" @mouseleave="endPreview()">
             <button v-for="p in PROVINCES" :key="p.code" class="sp-province-item"
-              :class="{ active: p.code === provinceCode }" @click="chooseProvince(p.code)">{{ p.name }}</button>
+              :class="{ active: p.code === provinceCode }"
+              @mouseenter="previewProvince(p.code)" @focus="previewProvince(p.code)"
+              @click="chooseProvince(p.code)">{{ p.name }}</button>
           </div>
         </div>
         <span class="sp-province-colors">
