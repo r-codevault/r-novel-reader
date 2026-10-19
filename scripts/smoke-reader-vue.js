@@ -978,6 +978,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     assert(prop.default === false, '该设置默认应为 false');
     console.log('窗口重开恢复(开关默认关闭/关闭即丢弃/可还原): 通过');
   }
+
+  // 启动绝不自动弹出: activate 里预载书架不得 openPanel:true
+  {
+    const extSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
+    const startIdx = extSrc.indexOf('migrateLegacySession');
+    assert(startIdx > 0, 'activate 应执行旧数据迁移');
+    const tail = extSrc.slice(startIdx);
+    assert(
+      !/openPanel:\s*true/.test(tail),
+      '启动流程中不得出现 openPanel: true(这是新开窗口自动弹出阅读页的根因)'
+    );
+    assert(
+      /openPanel:\s*false,\s*silent:\s*true/.test(tail),
+      '启动时只应静默预载书架(openPanel: false)'
+    );
+    console.log('启动不自动弹出阅读页: 通过');
+  }
   }
 
   console.log('\n阅读面板 Vue 冒烟测试全部通过 ✔');

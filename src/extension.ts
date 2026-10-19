@@ -5,7 +5,7 @@
  *  - 注册命令 / 阅读面板(内含 书架/目录/存储 左抽屉)
  *  - 打开并解码本地 txt(自动识别 UTF-8 / GB18030 / UTF-16 编码)
  *  - 书架管理: 多本小说的登记、进度同步、移除
- *  - 启动时自动延续上一次阅读状态(自动加载上次那本书与进度)
+ *  - 启动时不自动弹出阅读页(状态栏「小说阅读」/ novelReader.resumeCurrent 进入)
  *  - VS Code 设置页修改阅读偏好时同步到阅读界面
  */
 
@@ -663,24 +663,19 @@ export function activate(context: vscode.ExtensionContext): void {
         })
     );
 
-    // ---------------------------------------------------------------- 启动: 迁移旧数据 + 自动延续上次阅读状态
+    // ---------------------------------------------------------------- 启动: 迁移旧数据(不自动打开阅读页)
 
     syncLibraryToView();
     void (async () => {
         await shelf.migrateLegacySession();
         refreshShelfView();
         const last = shelf.last();
-        // 没有任何记录: 保持原样(用户可点状态栏「小说阅读」进入)
+        // 只把上次那本预载到内存(供书架/章节/设置抽屉使用), 绝不自动弹出阅读面板;
+        // 想继续读请点状态栏「小说阅读」或执行 novelReader.resumeCurrent
         if (!last || !fs.existsSync(last.filePath)) {
             return;
         }
-        if (last.chapterIndex >= 0) {
-            // 读过: 自动打开阅读面板, 恢复到上次的书/章节/章内位置
-            await loadNovel(last.filePath, { openPanel: true, silent: true });
-        } else {
-            // 只加进书架还没开始读: 只加载到侧边栏
-            await loadNovel(last.filePath, { openPanel: false, silent: true });
-        }
+        await loadNovel(last.filePath, { openPanel: false, silent: true });
     })();
 }
 
