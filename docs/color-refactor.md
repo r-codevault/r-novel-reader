@@ -168,13 +168,14 @@ danger       = ensure(#b3261e, bg, 4.5)
 
 纸纹实现（`reader.css` + `assets/paper-xuan.png`，仅 `html[data-theme="xuan"]`）：
 
-- 384×384 **无缝贴图**（周期正弦叠加生成：低频纸浆斑驳 + 高频横纤维 + 细颗粒），
-  `background-repeat: repeat` X/Y 双向平铺，`background-blend-mode: multiply`
+- **100×100 纸纹贴图**（取自古文岛 bcpic.png，保留其横竖纤维与颗粒），
+  先提亮到 mean≈251 并放大纤维起伏（gain 1.7），再 `background-repeat: repeat`
+  X/Y 双向平铺，`background-blend-mode: multiply` 只做轻微压暗
 - 构建期由 Vite 内联为 data URI（`assetsInlineLimit` 拉满）——webview 没有
   `localResourceRoots`，外链图片会 404
 - **CSP 必须放行图片**：readerPanel 的 `default-src 'none'` 会拦掉 data: 背景图，
   已补 `img-src data:`（这是"本地 dev 有纹理、装进 VS Code 却没有"的真正原因）
-- 覆盖纸面 / 留白 / 目录 / 弹窗 / 设置 / 状态栏；实测画面标准差 ≈4.7（纯色约 0.9），
+- 覆盖纸面 / 留白 / 目录 / 弹窗 / 设置 / 状态栏；实测画面标准差 ≈5.7（纯色约 0.9），
   文字仍落在实色令牌上，不影响已校验的对比度
 - 主题圆点用 `pageBg` 暖米色 + 纸纹，避免与「纯净白 / 米白」两个浅色点混淆
 

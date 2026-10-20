@@ -614,11 +614,12 @@
   /* 传统节日菜单: 4 列 5 行(日景 18 项, 夜场不进列表) */
   .sp-festival-menu { grid-template-columns: repeat(4, auto); }
 
-  /* 宣纸纸纹: 384×384 无缝贴图, 只声明一次(避免同一张图在 CSS 里重复内联两遍) */
+  /* 宣纸纸纹: 古文岛纸纹（100px 平铺）, 只声明一次(避免同一张图在 CSS 里重复内联两遍) */
   :root { --paper-xuan: url("./assets/paper-xuan.png"); }
   /* ---------- 宣纸主题: 纸纹质感 ----------
-     真实纸纹贴图(assets/paper-xuan.png, 384×384 无缝, X/Y 双向平铺),
-     用 multiply 与各面底色混合; 只改"面"的质感, 不动令牌 → 不参与对比度计算。 */
+     真实纸纹贴图(assets/paper-xuan.png, 100×100 原生颗粒, X/Y 双向平铺),
+     已提亮到 mean≈251 再放大纤维起伏, multiply 只做轻微压暗;
+     只改"面"的质感, 不动令牌 → 不参与对比度计算。 */
   html[data-theme="xuan"] #reader,
   html[data-theme="xuan"] #content,
   html[data-theme="xuan"] #catalogPanel,
@@ -627,7 +628,7 @@
   html[data-theme="xuan"] .statusbar {
     background-image: var(--paper-xuan);
     background-repeat: repeat;
-    background-size: 384px 384px;
+    background-size: 100px 100px;
     background-blend-mode: multiply;
   }
   /* 主题圆点也贴同一张纸纹, 让它和"纯净白/米白"一眼区分开 */
