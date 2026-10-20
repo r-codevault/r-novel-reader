@@ -951,6 +951,29 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(posted.some((m) => m.type === 'getChapter'), '点正文底部「上一章」应发 getChapter');
   console.log('正文底部章节导航: 通过');
 
+  // 正文两侧上/下一章箭头(垂直居中, 默认常驻; 可切悬浮显示)
+  const sidePrev = document.querySelector('.side-nav-prev');
+  const sideNext = document.querySelector('.side-nav-next');
+  assert(sidePrev && sideNext, '正文两侧应有上/下一章箭头');
+  assert(!sidePrev.classList.contains('hover-only') && !sideNext.classList.contains('hover-only'),
+    '默认应常驻显示');
+  assert(!sidePrev.disabled && !sideNext.disabled, '中间章节两侧箭头均应可用');
+  assert(sideNext.querySelector('svg path'), '箭头应使用 SVG 图标');
+  posted.length = 0;
+  sideNext.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  const sideGo = posted.find((m) => m.type === 'getChapter');
+  assert(sideGo && sideGo.dir === 'next', '点右箭头应请求下一章');
+  // 阅读设置切到「悬浮显示」→ 箭头带 hover-only; 切回常驻恢复
+  sendMsg({ type: 'settings', payload: { ...defaults, sideNavMode: 'hover' } });
+  await sleep(30);
+  assert(sidePrev.classList.contains('hover-only') && sideNext.classList.contains('hover-only'),
+    '悬浮显示模式下箭头应带 hover-only');
+  sendMsg({ type: 'settings', payload: { ...defaults, sideNavMode: 'always' } });
+  await sleep(30);
+  assert(!sidePrev.classList.contains('hover-only'), '切回常驻后箭头应恢复常驻');
+  console.log('正文两侧章节箭头(常驻/点击切章/悬浮显示): 通过');
+
   // 扩展消息 openDrawer 兼容(命令 [书架/目录/存储] 打开对应弹窗)
   sendMsg({ type: 'openDrawer', tab: 'catalog' });
   await sleep(30);

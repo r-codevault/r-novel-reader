@@ -287,6 +287,17 @@ const shortcutHintText = computed(function () {
         <button class="sp-step-btn" @click="stepSetting('paragraphSpacing', 0.1, 0, 2)">＋</button>
       </div>
     </div>
+    <div class="sp-row">
+      <span class="sp-label">章节切换</span>
+      <div class="sp-seg">
+        <button class="sp-seg-btn" :class="{ active: settings && settings.sideNavMode === 'always' }"
+          title="正文两侧箭头常驻显示"
+          @click="persistSettings({ sideNavMode: 'always' })">常驻</button>
+        <button class="sp-seg-btn" :class="{ active: settings && settings.sideNavMode === 'hover' }"
+          title="鼠标移到两侧箭头区域时才显示"
+          @click="persistSettings({ sideNavMode: 'hover' })">悬浮显示</button>
+      </div>
+    </div>
     <!-- 页面宽度: 与「阅读主题」同构 —— 第一行比例档, 第二行自定义输入(标签只占第一行) -->
     <div class="sp-row sp-row-stack">
       <span class="sp-label">页面宽度</span>

@@ -46,6 +46,8 @@ export interface ReadingSettings {
   shortcutNext: string;
   /** 是否显示底部状态栏(默认显示; 由侧边菜单「状态栏」项切换) */
   showStatusBar: boolean;
+  /** 正文两侧上/下一章箭头: always 常驻(默认) / hover 鼠标移到箭头区域才显示 */
+  sideNavMode: "always" | "hover";
   /** 重开 VS Code 时是否恢复上次打开的阅读页(关闭则丢弃 VS Code 恢复的阅读页 Tab) */
   restoreOnStartup: boolean;
   /** 正文栏宽: 视口宽度比例(0 = 关闭, 使用 contentWidth 的像素值) */
@@ -266,6 +268,7 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
   shortcutPrev: "alt+arrowleft",
   shortcutNext: "alt+arrowright",
   showStatusBar: true,
+  sideNavMode: "always",
 
   // 默认 true: 上次退出时阅读页开着, 重开窗口就原样恢复(章节+章内位置)。
   // 与"启动自动弹窗"无关 —— 全新窗口没有可恢复的 Tab, 压根不会走恢复流程。
@@ -289,6 +292,7 @@ const SETTING_KEYS: (keyof ReadingSettings)[] = [
   "shortcutPrev",
   "shortcutNext",
   "showStatusBar",
+  "sideNavMode",
 
   "restoreOnStartup",
   "widthRatio",
@@ -343,6 +347,7 @@ function configDefaults(): ReadingSettings {
       DEFAULT_SETTINGS.shortcutNext,
     ),
     showStatusBar: DEFAULT_SETTINGS.showStatusBar,
+    sideNavMode: DEFAULT_SETTINGS.sideNavMode,
 
     restoreOnStartup: DEFAULT_SETTINGS.restoreOnStartup,
     widthRatio: 0,
@@ -356,6 +361,9 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
   const out: Partial<ReadingSettings> = {};
   if (typeof s.showStatusBar === "boolean") {
     out.showStatusBar = s.showStatusBar;
+  }
+  if (s.sideNavMode === "always" || s.sideNavMode === "hover") {
+    out.sideNavMode = s.sideNavMode;
   }
   if (typeof s.fontSize === "number") {
     out.fontSize = clamp(s.fontSize, 12, 32, DEFAULT_SETTINGS.fontSize);

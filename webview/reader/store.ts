@@ -152,10 +152,11 @@ export function persistSettings(patch: Partial<ReadingSettings>): void {
   state.nextCombo = parseShortcut(state.settings.shortcutNext);
   pendingPatch = Object.assign(pendingPatch, patch);
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-  // 主题切换 / 状态栏显隐 / 栏宽档位 是离散操作 -> 立即提交, 不吃防抖延迟
+  // 主题切换 / 状态栏显隐 / 栏宽档位 / 两侧箭头模式 是离散操作 -> 立即提交, 不吃防抖延迟
   const immediate =
     Object.prototype.hasOwnProperty.call(patch, 'theme') ||
     Object.prototype.hasOwnProperty.call(patch, 'showStatusBar') ||
+    Object.prototype.hasOwnProperty.call(patch, 'sideNavMode') ||
     Object.prototype.hasOwnProperty.call(patch, 'widthRatio') ||
     Object.prototype.hasOwnProperty.call(patch, 'contentWidth');
   if (immediate) {

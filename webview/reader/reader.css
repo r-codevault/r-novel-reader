@@ -475,6 +475,28 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
+  /* ---------- 正文两侧: 上/下一章箭头(垂直居中; 阅读设置可切 常驻/悬浮显示) ---------- */
+  .side-nav {
+    position: fixed; top: 50%; transform: translateY(-50%);
+    z-index: 30;
+    width: 44px; height: 96px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0;
+    background: transparent; color: var(--fg-muted);
+    border: 0; cursor: pointer;
+    transition: opacity .15s ease, color .15s ease;
+  }
+  .side-nav-prev { left: calc(var(--menu-w, 48px) + 10px); }
+  .side-nav-next { right: 10px; }
+  .side-nav svg { width: 26px; height: 26px; display: block; }
+  .side-nav:hover { color: var(--accent); }
+  .side-nav:disabled { opacity: .25; cursor: default; }
+  .side-nav:disabled:hover { color: var(--fg-muted); }
+  /* 悬浮显示模式: 平时透明, 鼠标移到箭头区域才出现 */
+  .side-nav.hover-only { opacity: 0; }
+  .side-nav.hover-only:hover { opacity: 1; }
+  .side-nav.hover-only:disabled, .side-nav.hover-only:disabled:hover { opacity: 0; }
+
   /* ---------- 章节导航(纸面外侧留白区, 跟随页面滚动) ---------- */
   .ch-nav {
     display: flex; gap: 12px; justify-content: center;
