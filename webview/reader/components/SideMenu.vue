@@ -3,6 +3,7 @@
  * SideMenu.vue — 左侧常驻功能菜单(占位式: 参与标准流, 展开时把正文推右)
  * 菜单项只负责"打开对应弹窗", 弹窗互斥由 App 统一保证。
  */
+import { computed } from 'vue';
 import { state } from '../composables/vscode';
 import { persistSettings } from '../store';
 
@@ -17,9 +18,9 @@ function toggleStatusBar(): void {
 }
 
 interface MenuItem {
-  id: 'shelf' | 'catalog' | 'settings' | 'storage';
+  id: 'shelf' | 'catalog' | 'notes' | 'settings' | 'storage';
   name: string;
-  key: 'shelfOpen' | 'catalogOpen' | 'settingsOpen' | 'storageOpen';
+  key: 'shelfOpen' | 'catalogOpen' | 'notesOpen' | 'settingsOpen' | 'storageOpen';
   /** 完整内联 SVG(fill/stroke 由各自定义, 颜色统一用 currentColor 跟随主题) */
   svg: string;
 }
@@ -40,6 +41,14 @@ const SVG_CATALOG =
   '<path d="M 776.941 484.062 H 416.087 a 24.1331 24.1331 0 0 0 0 48.2662 h 360.854 a 24.1331 24.1331 0 0 0 0 -48.2662 Z M 776.941 284.771 H 416.087 a 24.1331 24.1331 0 0 0 0 48.2662 h 360.854 a 24.1331 24.1331 0 0 0 0 -48.2662 Z M 776.941 677.642 H 416.087 a 24.1331 24.1331 0 0 0 0 48.2662 h 360.854 a 24.1331 24.1331 0 0 0 0 -48.2662 Z M 242.94 484.062 h -6.06545 a 24.1331 24.1331 0 0 0 0 48.2662 H 242.94 a 24.1331 24.1331 0 0 0 0 -48.2662 Z M 242.94 284.771 h -6.06545 a 24.1331 24.1331 0 0 0 0 48.2662 H 242.94 a 24.1331 24.1331 0 0 0 0 -48.2662 Z M 242.94 677.642 h -6.06545 a 24.1331 24.1331 0 0 0 0 48.2662 H 242.94 a 24.1331 24.1331 0 0 0 0 -48.2662 Z"/>' +
   '</svg>';
 
+/** 笔记: 便签(线性, 与阅读设置/存储位置同族: 24×24 stroke 1.6 currentColor) */
+const SVG_NOTES =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"' +
+  ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M6.5 3.5h7l4 4v13h-11z"/>' +
+  '<path d="M13.5 3.5v4h4"/>' +
+  '<path d="M9 11.5h6M9 15h4"/></svg>';
+
 /** 阅读设置: 字号图标(线性) */
 const SVG_SETTINGS =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">' +
@@ -53,9 +62,17 @@ const SVG_STORAGE =
 const items: MenuItem[] = [
   { id: 'shelf', name: '书架', key: 'shelfOpen', svg: SVG_SHELF },
   { id: 'catalog', name: '目录', key: 'catalogOpen', svg: SVG_CATALOG },
+  { id: 'notes', name: '笔记', key: 'notesOpen', svg: SVG_NOTES },
   { id: 'settings', name: '阅读设置', key: 'settingsOpen', svg: SVG_SETTINGS },
   { id: 'storage', name: '存储位置', key: 'storageOpen', svg: SVG_STORAGE },
 ];
+
+/** 当前书的笔记条数(角标; 0 不显示) */
+const currentNoteCount = computed(function () {
+  const path = state.novel && (state.novel as { filePath?: string }).filePath;
+  if (!path) { return 0; }
+  return state.notes.filter(function (n) { return n.bookPath === path; }).length;
+});
 
 function toggle(item: MenuItem): void {
   const key = item.key;
@@ -65,6 +82,7 @@ function toggle(item: MenuItem): void {
   state.settingsOpen = false;
   state.shelfOpen = false;
   state.storageOpen = false;
+  state.notesOpen = false;
   state[key] = willOpen;
 }
 </script>
@@ -93,11 +111,12 @@ function toggle(item: MenuItem): void {
     <!-- 菜单分隔线(位于折叠按钮与菜单项之间) -->
     <div class="menu-divider"></div>
 
-    <button v-for="it in items.filter(function (x) { return x.id === 'shelf' || x.id === 'catalog'; })"
+    <button v-for="it in items.filter(function (x) { return x.id === 'shelf' || x.id === 'catalog' || x.id === 'notes'; })"
       :key="it.id" class="menu-item" :class="{ active: state[it.key] }" :data-menu="it.id"
       :title="it.name" @click="toggle(it)">
       <span class="menu-ico" v-html="it.svg"></span>
       <span class="menu-label">{{ it.name }}</span>
+      <span v-if="it.id === 'notes' && currentNoteCount > 0" class="menu-badge">{{ currentNoteCount }}</span>
     </button>
 
     <!-- 状态栏显示/隐藏开关(默认显示; 放在「目录」下方)
@@ -120,7 +139,7 @@ function toggle(item: MenuItem): void {
       <span class="menu-label">状态栏</span>
     </button>
 
-    <button v-for="it in items.filter(function (x) { return x.id !== 'shelf' && x.id !== 'catalog'; })"
+    <button v-for="it in items.filter(function (x) { return x.id !== 'shelf' && x.id !== 'catalog' && x.id !== 'notes'; })"
       :key="it.id" class="menu-item" :class="{ active: state[it.key] }" :data-menu="it.id"
       :title="it.name" @click="toggle(it)">
       <span class="menu-ico" v-html="it.svg"></span>

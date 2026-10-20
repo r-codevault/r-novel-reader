@@ -190,11 +190,25 @@ export function resetSettings(): void {
   send({ type: 'resetSettings' });
 }
 
+/**
+ * 临时抑制进度上报(笔记跳转落位期间用):
+ * 跳转造成的滚动不是"用户读到这里", 若照常上报会把书架进度写成错误位置。
+ */
+let suppressedUntil = 0;
+export function setProgressSuppressed(on: boolean, ms = 500): void {
+  suppressedUntil = on ? Date.now() + Math.max(0, ms) : 0;
+}
+function progressSuppressed(): boolean {
+  return suppressedUntil > 0 && Date.now() < suppressedUntil;
+}
+
 /** 进度上报(600ms 节流 / immediate 立即) */
 let progressTimer: ReturnType<typeof setTimeout> | null = null;
 export function sendProgress(immediate: boolean): void {
+  if (progressSuppressed()) { return; }
   const send2 = function (): void {
-    if (!state.chapter) { return; }
+    // 定时器可能晚于抑制窗口结束才触发, 触发点再判一次
+    if (!state.chapter || progressSuppressed()) { return; }
     const max = document.body.scrollHeight - window.innerHeight;
     const ratio = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
     // 同步回state, 供切章时作为章内位置使用

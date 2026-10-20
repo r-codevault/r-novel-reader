@@ -19,6 +19,8 @@ export interface ChapterPayload {
 }
 
 export interface NovelInfo {
+  /** 实际读取路径(笔记分组键与"当前书"判定都用它) */
+  filePath?: string;
   totalChapters: number;
   totalWords: number;
   bookTitle: string;
@@ -35,8 +37,53 @@ export interface ShelfItemView {
   current: boolean;
 }
 
+/** 阅读笔记(与扩展端 NoteItem 一一对应) */
+export interface NoteItem {
+  id: string;
+  bookPath: string;
+  bookTitle: string;
+  chapterTitle: string;
+  chapterIndex: number;
+  paragraphIndex: number;
+  quote: string;
+  text: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** 新建笔记卡片的状态(仅内存, 取消即丢弃) */
+export interface NoteComposerState {
+  phase: 'composing' | 'saving';
+  chapterTitle: string;
+  chapterIndex: number;
+  paragraphIndex: number;
+  quote: string;
+  text: string;
+  /** 段落锚点(视口坐标), 卡片据此定位 */
+  anchorTop: number;
+  anchorBottom: number;
+  anchorLeft: number;
+  error?: string;
+}
+
+/** 跳转前的阅读位置(供「返回阅读位置」用) */
+export interface NoteReturnPos {
+  chapterIndex: number;
+  scrollRatio: number;
+  chapterTitle: string;
+}
+
+/** 待落位的笔记跳转(跨章时等 chapter 到达) */
+export interface NoteJumpTarget {
+  id: string;
+  chapterTitle: string;
+  chapterIndex: number;
+  paragraphIndex: number;
+  quote: string;
+}
+
 /** 左抽屉页签 */
-export type DrawerTab = 'shelf' | 'catalog' | 'storage';
+export type DrawerTab = 'shelf' | 'catalog' | 'notes' | 'storage';
 
 /**
  * 写入"窗口重开恢复信息"(VS Code 的 webview state)。
@@ -59,6 +106,8 @@ export const state = reactive({
   chapters: [] as { index: number; title: string }[],
   shelf: [] as ShelfItemView[],
   libraryPath: '',
+  /** 全部笔记(按书分组在 webview 完成) */
+  notes: [] as NoteItem[],
   catReverse: false,
   catCollapsed: [] as string[],
   prevCombo: null as ShortcutCombo | null,
@@ -69,6 +118,15 @@ export const state = reactive({
   settingsOpen: false,
   shelfOpen: false,
   storageOpen: false,
+  notesOpen: false,
+  /** 笔记分组折叠(bookPath 列表, 仅内存) */
+  noteCollapsed: [] as string[],
+  /** 新建笔记卡片 */
+  noteComposer: null as NoteComposerState | null,
+  /** 跳转前位置 */
+  noteReturn: null as NoteReturnPos | null,
+  /** 待落位跳转 */
+  noteJump: null as NoteJumpTarget | null,
 });
 
 /** 发消息给扩展(自由格式, 字段与协议一一对应) */
@@ -77,17 +135,25 @@ export function send(msg: Record<string, unknown>): void {
 }
 
 /** 章节跳转请求(dir: 按钮方向; curRatio: 离开时的章内位置, 供扩展记住本章进度) */
-export function gotoChapter(index: number, dir?: 'prev' | 'next' | 'jump'): void {
+export function gotoChapter(index: number, dir?: 'prev' | 'next' | 'jump', exactRatio?: number): void {
   send({
     type: 'getChapter',
     index,
     dir,
     curRatio: currentScrollRatio(),
+    // 笔记「返回阅读位置」要求精确落点, 优先于扩展侧的记忆比例
+    exactRatio: typeof exactRatio === 'number' ? exactRatio : undefined,
   });
 }
 
+/** 打开笔记浮层(与其它抽屉互斥由 App 统一处理) */
+export function openNotes(): void {
+  send({ type: 'requestNotes' });
+  state.notesOpen = true;
+}
+
 /** 当前章内滚动位置 0~1(与上报进度同一算法, 章不足一屏时为 0) */
-function currentScrollRatio(): number {
+export function currentScrollRatio(): number {
   const max = document.body.scrollHeight - window.innerHeight;
   return max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
 }

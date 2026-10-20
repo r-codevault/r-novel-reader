@@ -5,8 +5,9 @@
  * 弹窗互斥: 任何时刻最多一个弹窗(目录/阅读设置/书架/存储)
  */
 import { onMounted, nextTick, ref, watch } from 'vue';
-import { state, vscode, gotoChapter, saveRestoreState, type ChapterPayload, type DrawerTab, type ShelfItemView } from './composables/vscode';
-import { applyThemeVars, DEFAULT_SETTINGS, persistSettings, sendProgress, type ReadingSettings } from './store';
+import { state, vscode, gotoChapter, saveRestoreState, currentScrollRatio, type ChapterPayload, type DrawerTab, type NoteItem, type ShelfItemView } from './composables/vscode';
+import { applyThemeVars, DEFAULT_SETTINGS, persistSettings, sendProgress, setProgressSuppressed, type ReadingSettings } from './store';
+import { resolveChapterIndex } from '../../src/noteAnchor';
 import { parseShortcut, matchShortcut } from './composables/shortcut';
 import CatalogPanel from './components/CatalogPanel.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
@@ -15,12 +16,15 @@ import StatusBar from './components/StatusBar.vue';
 import SideMenu from './components/SideMenu.vue';
 import ShelfPopup from './components/ShelfPopup.vue';
 import StoragePopup from './components/StoragePopup.vue';
+import NotesPopup from './components/NotesPopup.vue';
+import NoteComposer from './components/NoteComposer.vue';
 import './reader.css';
 
 const catalogRef = ref<InstanceType<typeof CatalogPanel> | null>(null);
 const settingsRef = ref<InstanceType<typeof SettingsPanel> | null>(null);
 const shelfRef = ref<InstanceType<typeof ShelfPopup> | null>(null);
 const storageRef = ref<InstanceType<typeof StoragePopup> | null>(null);
+const notesRef = ref<InstanceType<typeof NotesPopup> | null>(null);
 const readerRef = ref<InstanceType<typeof ReaderArea> | null>(null);
 
 // ---------------------------------------------------------------- 设置应用 / 菜单宽度
@@ -38,7 +42,7 @@ watch(function () { return state.menuExpanded; }, function (expanded) {
 }, { immediate: true });
 
 // ---------------------------------------------------------------- 弹窗互斥(同一时刻只允许一个)
-const popupKeys = ['catalogOpen', 'settingsOpen', 'shelfOpen', 'storageOpen'] as const;
+const popupKeys = ['catalogOpen', 'settingsOpen', 'shelfOpen', 'storageOpen', 'notesOpen'] as const;
 
 /** 状态栏是否显示(设置项, 默认显示) */
 function statusBarVisible(): boolean {
@@ -46,7 +50,7 @@ function statusBarVisible(): boolean {
 }
 
 function anyPopupOpen(): boolean {
-  return state.catalogOpen || state.settingsOpen || state.shelfOpen || state.storageOpen;
+  return state.catalogOpen || state.settingsOpen || state.shelfOpen || state.storageOpen || state.notesOpen;
 }
 
 /** 关闭全部弹窗(点击弹窗外任意处/按 Esc 时调用) */
@@ -55,6 +59,7 @@ function closeAllPopups(): void {
   state.settingsOpen = false;
   state.shelfOpen = false;
   state.storageOpen = false;
+  state.notesOpen = false;
 }
 
 function openOnly(key: typeof popupKeys[number]): void {
@@ -82,6 +87,7 @@ function openTab(tab: DrawerTab | undefined): void {
   if (tab === 'shelf') { openOnly('shelfOpen'); }
   else if (tab === 'catalog') { openOnly('catalogOpen'); }
   else if (tab === 'storage') { openOnly('storageOpen'); }
+  else if (tab === 'notes') { openOnly('notesOpen'); }
   else { openOnly('shelfOpen'); }
 }
 
@@ -92,6 +98,7 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
     case 'init': {
       const p = msg.payload as Record<string, unknown>;
       state.novel = {
+        filePath: (p.filePath as string) || '',
         totalChapters: p.totalChapters as number,
         totalWords: p.totalWords as number,
         bookTitle: p.bookTitle as string,
@@ -120,6 +127,12 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       if (p.openSettings) { closeAllPopups(); state.settingsOpen = true; }
       state.shelf = (p.shelf as ShelfItemView[]) || [];
       state.libraryPath = (p.libraryPath as string) || '';
+      state.notes = (p.notes as NoteItem[]) || [];
+      // 换书/重开: 笔记相关的临时态一律清空
+      state.noteComposer = null;
+      state.noteReturn = null;
+      state.noteJump = null;
+      state.noteCollapsed = [];
       break;
     }
     case 'chapter':
@@ -140,6 +153,30 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
     case 'openDrawer':
       openTab((msg as { tab?: DrawerTab }).tab);
       break;
+    case 'notes':
+      state.notes = (msg as { items?: NoteItem[] }).items || [];
+      break;
+    case 'noteUpserted': {
+      const item = (msg as { item?: NoteItem }).item;
+      if (!item) { break; }
+      const i = state.notes.findIndex(function (n) { return n.id === item.id; });
+      if (i >= 0) { state.notes.splice(i, 1, item); } else { state.notes.push(item); }
+      // 新建卡片: 保存成功才关闭(失败保留草稿)
+      if (state.noteComposer && state.noteComposer.phase === 'saving') { state.noteComposer = null; }
+      break;
+    }
+    case 'noteRemoved': {
+      const id = (msg as { id?: string }).id;
+      state.notes = state.notes.filter(function (n) { return n.id !== id; });
+      break;
+    }
+    case 'noteError': {
+      if (state.noteComposer) {
+        state.noteComposer.phase = 'composing';
+        state.noteComposer.error = (msg as { message?: string }).message || '保存失败';
+      }
+      break;
+    }
   }
 }
 
@@ -152,6 +189,26 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
  */
 watch(function () { return state.chapter; }, function (ch) {
   if (!ch) { return; }
+  // 笔记跳转: 章节到位后按段落定位, 不按比例滚动, 也不回写进度
+  if (state.noteJump) {
+    const target = state.noteJump;
+    state.noteJump = null;
+    nextTick(function () {
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          readerRef.value?.scrollToParagraph({
+            paragraphIndex: target.paragraphIndex,
+            quote: target.quote,
+          });
+          setProgressSuppressed(true, 600);
+          readerRef.value?.positionHandles();
+        });
+      });
+    });
+    return;
+  }
+  // 用户自己导航(上一章/下一章/目录): 之前记下的"返回阅读位置"已失效
+  state.noteReturn = null;
   const ratio = ch.scrollRatio || 0;
   nextTick(function () {
     requestAnimationFrame(function () {
@@ -179,6 +236,59 @@ function onVisibilityChange(): void {
   }
 }
 
+// ---------------------------------------------------------------- 笔记跳转 / 返回上次位置
+/** 从笔记跳回原文: 先记住当前阅读位置, 再定位章节与段落 */
+function jumpToNote(note: NoteItem): void {
+  const cur = state.chapter;
+  const currentPath = (state.novel && state.novel.filePath) || '';
+  if (!cur || !note || note.bookPath !== currentPath) { return; }
+
+  state.noteReturn = {
+    chapterIndex: cur.index,
+    scrollRatio: currentScrollRatio(),
+    chapterTitle: cur.title,
+  };
+  state.noteComposer = null;
+  state.notesOpen = false;
+
+  const target = resolveChapterIndex(state.chapters, note);
+  if (target === cur.index) {
+    nextTick(function () {
+      requestAnimationFrame(function () {
+        readerRef.value?.scrollToParagraph({
+          paragraphIndex: note.paragraphIndex,
+          quote: note.quote,
+        });
+        setProgressSuppressed(true, 600);
+      });
+    });
+    return;
+  }
+  state.noteJump = {
+    id: note.id,
+    chapterTitle: note.chapterTitle,
+    chapterIndex: note.chapterIndex,
+    paragraphIndex: note.paragraphIndex,
+    quote: note.quote,
+  };
+  gotoChapter(target, 'jump');
+}
+
+/** 返回跳转前的阅读位置(同章滚回原比例; 跨章走精确恢复) */
+function backToReadingPos(): void {
+  const pos = state.noteReturn;
+  if (!pos) { return; }
+  const cur = state.chapter;
+  state.noteReturn = null;
+  if (cur && cur.index === pos.chapterIndex) {
+    const max = Math.max(0, document.body.scrollHeight - window.innerHeight);
+    window.scrollTo(0, Math.max(0, pos.scrollRatio * max));
+    setProgressSuppressed(true, 600);
+    return;
+  }
+  gotoChapter(pos.chapterIndex, 'jump', pos.scrollRatio);
+}
+
 function onDocMouseDown(e: MouseEvent): void {
   if (!anyPopupOpen()) { return; }
   const target = e.target as Node;
@@ -188,6 +298,7 @@ function onDocMouseDown(e: MouseEvent): void {
     (settingsRef.value?.el && settingsRef.value.el.contains(target)) ||
     (shelfRef.value?.el && shelfRef.value.el.contains(target)) ||
     (storageRef.value?.el && storageRef.value.el.contains(target)) ||
+    (notesRef.value?.el && notesRef.value.el.contains(target)) ||
     (el.closest ? !!el.closest('.menu') : false);
   if (!inside) { closeAllPopups(); }
 }
@@ -207,7 +318,13 @@ function blurActiveElement(): void {
 
 function onKeyDown(e: KeyboardEvent): void {
   if (e.key === 'Escape') {
-    // Esc: 有弹窗先关弹窗; 否则收起菜单; 两种情况都清掉焦点残留
+    // 优先级: 新建笔记卡片 → 弹窗 → 菜单
+    if (state.noteComposer) {
+      e.preventDefault();
+      state.noteComposer = null;
+      blurActiveElement();
+      return;
+    }
     if (anyPopupOpen()) {
       e.preventDefault();
       closeAllPopups();
@@ -278,8 +395,12 @@ onMounted(function () {
       <SettingsPanel ref="settingsRef" />
       <ShelfPopup ref="shelfRef" />
       <StoragePopup ref="storageRef" />
+      <NotesPopup ref="notesRef" @jump="jumpToNote" />
+      <NoteComposer />
       <ReaderArea ref="readerRef" />
       <StatusBar v-show="statusBarVisible()" />
+      <button v-if="state.noteReturn" class="note-return" :title="'返回：' + state.noteReturn.chapterTitle"
+        @click="backToReadingPos">↩ 返回阅读位置</button>
     </div>
   </div>
 </template>

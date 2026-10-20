@@ -152,6 +152,8 @@ export class ShelfStore {
             totalChapters: meta.totalChapters,
             chapterIndex: old ? old.chapterIndex : -1,
             scrollRatio: old ? old.scrollRatio : 0,
+            // 章内位置记忆必须一起迁走, 否则重选文件后"目录切走再切回"会回到章首
+            chapterRatios: old ? old.chapterRatios : undefined,
             addedAt: old ? old.addedAt : now,
             updatedAt: now,
         };

@@ -15,6 +15,7 @@ import * as vscode from 'vscode';
 import { parseNovel, deriveTitleAuthor, Novel } from './novelParser';
 import { ReaderPanel, ShelfItemView, DrawerTab, ReaderPanelState } from './readerPanel';
 import { ShelfStore } from './shelf';
+import { NotesStore } from './notes';
 import { ensureInLibrary, isInsideDir } from './library';
 import { shelfBookKey, planDuplicateRemoval } from './shelfMaintenance';
 import { moveToTrash } from './trash';
@@ -32,8 +33,10 @@ interface LoadOptions {
 export function activate(context: vscode.ExtensionContext): void {
     const store = new SettingsStore(context.globalState);
     const shelf = new ShelfStore(context.globalState);
+    const notes = new NotesStore(context.globalState);
     // 书架/目录/存储 已并入阅读面板左抽屉; 面板未打开时用状态栏按钮或命令面板进入
     ReaderPanel.getShelf = () => shelfItems();
+    ReaderPanel.notes = notes;
     ReaderPanel.getLibrary = () => getLibraryPath();
     // 章节位置记忆(书架 chapterRatios): 目录切走再切回时恢复原阅读位置
     ReaderPanel.getChapterRatio = (filePath: string, chapterIndex: number) =>
@@ -163,8 +166,22 @@ export function activate(context: vscode.ExtensionContext): void {
                 }
             }
 
+            // 笔记与书架进度都必须落在"实际读取路径"上:
+            // 设了书库目录时 novel.filePath 已是副本路径, 而用户选的是原始路径,
+            // 若不归一会出现"书架有两条记录 / 笔记分组对不上"的历史问题。
+            if (novel.filePath !== filePath && !shelf.get(novel.filePath)) {
+                const legacy = shelf.get(filePath);
+                if (legacy) {
+                    await shelf.relink(filePath, novel.filePath, {
+                        title: novel.bookTitle,
+                        author: novel.author,
+                        totalChapters: novel.chapters.length,
+                    });
+                }
+                await notes.relink(filePath, novel.filePath, novel.bookTitle);
+            }
             const entry = await shelf.upsert({
-                filePath,
+                filePath: novel.filePath,
                 title: novel.bookTitle,
                 author: novel.author,
                 totalChapters: novel.chapters.length,
@@ -327,6 +344,9 @@ export function activate(context: vscode.ExtensionContext): void {
                     author: novel.author,
                     totalChapters: novel.chapters.length,
                 });
+                // 笔记跟着走, 否则重选文件后旧分组会变成孤儿
+                await notes.relink(filePath, novel.filePath, novel.bookTitle);
+                ReaderPanel.current?.postNotes();
                 refreshShelfView();
                 await loadNovel(novel.filePath, { openPanel: true });
                 return;

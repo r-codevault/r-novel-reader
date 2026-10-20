@@ -107,7 +107,7 @@ assert(
   '滚动条应主题化(默认 Chromium 深色滚动条与浅色主题不符)'
 );
 assert(
-  /#catalogPanel,\s*#settingsPanel,\s*#shelfPopup,\s*#storagePopup\s*\{[^}]*background:\s*var\(--bg\)/.test(capturedHtml),
+  /#catalogPanel,\s*#settingsPanel,\s*#shelfPopup,\s*#storagePopup,\s*#notesPopup\s*\{[^}]*background:\s*var\(--bg\)/.test(capturedHtml),
   '弹窗底色应统一为正文纸面色(--bg)'
 );
 assert(
@@ -467,17 +467,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!menuEl.classList.contains('expanded'), '点菜单按钮应收起');
   assert(document.documentElement.style.getPropertyValue('--menu-w') === '48px', '收起时 --menu-w 应为 48px');
   assert(
-    document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar)').length === 4,
-    '菜单应有 4 个弹窗功能项'
+    document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar)').length === 5,
+    '菜单应有 5 个弹窗功能项, 实际: ' + document.querySelectorAll('.menu-item').length + ' (含状态栏) / ' + document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar)').length + ' (不含)'
   );
-  assert(document.querySelectorAll('.menu-item[data-menu]').length === 5, '菜单共 5 项(含状态栏开关)');
+  assert(document.querySelectorAll('.menu-item[data-menu]').length === 6, '菜单共 6 项(含状态栏开关)');
   assert(document.querySelector('.menu-item[data-menu="statusbar"]'), '菜单应有「状态栏」显隐开关');
   // 顺序: 书架 → 目录 → 状态栏 → 阅读设置 → 存储位置, 分割线在最下方
   const order = Array.from(document.querySelector('.menu').children).map((el) =>
     el.classList.contains('menu-divider') ? 'divider' : el.getAttribute('data-menu'));
   assert(
-    JSON.stringify(order) === JSON.stringify([null, 'divider', 'shelf', 'catalog', 'statusbar', 'settings', 'storage']),
-    '菜单顺序应为 折叠按钮 + 分割线 + 书架/目录/状态栏/阅读设置/存储位置, 实际: ' + JSON.stringify(order)
+    JSON.stringify(order) === JSON.stringify([null, 'divider', 'shelf', 'catalog', 'notes', 'statusbar', 'settings', 'storage']),
+    '菜单顺序应为 折叠按钮 + 分割线 + 书架/目录/笔记/状态栏/阅读设置/存储位置, 实际: ' + JSON.stringify(order)
   );
   assert(/\.menu-divider\s*\{[^}]*margin:\s*0\s+12px/.test(capturedHtml), '分隔线应无上下外边距(仅左右缩进)');
   // CSS 完整性: 源文件注释必须成对闭合(未闭合的 /* 会吞掉后续声明, 曾导致分隔线背景丢失)
@@ -1196,6 +1196,105 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     console.log('切章落点(记忆位置恢复/上一章停底部/同章不动/等布局落定): 通过');
   }
   }
+
+
+  // ================================================================ 阅读笔记
+  console.log('[阅读笔记]');
+  // 1) 空态
+  menuItem('notes').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert($('#notesPopup').classList.contains('open'), '点菜单「笔记」应打开笔记浮层');
+  assert(document.querySelector('#notesPopup .nt-empty'), '无笔记时应显示空态引导');
+  document.querySelector('#notesPopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+
+  // 2) 单击段落 → 新建卡片(默认引用整段)
+  dispatch('chapter', {
+    index: 2, title: novel.chapters[2].title, paragraphs: ['甲段原文。', '乙段原文。', '丙段。'],
+    totalChapters: 5, chapterWords: 9, scrollRatio: 0,
+  });
+  await sleep(30);
+  const para1 = document.querySelector('#content p[data-p="1"]');
+  para1.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+  para1.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  let composer = document.querySelector('.note-composer');
+  assert(composer, '单击段落应弹出新建笔记卡片');
+  assert(composer.querySelector('.nc-quote').textContent.trim() === '乙段原文。', '卡片应默认引用整段原文');
+
+  // 3) Ctrl+Enter 保存 → addNote(不带 bookPath)
+  const ta = composer.querySelector('.nc-text');
+  ta.value = '第一条笔记';
+  ta.dispatchEvent(new win.Event('input', { bubbles: true }));
+  await sleep(10);
+  posted.length = 0;
+  ta.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
+  await sleep(30);
+  const addMsg = posted.find((m) => m.type === 'addNote');
+  assert(addMsg, 'Ctrl+Enter 应发出 addNote');
+  assert(addMsg.text === '第一条笔记' && addMsg.quote === '乙段原文。' && addMsg.paragraphIndex === 1,
+    'addNote 应带正文/整段引用/段落序号');
+  assert(addMsg.chapterTitle === novel.chapters[2].title, 'addNote 应带章节标题锚点');
+  assert(!('bookPath' in addMsg), 'bookPath 应由扩展盖章, webview 不传');
+
+  // 4) 回执 → 卡片关闭, 浮层出现分组与条目
+  const noteItem = {
+    id: 'note-1', bookPath: novel.filePath, bookTitle: novel.bookTitle,
+    chapterTitle: novel.chapters[2].title, chapterIndex: 2, paragraphIndex: 1,
+    quote: '乙段原文。', text: '第一条笔记', createdAt: 1, updatedAt: 1,
+  };
+  sendMsg({ type: 'noteUpserted', item: noteItem });
+  await sleep(30);
+  assert(!document.querySelector('.note-composer'), '保存成功后新建卡片应关闭');
+  menuItem('notes').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(document.querySelectorAll('#notesPopup .nt-item').length === 1, '笔记浮层应出现 1 条');
+  assert(document.querySelector('#notesPopup .nt-book-title').textContent.includes(novel.bookTitle),
+    '应按书分组显示书名');
+  assert(document.querySelector('.menu-item[data-menu="notes"] .menu-badge'), '侧栏入口应显示笔记角标');
+
+  // 5) 悬浮预览: 展示引用的整段原文 + 章节
+  const nt1 = document.querySelector('#notesPopup .nt-item');
+  nt1.dispatchEvent(new win.MouseEvent('mouseenter'));
+  await sleep(320);
+  const pv = document.querySelector('.note-preview');
+  assert(pv, '悬浮条目应出现原文预览');
+  assert(pv.textContent.includes('乙段原文。'), '预览应包含整段引用原文');
+  assert(pv.textContent.includes(novel.chapters[2].title), '预览应包含章节标题');
+  nt1.dispatchEvent(new win.MouseEvent('mouseleave'));
+  await sleep(20);
+
+  // 6) 两步删除: 第一次只变文案, 第二次才发 removeNote
+  posted.length = 0;
+  const delBtn = document.querySelector('#notesPopup .nt-act-danger');
+  delBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(document.querySelector('#notesPopup .nt-act-danger').textContent.includes('确认删除'),
+    '第一次点删除应变「确认删除」');
+  assert(!posted.some((m) => m.type === 'removeNote'), '第一次点击不应发 removeNote');
+  document.querySelector('#notesPopup .nt-act-danger').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'removeNote' && m.id === 'note-1'), '第二次点击应发 removeNote');
+  // 恢复该条, 供跳转测试
+  sendMsg({ type: 'noteUpserted', item: noteItem });
+  await sleep(30);
+
+  // 7) 点击条目跳回原文: 段落高亮 + 返回按钮
+  posted.length = 0;
+  document.querySelector('#notesPopup .nt-item').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(60);
+  assert(!$('#notesPopup').classList.contains('open'), '跳转后笔记浮层应收起');
+  assert(document.querySelector('#content p[data-p="1"]').classList.contains('note-focus'),
+    '目标段落应加 .note-focus 高亮');
+  assert(document.querySelector('.note-return'), '跳转后应出现「返回阅读位置」按钮');
+  assert(!posted.some((m) => m.type === 'saveProgress'), '跳转落位期间不应上报进度(避免污染书架位置)');
+
+  // 8) 返回上一次阅读位置
+  document.querySelector('.note-return').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(!document.querySelector('.note-return'), '返回后按钮应消失');
+
+  console.log('笔记(空态/段落建卡/保存/分组/悬浮原文/两步删除/跳转高亮/返回位置): 通过');
 
   console.log('\n阅读面板 Vue 冒烟测试全部通过 ✔');
   process.exit(0);

@@ -15,6 +15,7 @@ import { decodeBuffer } from './encoding';
 import { readWebviewAsset } from './webviewAssets';
 
 import { ReadingSettings, SettingsStore, THEMES, fontStackById, themeById } from './settings';
+import type { NoteDraft, NoteItem } from './notes';
 
 interface InitPayload {
     filePath: string;
@@ -37,6 +38,8 @@ interface InitPayload {
     shelf: ShelfItemView[];
     /** 书库目录(抽屉「存储」页) */
     libraryPath: string;
+    /** 全部阅读笔记(按书分组在 webview 完成, 一次带全避免打开浮层再请求) */
+    notes: NoteItem[];
 }
 
 interface ChapterPayload {
@@ -51,7 +54,7 @@ interface ChapterPayload {
 
 type WebviewMessage =
     | { type: 'ready' }
-    | { type: 'getChapter'; index: number; dir?: 'prev' | 'next' | 'jump'; /** 发消息时的章内滚动位置(用于记住当前章) */ curRatio?: number }
+    | { type: 'getChapter'; index: number; dir?: 'prev' | 'next' | 'jump'; /** 发消息时的章内滚动位置(用于记住当前章) */ curRatio?: number; /** 精确恢复位置(笔记跳转返回用), 优先级最高 */ exactRatio?: number }
     | { type: 'updateSettings'; patch: Partial<ReadingSettings> }
     | { type: 'resetSettings' }
     | { type: 'saveProgress'; chapterIndex: number; scrollRatio: number }
@@ -62,7 +65,12 @@ type WebviewMessage =
     | { type: 'pickLibrary' }
     | { type: 'clearLibrary' }
     | { type: 'openLibraryFolder' }
-    | { type: 'refreshLibrary' };
+    | { type: 'refreshLibrary' }
+    // 阅读笔记
+    | { type: 'addNote'; chapterTitle: string; chapterIndex: number; paragraphIndex: number; quote: string; text: string }
+    | { type: 'updateNote'; id: string; text: string }
+    | { type: 'removeNote'; id: string }
+    | { type: 'requestNotes' };
 
 /** 窗口重开时的恢复信息(VS Code 持久化 webview 状态用) */
 export interface ReaderPanelState {
@@ -85,7 +93,15 @@ export interface ShelfItemView {
 }
 
 /** 左抽屉页签 */
-export type DrawerTab = 'shelf' | 'catalog' | 'storage';
+export type DrawerTab = 'shelf' | 'catalog' | 'notes' | 'storage';
+
+/** 笔记存储接口(插件入口注入 NotesStore) */
+export interface NotesApi {
+    list(): NoteItem[];
+    add(draft: NoteDraft, book: { bookPath: string; bookTitle: string }): Promise<NoteItem>;
+    update(id: string, text: string): Promise<NoteItem | undefined>;
+    remove(id: string): Promise<boolean>;
+}
 
 export class ReaderPanel {
     public static readonly viewType = 'novelReader.reader';
@@ -107,6 +123,8 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
     public static getLibrary?: () => string;
     /** 章节位置记忆查询(书架 chapterRatios): 返回 undefined = 该章没有记忆, 从顶部读 */
     public static getChapterRatio?: (filePath: string, chapterIndex: number) => number | undefined;
+    /** 笔记存储(插件入口注入): init 时下发全量, 增删改后回推增量 */
+    public static notes?: NotesApi;
     /** 视图就绪前的抽屉打开请求 */
     private static _pendingDrawer: DrawerTab | null = null;
 
@@ -408,8 +426,10 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                         this._ratios.set(this._chapterIndex, Math.min(1, Math.max(0, msg.curRatio)));
                     }
                     this._chapterIndex = index;
-                    // 上一章停在底部; 其余(下一章/目录跳转)恢复该章记忆位置, 没有记忆则回顶部
-                    this._scrollRatio = msg.dir === 'prev' ? 1 : this._rememberedRatio(index);
+                    // 精确恢复(笔记返回)优先; 否则上一章停在底部, 其余恢复该章记忆位置
+                    this._scrollRatio = typeof msg.exactRatio === 'number'
+                        ? Math.min(1, Math.max(0, msg.exactRatio))
+                        : msg.dir === 'prev' ? 1 : this._rememberedRatio(index);
                     this._postChapter();
                     ReaderPanel.onDidChangeChapter?.(index);
                 }
@@ -487,7 +507,63 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                         );
                     });
                 break;
+            // ---- 阅读笔记: 增删改走 NotesStore, 成功后回推增量(失败回 noteError 保留草稿) ----
+            case 'addNote':
+                if (!ReaderPanel.notes) { break; }
+                void ReaderPanel.notes
+                    .add(
+                        {
+                            chapterTitle: msg.chapterTitle,
+                            chapterIndex: msg.chapterIndex,
+                            paragraphIndex: msg.paragraphIndex,
+                            quote: msg.quote,
+                            text: msg.text,
+                        },
+                        { bookPath: this._novel.filePath, bookTitle: this._novel.bookTitle }
+                    )
+                    .then((item) => {
+                        void this._panel.webview.postMessage({ type: 'noteUpserted', item });
+                    }, (err: unknown) => {
+                        void this._panel.webview.postMessage({
+                            type: 'noteError', op: 'add',
+                            message: err instanceof Error ? err.message : String(err),
+                        });
+                    });
+                break;
+            case 'updateNote':
+                if (!ReaderPanel.notes) { break; }
+                void ReaderPanel.notes.update(msg.id, msg.text).then((item) => {
+                    if (item) {
+                        void this._panel.webview.postMessage({ type: 'noteUpserted', item });
+                    } else {
+                        void this._panel.webview.postMessage({ type: 'noteRemoved', id: msg.id });
+                    }
+                }, (err: unknown) => {
+                    void this._panel.webview.postMessage({
+                        type: 'noteError', op: 'update', id: msg.id,
+                        message: err instanceof Error ? err.message : String(err),
+                    });
+                });
+                break;
+            case 'removeNote':
+                if (!ReaderPanel.notes) { break; }
+                void ReaderPanel.notes.remove(msg.id).then((ok) => {
+                    if (ok) {
+                        void this._panel.webview.postMessage({ type: 'noteRemoved', id: msg.id });
+                    }
+                });
+                break;
+            case 'requestNotes':
+                this.postNotes();
+                break;
         }
+    }
+
+    /** 把全量笔记推给 webview(init 后/路径迁移后调用) */
+    public postNotes(): void {
+        if (!this._ready) { return; }
+        const items = ReaderPanel.notes ? ReaderPanel.notes.list() : [];
+        void this._panel.webview.postMessage({ type: 'notes', items });
     }
 
     /** 某章的恢复位置: 优先本会话记忆, 其次书架 chapterRatios(跨会话), 都没有则回顶部 */
@@ -532,6 +608,7 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             openSettings: this._openSettingsOnLoad,
             shelf: ReaderPanel.getShelf ? ReaderPanel.getShelf() : [],
             libraryPath: ReaderPanel.getLibrary ? ReaderPanel.getLibrary() : '',
+            notes: ReaderPanel.notes ? ReaderPanel.notes.list() : [],
         };
         this._openSettingsOnLoad = false;
         this._panel.webview.postMessage({ type: 'init', payload });

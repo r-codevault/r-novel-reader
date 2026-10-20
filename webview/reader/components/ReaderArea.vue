@@ -5,6 +5,7 @@
  */
 import { computed, onMounted, reactive, ref } from 'vue';
 import { state, gotoChapter } from '../composables/vscode';
+import { findParagraph } from '../../../src/noteAnchor';
 import { persistSettings, CONTENT_WIDTH, syncXScrollbar } from '../store';
 
 // 与 settings.ts 的 CONTENT_WIDTH 一致: 上限放宽到 4000, 允许拖出窗口宽度(横向滚动)
@@ -26,6 +27,60 @@ const isFirst = computed(() => !state.chapter || state.chapter.index <= 0);
 const isLast = computed(() =>
   !state.chapter || !state.novel || state.chapter.index >= state.novel.totalChapters - 1
 );
+
+// ---------------------------------------------------------------- 笔记: 段落单击新建
+/** mousedown 时是否已有文本选区(拖选复制/查词时不应弹卡片) */
+let hadSelection = false;
+
+function selectionActive(): boolean {
+  const sel = window.getSelection();
+  return !!(sel && !sel.isCollapsed && sel.toString().trim());
+}
+
+function onParaMouseDown(): void {
+  hadSelection = selectionActive();
+}
+
+function onParaClick(index: number, e: MouseEvent): void {
+  if (hadSelection) { hadSelection = false; return; }
+  if (selectionActive()) { return; }
+  const ch = state.chapter;
+  if (!ch) { return; }
+  const text = (ch.paragraphs[index] || '').trim();
+  if (!text) { return; }
+  if (resizingWidth.value) { return; }
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  state.noteComposer = {
+    phase: 'composing',
+    chapterTitle: ch.title,
+    chapterIndex: ch.index,
+    paragraphIndex: index,
+    quote: text,
+    text: '',
+    anchorTop: rect.top,
+    anchorBottom: rect.bottom,
+    anchorLeft: rect.left,
+  };
+}
+
+/** 滚动到指定段落并短暂高亮; 引文找不到时落到 hint 附近 */
+function scrollToParagraph(target: { paragraphIndex: number; quote: string }): { index: number; exact: boolean } {
+  const ch = state.chapter;
+  const found = ch
+    ? findParagraph(ch.paragraphs, target.paragraphIndex, target.quote)
+    : { index: target.paragraphIndex, exact: false };
+  const el = document.querySelector('#content p[data-p="' + found.index + '"]') as HTMLElement | null;
+  if (!el) { return found; }
+  el.scrollIntoView({
+    block: 'center',
+    behavior: window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+  });
+  // 重复跳转先清掉旧高亮, 避免多处同时闪
+  document.querySelectorAll('#content p.note-focus').forEach(function (n) { n.classList.remove('note-focus'); });
+  el.classList.add('note-focus');
+  window.setTimeout(function () { el.classList.remove('note-focus'); }, 1600);
+  return found;
+}
 
 function prevChapter(): void {
   if (state.chapter && !isFirst.value) { gotoChapter(state.chapter.index - 1, 'prev'); }
@@ -104,7 +159,7 @@ onMounted(function () {
   requestAnimationFrame(positionHandles);
 });
 
-defineExpose({ positionHandles });
+defineExpose({ positionHandles, scrollToParagraph });
 </script>
 
 <template>
@@ -112,7 +167,8 @@ defineExpose({ positionHandles });
     <article id="content" ref="contentRef">
       <h2 class="chapter-title">{{ chapter ? chapter.title : '' }}</h2>
       <p v-if="paras.length === 0" class="empty-tip">(本章无内容)</p>
-      <p v-for="(p, i) in paras" :key="i">{{ p }}</p>
+      <p v-for="(p, i) in paras" :key="i" class="rd-para" :data-p="i"
+        @mousedown="onParaMouseDown" @click="onParaClick(i, $event)">{{ p }}</p>
     </article>
 
     <!-- 章节底部导航(纸面外侧, 跟随页面滚动) -->
