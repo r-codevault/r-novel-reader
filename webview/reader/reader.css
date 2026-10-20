@@ -823,19 +823,19 @@
   .nt-foot { padding: 8px 16px 10px; }
   .nt-foot-tip { color: var(--fg-muted); font-size: var(--ui-font-sub); }
 
-  /* 悬浮预览: 锚定条目下方(间距同新建卡片), 与浮层左对齐同宽; 笔记+原文各自滚动 */
+  /* 悬浮预览: 浮层右侧浮窗; 边框与「笔记/原文」标签跟随主题强调色 */
   .note-preview {
     position: fixed; z-index: 47;
-    width: min(420px, calc(100vw - 32px));
+    width: min(340px, calc(100vw - 32px));
     max-height: calc(100vh - 24px); overflow: auto;
     padding: 10px 12px;
     background: var(--sp-bg); color: var(--sp-fg);
-    border: 1px solid var(--chrome-border); border-radius: 8px;
+    border: 1px solid var(--accent); border-radius: 8px;
     box-shadow: 0 8px 24px var(--shadow-color, rgba(0,0,0,.24));
     box-sizing: border-box;
   }
   .np-label {
-    color: var(--fg-muted); font-size: calc(var(--ui-font-sub) - 1px);
+    color: var(--accent); font-size: calc(var(--ui-font-sub) - 1px);
     font-weight: 600; letter-spacing: 1px;
   }
   .np-note {
@@ -915,14 +915,14 @@
 
   /* 段落虚线下划线(不再有段落悬浮提示浮窗) */
 
-  /* 返回上次阅读位置: 章名直接显示在条内, 右侧「关闭」(无原生悬浮提示) */
+  /* 返回上次阅读位置: 金色边框固定, 章名直接显示在条内(两行截断), 右侧「关闭」同主题色 */
   .note-return {
     position: fixed; z-index: 44;
     right: 18px; bottom: calc(var(--x-sb, 0px) + 56px);
     display: flex; align-items: stretch;
     max-width: calc(100vw - 36px);
     background: var(--sp-bg);
-    border: 1px solid var(--input-border); border-radius: 16px;
+    border: 1px solid var(--accent); border-radius: 16px;
     box-shadow: 0 6px 18px var(--shadow-color, rgba(0,0,0,.22));
     overflow: hidden;
   }
@@ -931,13 +931,13 @@
     background: transparent; color: var(--accent);
     border: 0; cursor: pointer;
     font-size: var(--ui-font-sub);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    text-align: left;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; word-break: break-all;
   }
-  .note-return:hover { border-color: var(--accent); }
   .note-return .nr-close {
     padding: 6px 12px;
-    background: transparent; color: var(--fg-muted);
-    border: 0; border-left: 1px solid var(--chrome-border); cursor: pointer;
+    background: transparent; color: var(--accent);
+    border: 0; border-left: 1px solid var(--accent); cursor: pointer;
     font-size: var(--ui-font-sub); line-height: 1;
   }
-  .note-return .nr-close:hover { color: var(--danger); }

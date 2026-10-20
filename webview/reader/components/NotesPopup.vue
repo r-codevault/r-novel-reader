@@ -3,7 +3,7 @@
  * NotesPopup.vue — 阅读笔记浮层
  *
  * 结构: 头部(条数) → 书分组(可折叠) → 章分组(可折叠) → 条目(正文/原文/时间)
- * 交互: 点条目或「定位到原文」跳回原文; 悬浮条目下方浮出完整笔记+原文; 行内编辑; 两步确认删除
+ * 交互: 点条目或「定位到原文」跳回原文; 悬浮笔记正文 → 右侧浮窗看完整笔记+原文; 行内编辑; 两步确认删除
  */
 import { computed, nextTick, ref, watch } from 'vue';
 import { state, send, type NoteItem } from '../composables/vscode';
@@ -121,7 +121,7 @@ watch(function () { return state.notesOpen; }, function (open) {
   if (!open) { cancelEdit(); pendingDeleteId.value = ''; clearDeleteTimer(); hidePreview(); }
 });
 
-// ---------------------------------------------------------------- 悬浮预览(锚定条目下方, 间距同新建卡片; 笔记 + 完整原文, 可滚动)
+// ---------------------------------------------------------------- 悬浮预览(浮层右侧浮窗: 笔记 + 完整原文; 悬浮「笔记正文」触发, 原文行不触发)
 const previewNote = ref<NoteItem | null>(null);
 const previewPos = ref({ left: 0, top: 0 });
 let hoverTimer: number | null = null;
@@ -133,16 +133,15 @@ function showPreview(n: NoteItem, e: MouseEvent): void {
   hoverTimer = window.setTimeout(function () {
     const itemRect = item.getBoundingClientRect();
     const popupRect = rootRef.value?.getBoundingClientRect();
-    // 与笔记浮层左对齐、同宽, 不往正文方向外扩
-    const w = Math.min(420, popupRect ? popupRect.width : 420);
-    const left = popupRect ? popupRect.left : itemRect.left;
-    // 锚定条目下方(间距同新建卡片 10px); 下方放不下翻到条目上方
-    const estimated = 280;
-    let top = itemRect.bottom + 10;
-    if (top + estimated > window.innerHeight - 12) {
-      top = itemRect.top - estimated - 10;
+    const w = Math.min(340, window.innerWidth - 32);
+    const estimated = 220;
+    // 放在浮层右侧; 右侧放不下再翻到左侧, 都不行就夹取到视口内
+    let left = (popupRect ? popupRect.right : itemRect.right) + 10;
+    if (left + w > window.innerWidth - 8) {
+      left = (popupRect ? popupRect.left : itemRect.left) - w - 10;
     }
-    top = Math.max(12, Math.min(top, window.innerHeight - estimated - 12));
+    left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+    const top = Math.max(8, Math.min(itemRect.top - 4, window.innerHeight - estimated - 8));
     previewPos.value = { left, top };
     previewNote.value = n;
     hoverTimer = null;
@@ -227,8 +226,7 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
             <div v-if="!isChapCollapsed(g.bookPath, c)" class="nt-items">
           <div v-for="n in c.items" :key="n.id" class="nt-item" :data-note-id="n.id"
             :class="{ editing: editingId === n.id }"
-            @click="editingId === n.id ? null : jumpTo(n)"
-            @mouseenter="showPreview(n, $event)" @mouseleave="hideSoon()">
+            @click="editingId === n.id ? null : jumpTo(n)">
             <template v-if="editingId === n.id">
               <textarea class="nt-edit-area" v-model="editingText" rows="3"
                 @keydown="onEditKey" @click.stop></textarea>
@@ -240,7 +238,8 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
               <div class="nt-quote-hint" :title="n.quote">原文：{{ n.quote }}</div>
             </template>
             <template v-else>
-              <p v-if="noteHasText(n)" class="nt-text">{{ n.text }}</p>
+              <p v-if="noteHasText(n)" class="nt-text"
+                @mouseenter="showPreview(n, $event)" @mouseleave="hideSoon()">{{ n.text }}</p>
               <div class="nt-meta">
                 <span class="nt-quote" :title="n.quote">原文：{{ n.quote }}</span>
                 <span class="nt-time">{{ relativeTime(n.updatedAt) }}</span>
@@ -264,7 +263,7 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
       <span class="nt-foot-tip">在正文中单击任意段落即可记笔记</span>
     </div>
 
-    <!-- 悬浮预览: 锚定条目下方, 笔记 + 完整原文(可滚动) -->
+    <!-- 悬浮预览: 浮层右侧, 笔记 + 完整原文(可滚动); 悬浮「笔记正文」触发 -->
     <div v-if="previewNote" class="note-preview" :style="{ left: previewPos.left + 'px', top: previewPos.top + 'px' }"
       @mouseenter="cancelHide()" @mouseleave="hidePreview()">
       <template v-if="noteHasText(previewNote)">

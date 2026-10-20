@@ -1298,19 +1298,20 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(320);
   assert(!document.querySelector('.para-note-tip'), '正文段落悬浮不应再显示笔记浮窗');
 
-  // 5) 条目内联「定位到原文」; 悬浮条目 → 下方浮出完整笔记+原文浮窗(与浮层左对齐)
+  // 5) 悬浮笔记正文 → 右侧浮窗(完整笔记+原文); 悬浮原文行不弹浮窗
   const nt1 = document.querySelector('#notesPopup .nt-item');
-  nt1.dispatchEvent(new win.MouseEvent('mouseenter'));
+  nt1.querySelector('.nt-meta').dispatchEvent(new win.MouseEvent('mouseenter'));
+  await sleep(320);
+  assert(!document.querySelector('.note-preview'), '悬浮原文行不应弹出预览浮窗');
+  nt1.querySelector('.nt-text').dispatchEvent(new win.MouseEvent('mouseenter'));
   await sleep(320);
   const pv = document.querySelector('.note-preview');
-  assert(pv, '悬浮条目应出现预览浮窗');
+  assert(pv, '悬浮笔记正文应出现预览浮窗');
   assert(pv.textContent.includes('笔记') && pv.textContent.includes('第一条笔记'), '预览应显示笔记正文');
   assert(pv.textContent.includes('原文') && pv.textContent.includes('乙段原文。'), '预览应显示完整原文');
-  const pvLeft = Math.abs(pv.getBoundingClientRect().left - document.querySelector('#notesPopup').getBoundingClientRect().left);
-  assert(pvLeft < 2, '浮窗应与浮层左对齐(不外扩挡正文)');
-  nt1.dispatchEvent(new win.MouseEvent('mouseleave'));
+  nt1.querySelector('.nt-text').dispatchEvent(new win.MouseEvent('mouseleave'));
   await sleep(200);
-  assert(!document.querySelector('.note-preview'), '移出条目后预览浮窗应收起');
+  assert(!document.querySelector('.note-preview'), '移出后预览浮窗应收起');
   const goBtn = nt1.querySelector('.nt-go');
   assert(goBtn && goBtn.textContent.includes('定位到原文'), '条目内应有「定位到原文」按钮');
   assert(nt1.querySelector('.nt-quote').textContent.includes('原文：乙段原文。'), '条目原文应带「原文」前缀');
