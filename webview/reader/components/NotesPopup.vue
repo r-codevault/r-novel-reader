@@ -241,7 +241,7 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
               <p v-if="noteHasText(n)" class="nt-text"
                 @mouseenter="showPreview(n, $event)" @mouseleave="hideSoon()">{{ n.text }}</p>
               <div class="nt-meta">
-                <span class="nt-quote" :title="n.quote">原文：{{ n.quote }}</span>
+                <span class="nt-quote" @mouseenter="showPreview(n, $event)" @mouseleave="hideSoon()">原文：{{ n.quote }}</span>
                 <span class="nt-time">{{ relativeTime(n.updatedAt) }}</span>
               </div>
               <div class="nt-acts">

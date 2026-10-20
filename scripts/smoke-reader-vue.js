@@ -1298,11 +1298,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(320);
   assert(!document.querySelector('.para-note-tip'), '正文段落悬浮不应再显示笔记浮窗');
 
-  // 5) 悬浮笔记正文 → 右侧浮窗(完整笔记+原文); 悬浮原文行不弹浮窗
+  // 5) 悬浮笔记正文或原文行 → 右侧浮窗(完整笔记+原文); 原文行不再有原生 title 提示
   const nt1 = document.querySelector('#notesPopup .nt-item');
-  nt1.querySelector('.nt-meta').dispatchEvent(new win.MouseEvent('mouseenter'));
+  const quoteEl = nt1.querySelector('.nt-quote');
+  quoteEl.dispatchEvent(new win.MouseEvent('mouseenter'));
   await sleep(320);
-  assert(!document.querySelector('.note-preview'), '悬浮原文行不应弹出预览浮窗');
+  const pvOnQuote = document.querySelector('.note-preview');
+  assert(pvOnQuote, '悬浮原文行应弹出预览浮窗');
+  assert(pvOnQuote.textContent.includes('乙段原文。'), '原文行触发的浮窗应显示完整原文');
+  quoteEl.dispatchEvent(new win.MouseEvent('mouseleave'));
+  await sleep(200);
+  assert(!document.querySelector('.note-preview'), '移出后浮窗应收起');
+  assert(!quoteEl.hasAttribute('title'), '原文行不应有原生 title 提示');
   nt1.querySelector('.nt-text').dispatchEvent(new win.MouseEvent('mouseenter'));
   await sleep(320);
   const pv = document.querySelector('.note-preview');
