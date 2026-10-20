@@ -132,7 +132,7 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.noteComposer = null;
       state.noteReturn = null;
       state.noteJump = null;
-      state.noteCollapsed = [];
+      // 折叠态是"用户显式选择", 换书/重发 init 都不清空(新书默认展开靠 current 推导)
       break;
     }
     case 'chapter':

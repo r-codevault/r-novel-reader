@@ -82,6 +82,9 @@ export interface NoteJumpTarget {
   quote: string;
 }
 
+/** 笔记分组展开态: 只记录用户显式选择(bookPath -> 是否展开), 缺省值由"是否在读"推导 */
+export type NoteGroupOpenMap = Record<string, boolean>;
+
 /** 左抽屉页签 */
 export type DrawerTab = 'shelf' | 'catalog' | 'notes' | 'storage';
 
@@ -119,8 +122,8 @@ export const state = reactive({
   shelfOpen: false,
   storageOpen: false,
   notesOpen: false,
-  /** 笔记分组折叠(bookPath 列表, 仅内存) */
-  noteCollapsed: [] as string[],
+  /** 笔记分组展开态(仅内存, 只记用户显式操作过的书) */
+  noteGroupOpen: {} as NoteGroupOpenMap,
   /** 新建笔记卡片 */
   noteComposer: null as NoteComposerState | null,
   /** 跳转前位置 */

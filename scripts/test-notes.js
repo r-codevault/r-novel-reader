@@ -54,9 +54,14 @@ const DRAFT = {
   assert.strictEqual(b.text, '第二条', '正文应 trim');
   assert.notStrictEqual(a.id, b.id, 'id 不应重复');
 
-  // --- 空正文拒绝 ---
-  await assert.rejects(() => notes.add({ ...DRAFT, text: '   ' }, BOOK), /不能为空/);
-  await assert.rejects(() => notes.update(a.id, '  '), /不能为空/);
+  // --- 空正文允许: 只记原文锚点, 正文可以是空串 ---
+  const emptyNote = await notes.add({ ...DRAFT, text: '   ' }, BOOK);
+  assert.strictEqual(emptyNote.text, '', '纯空白正文应存为空串');
+  assert.strictEqual(notes.listFor(BOOK.bookPath).length, 3, '空正文笔记也应入列表');
+  const cleared = await notes.update(emptyNote.id, '   ');
+  assert(cleared && cleared.text === '', '编辑清空正文也应允许');
+  assert.strictEqual(await notes.update('不存在', ''), undefined, '未知 id 仍返回 undefined');
+  await notes.remove(emptyNote.id);
 
   // --- 更新 ---
   const before = a.updatedAt;
@@ -67,6 +72,9 @@ const DRAFT = {
   assert.strictEqual(updated.createdAt, a.createdAt, 'createdAt 不应变');
   assert(updated.updatedAt > before, 'updatedAt 应刷新');
   assert.strictEqual(await notes.update('不存在', 'x'), undefined, '未知 id 返回 undefined');
+  const clearedA = await notes.update(a.id, '   ');
+  assert(clearedA && clearedA.text === '', '已有笔记清空正文也应允许');
+  await notes.update(a.id, '改过的内容');
 
   // --- 按书查询 / 计数 ---
   assert.strictEqual(notes.listFor(BOOK.bookPath).length, 2);

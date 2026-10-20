@@ -6,7 +6,7 @@
  *  - 组内: updatedAt 倒序, 同时刻按 createdAt 倒序
  */
 
-import type { NoteItem } from './vscode';
+import type { NoteGroupOpenMap, NoteItem } from './vscode';
 
 export interface NoteBookGroup {
   bookPath: string;
@@ -66,6 +66,26 @@ export function groupNotes(
     return a.bookTitle.localeCompare(b.bookTitle, 'zh-Hans-CN');
   });
   return groups;
+}
+
+/**
+ * 分组是否展开:
+ *  - 用户点过组头 → 以 map 里记录的显式选择为准
+ *  - 没点过 → 在读的书展开, 其它收起
+ */
+export function isGroupOpen(map: NoteGroupOpenMap, g: NoteBookGroup): boolean {
+  // 必须用 in 而不是 hasOwnProperty: in 走 Proxy 的 has 陷阱(Vue 有 instrument, 会 track),
+  // hasOwnProperty 走 getOwnPropertyDescriptor 陷阱(Vue 未 instrument, 不 track)
+  // → 若用 hasOwnProperty, 首次给 map 添加新 key 时渲染 effect 没有依赖, 点击组头不会重渲染
+  if (g.bookPath in map) {
+    return map[g.bookPath] === true;
+  }
+  return g.current;
+}
+
+/** 切换分组展开态: 写入的是"取反后的有效值", 不是取反 map 原值 */
+export function toggleGroupOpen(map: NoteGroupOpenMap, g: NoteBookGroup): void {
+  map[g.bookPath] = !isGroupOpen(map, g);
 }
 
 /** 从路径取文件名(无扩展名), 作为书名为空时的兜底 */

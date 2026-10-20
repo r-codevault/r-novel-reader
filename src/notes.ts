@@ -25,7 +25,7 @@ export interface NoteItem {
     paragraphIndex: number;
     /** 被引用的整段原文(上限 4000 字, 超出截断) */
     quote: string;
-    /** 笔记正文(上限 5000 字, trim 后非空) */
+    /** 笔记正文(上限 5000 字, trim 后可为空串: 只记原文锚点) */
     text: string;
     createdAt: number;
     updatedAt: number;
@@ -124,8 +124,8 @@ export class NotesStore {
     }
 
     async add(draft: NoteDraft, book: NoteBookRef): Promise<NoteItem> {
+        // 允许空正文: 笔记的价值是"锚定这段原文", 正文可以不写
         const text = typeof draft.text === 'string' ? draft.text.trim() : '';
-        if (!text) { throw new Error('笔记内容不能为空'); }
         return this._enqueue(async () => {
             const now = Date.now();
             const item: NoteItem = {
@@ -148,8 +148,8 @@ export class NotesStore {
     }
 
     async update(id: string, text: string): Promise<NoteItem | undefined> {
+        // 允许清空正文(与新建一致), 删除仍只走 remove
         const next = typeof text === 'string' ? text.trim() : '';
-        if (!next) { throw new Error('笔记内容不能为空'); }
         return this._enqueue(async () => {
             const items = this._read();
             const item = items.find((n) => n.id === id);

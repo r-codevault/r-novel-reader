@@ -7,7 +7,7 @@
  */
 import { computed, nextTick, ref, watch } from 'vue';
 import { state, send, type NoteItem } from '../composables/vscode';
-import { groupNotes, relativeTime, type NoteBookGroup } from '../composables/notesView';
+import { groupNotes, isGroupOpen, relativeTime, toggleGroupOpen, type NoteBookGroup } from '../composables/notesView';
 
 const emit = defineEmits<{ (e: 'jump', note: NoteItem): void }>();
 
@@ -24,23 +24,34 @@ const total = computed(function () {
 });
 
 function isCollapsed(g: NoteBookGroup): boolean {
-  return state.noteCollapsed.indexOf(g.bookPath) >= 0;
+  return !isGroupOpen(state.noteGroupOpen, g);
 }
 function toggleGroup(g: NoteBookGroup): void {
-  const i = state.noteCollapsed.indexOf(g.bookPath);
-  if (i >= 0) { state.noteCollapsed.splice(i, 1); } else { state.noteCollapsed.push(g.bookPath); }
+  // 即将收起: 先收掉正在编辑的草稿与悬浮预览, 避免它们悬在已收起的分组上
+  if (!isCollapsed(g)) {
+    cancelEdit();
+    hidePreview();
+  }
+  toggleGroupOpen(state.noteGroupOpen, g);
+}
+
+/** 空笔记占位: 允许只记原文锚点、不写正文 */
+const EMPTY_NOTE_TEXT = '（未填写内容）';
+function noteHasText(n: NoteItem): boolean {
+  return !!(n.text && n.text.trim());
+}
+function notePreviewText(n: NoteItem): string {
+  return noteHasText(n) ? n.text : EMPTY_NOTE_TEXT;
 }
 
 // ---------------------------------------------------------------- 编辑态
 const editingId = ref<string>('');
 const editingText = ref<string>('');
-const editError = ref<string>('');
 
 function beginEdit(n: NoteItem): void {
   pendingDeleteId.value = '';
   editingId.value = n.id;
   editingText.value = n.text;
-  editError.value = '';
   nextTick(function () {
     const el = rootRef.value?.querySelector('.nt-edit-area') as HTMLTextAreaElement | null;
     if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
@@ -49,15 +60,13 @@ function beginEdit(n: NoteItem): void {
 function cancelEdit(): void {
   editingId.value = '';
   editingText.value = '';
-  editError.value = '';
 }
 function saveEdit(): void {
+  // 允许清空正文(与新建一致); 内容未变化则直接退出编辑
   const text = editingText.value.trim();
-  if (!text) { editError.value = '笔记内容不能为空'; return; }
-  if (text === state.notes.find(function (n) { return n.id === editingId.value; })?.text) {
-    cancelEdit();
-    return;
-  }
+  const cur = state.notes.find(function (n) { return n.id === editingId.value; });
+  if (!cur) { cancelEdit(); return; }
+  if (text === cur.text) { cancelEdit(); return; }
   send({ type: 'updateNote', id: editingId.value, text });
 }
 function onEditKey(e: KeyboardEvent): void {
@@ -151,7 +160,7 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
       <b class="popup-title">笔记</b>
       <span class="popup-sub" v-show="total > 0">共 {{ total }} 条 · {{ groups.length }} 本书</span>
       <span class="spacer"></span>
-      <button class="popup-close" @click="state.notesOpen = false">关闭</button>
+      <button class="popup-close" @click="toggleGroup(g)">关闭</button>
     </div>
 
     <div class="popup-body">
@@ -187,7 +196,6 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
               <textarea class="nt-edit-area" v-model="editingText" rows="3"
                 @keydown="onEditKey" @click.stop></textarea>
               <div class="nt-edit-foot">
-                <span class="nt-edit-err">{{ editError }}</span>
                 <span class="spacer"></span>
                 <button class="nt-act" @click.stop="cancelEdit()">取消</button>
                 <button class="nt-act nt-act-primary" @click.stop="saveEdit()">保存</button>
@@ -195,7 +203,7 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
               <div class="nt-quote-hint" :title="n.quote">原文：{{ n.quote }}</div>
             </template>
             <template v-else>
-              <p class="nt-text">{{ n.text }}</p>
+              <p class="nt-text" :class="{ 'nt-text-empty': !noteHasText(n) }">{{ notePreviewText(n) }}</p>
               <div class="nt-meta">
                 <span class="nt-chap" :title="n.chapterTitle">{{ n.chapterTitle }}</span>
                 <span class="nt-time">{{ relativeTime(n.updatedAt) }}</span>

@@ -1296,6 +1296,98 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   console.log('笔记(空态/段落建卡/保存/分组/悬浮原文/两步删除/跳转高亮/返回位置): 通过');
 
+
+  // ---------------- 笔记: 空内容保存 + 分组默认折叠 ----------------
+  // 9a 空内容也能保存
+  const para2 = document.querySelector('#content p[data-p="2"]');
+  para2.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+  para2.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  const emptyComposer = document.querySelector('.note-composer');
+  assert(emptyComposer, '再点段落应再次弹出新建卡片');
+  posted.length = 0;
+  emptyComposer.querySelector('.nc-text').dispatchEvent(
+    new win.KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true })
+  );
+  await sleep(30);
+  const emptyAdd = posted.find((m) => m.type === 'addNote');
+  assert(emptyAdd && emptyAdd.text === '', '不写正文也应能保存(addNote.text 为空串)');
+
+  // 9b 空笔记在列表里显示占位文案
+  const emptyItem = {
+    id: 'note-empty', bookPath: novel.filePath, bookTitle: novel.bookTitle,
+    chapterTitle: novel.chapters[2].title, chapterIndex: 2, paragraphIndex: 2,
+    quote: '丙段。', text: '', createdAt: 3, updatedAt: 3,
+  };
+  sendMsg({ type: 'noteUpserted', item: emptyItem });
+  await sleep(30);
+  assert(!document.querySelector('.note-composer'), '空内容保存成功后卡片应关闭');
+  menuItem('notes').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  const emptyRow = document.querySelector('#notesPopup [data-note-id="note-empty"] .nt-text');
+  assert(emptyRow && emptyRow.textContent.trim() === '（未填写内容）', '空笔记应显示占位文案');
+  assert(emptyRow.classList.contains('nt-text-empty'), '空笔记占位应带 .nt-text-empty 样式类');
+
+  // 9c 行内编辑清空正文也能保存
+  const firstRow = document.querySelector('#notesPopup [data-note-id="note-1"]');
+  firstRow.querySelector('.nt-act').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  const editArea = document.querySelector('#notesPopup .nt-edit-area');
+  assert(editArea, '点编辑应进入行内编辑态');
+  editArea.value = '   ';
+  editArea.dispatchEvent(new win.Event('input', { bubbles: true }));
+  posted.length = 0;
+  editArea.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
+  await sleep(30);
+  const clearUpdate = posted.find((m) => m.type === 'updateNote');
+  assert(clearUpdate && clearUpdate.text === '', '编辑清空后保存应发 updateNote(text 为空串)');
+  sendMsg({ type: 'noteUpserted', item: { ...noteItem, updatedAt: 2 } });
+  await sleep(30);
+
+  // 9d 分组默认态: 在读展开 / 其它收起
+  const otherItem = {
+    id: 'note-other', bookPath: 'D:/b.txt', bookTitle: '另一本书',
+    chapterTitle: '第1章 起', chapterIndex: 0, paragraphIndex: 0,
+    quote: '另一本原文。', text: '另一本的笔记', createdAt: 1, updatedAt: 1,
+  };
+  sendMsg({ type: 'notes', items: [{ ...noteItem, updatedAt: 2 }, emptyItem, otherItem] });
+  await sleep(40);
+  const books = Array.from(document.querySelectorAll('#notesPopup .nt-book'));
+  assert(books.length === 2, '应渲染 2 个书分组(实际 ' + books.length + ')');
+  const curBook = books.find((b) => (b.querySelector('.nt-book-title') || {}).textContent === novel.bookTitle);
+  const otherBook = books.find((b) => b !== curBook);
+  assert(curBook && otherBook, '应能按书名定位两组');
+  assert(!curBook.classList.contains('collapsed'), '在读分组默认应展开');
+  assert(curBook.querySelector('.nt-items'), '在读分组应渲染条目');
+  assert(curBook.querySelector('.nt-book-head').getAttribute('aria-expanded') === 'true', '在读分组 aria-expanded 应为 true');
+  assert(otherBook.classList.contains('collapsed'), '非在读分组默认应收起');
+  assert(!otherBook.querySelector('.nt-items'), '非在读分组不应渲染条目');
+  assert(otherBook.querySelector('.nt-book-head').getAttribute('aria-expanded') === 'false', '收起分组 aria-expanded 应为 false');
+  assert(otherBook.querySelector('.nt-book-count').textContent.trim() === '1', '收起后仍应显示条目数');
+
+  // 9e 点组头展开其它书, 关闭再打开保持选择
+  const bookByTitle = (name) => Array.from(document.querySelectorAll('#notesPopup .nt-book'))
+    .find((b) => (b.querySelector('.nt-book-title') || {}).textContent === name);
+  bookByTitle('另一本书').querySelector('.nt-book-head').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(bookByTitle('另一本书').querySelector('.nt-items'), '点组头应展开该分组');
+  document.querySelector('#notesPopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  menuItem('notes').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(bookByTitle('另一本书') && !bookByTitle('另一本书').classList.contains('collapsed'),
+    '关闭再打开应保留用户展开的选择');
+
+  // 9f 在读分组也可手动收起
+  bookByTitle(novel.bookTitle).querySelector('.nt-book-head').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(bookByTitle(novel.bookTitle).classList.contains('collapsed'), '在读分组也应允许手动收起');
+  bookByTitle(novel.bookTitle).querySelector('.nt-book-head').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(!bookByTitle(novel.bookTitle).classList.contains('collapsed'), '再点应恢复展开');
+
+  console.log('笔记补充(空内容保存/占位/编辑清空/分组默认态/会话保留): 通过');
+
   console.log('\n阅读面板 Vue 冒烟测试全部通过 ✔');
   process.exit(0);
 })().catch((err) => {

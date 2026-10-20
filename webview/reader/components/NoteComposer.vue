@@ -45,8 +45,8 @@ function cancel(): void {
 function save(): void {
   const c = state.noteComposer;
   if (!c || c.phase === 'saving') { return; }
+  // 允许空正文: 只引用原文、不写想法也能存下来
   const text = (c.text || '').trim();
-  if (!text) { c.error = '写点什么再保存吧'; return; }
   c.phase = 'saving';
   c.error = '';
   send({
