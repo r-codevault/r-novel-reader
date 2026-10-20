@@ -1,5 +1,5 @@
 /**
- * test-theme-presets.js — 6 套预设主题的配色契约
+ * test-theme-presets.js — 7 套预设主题的配色契约
  *
  * 这些断言就是 docs/color-audit.html 里那张"缺陷清单"的回归线：
  *   1. 强调色作文字压在留白区(pageBg)、作图标压在面板底(chromeBg)，都要 ≥4.5:1
@@ -28,7 +28,7 @@ const REQUIRED = ['bg', 'fg', 'pageBg', 'chromeBg', 'chromeBorder', 'borderStron
   'accent', 'accentFg', 'muted', 'panelHover', 'danger', 'shadow'];
 const failures = [];
 
-assert.strictEqual(THEMES.length, 6, '应有 6 套预设主题');
+assert.strictEqual(THEMES.length, 7, '应有 7 套预设主题');
 
 for (const t of THEMES) {
   for (const key of REQUIRED) {
@@ -81,6 +81,7 @@ for (const t of THEMES) {
 const GOLDEN = {
   white: { accent: '#b83729', danger: '#8f1d16' },
   beige: { accent: '#8c4423', danger: '#8f1d16' },
+  xuan: { accent: '#835529', danger: '#8c1d18' },
   sepia: { accent: '#8d3f22', danger: '#8c1d18' },
   green: { accent: '#2b6135', danger: '#8c1d18' },
   blue: { accent: '#2c5a8a', danger: '#8c1d18' },
@@ -97,11 +98,21 @@ for (const t of THEMES) {
   assert.notStrictEqual(t.accent.toLowerCase(), t.danger.toLowerCase(), `${t.name} danger 不应等于 accent`);
 }
 
+// 宣纸主题的纸纹层: CSS 必须存在该主题专属纹理规则(否则"宣纸"退化成普通米色)
+const fsx = require('fs');
+const pathx = require('path');
+const cssText = fsx.readFileSync(pathx.join(__dirname, '..', 'webview', 'reader', 'reader.css'), 'utf8');
+assert(cssText.indexOf('html[data-theme="xuan"]') >= 0, '宣纸主题应带纸纹层规则');
+assert(cssText.indexOf('data:image/svg+xml') >= 0, '宣纸纸纹应使用内联 SVG 噪点(不依赖外部资源)');
+const xuanTheme = THEMES.find((t) => t.id === 'xuan');
+assert(xuanTheme, '应存在 id=xuan 的宣纸主题');
+assert.strictEqual(THEMES[THEMES.findIndex((t) => t.id === 'xuan') - 1].id, 'beige', '宣纸应紧挨在米白右侧');
+
 // 主题分发不受影响
 assert.strictEqual(themeById('sepia').name, '羊皮纸');
 assert.strictEqual(themeById('nope').name, THEMES[0].name, '未知主题应回退第一套');
 
-console.log(`预设主题契约通过 ✔ (6 套, 最低: 正文 ${Math.min.apply(null, THEMES.map((t) => contrastRatio(t.fg, t.bg))).toFixed(2)}:1, ` +
+console.log(`预设主题契约通过 ✔ (7 套, 最低: 正文 ${Math.min.apply(null, THEMES.map((t) => contrastRatio(t.fg, t.bg))).toFixed(2)}:1, ` +
   `次要文字 ${Math.min.apply(null, THEMES.map((t) => contrastRatio(t.muted, t.chromeBg))).toFixed(2)}:1, ` +
   `强调 ${Math.min.apply(null, THEMES.map((t) => contrastRatio(t.accent, t.pageBg))).toFixed(2)}:1, ` +
   `控件边框 ${Math.min.apply(null, THEMES.map((t) => contrastRatio(t.borderStrong, t.chromeBg))).toFixed(2)}:1)`);

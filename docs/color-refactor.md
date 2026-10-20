@@ -146,6 +146,62 @@ danger       = ensure(#b3261e, bg, 4.5)
 
 ---
 
+### 4.5 宣纸主题（v1.37.1 新增，第 7 套预设）
+
+参照古文岛一类国风站点的纸面观感新增：暖米纸底 + 极轻纸纹。令牌仍是同一套 12 枚，纹理只是**"面"上的一层
+`background-image`（multiply 混合）**，不改任何令牌、不参与对比度计算。
+
+| 令牌 | 取值 | 实测 |
+|---|---|---|
+| `bg` | `#f7f5ec` | 正文/bg 12.04:1 |
+| `fg` | `#33302a` | — |
+| `pageBg` | `#e7e3d5` | 纸面/留白台阶 1.19:1 |
+| `chromeBg` | `#efece0` | 纸面/面板台阶 1.08:1 |
+| `chromeBorder` | `#c7bda4` | 装饰线 1.58:1 |
+| `borderStrong` | `#92815f` | 控件边框 3.21:1 |
+| `accent`（赭石） | `#835529` | 强调/pageBg 4.96:1；强调/chromeBg 5.38:1 |
+| `accentFg` | `#ffffff` | 反白 6.37:1 |
+| `muted` | `#6d695d` | 次要/chromeBg 4.63:1 |
+| `panelHover` | `rgba(0,0,0,.045)` | — |
+| `danger` | `#8c1d18` | 危险色 8.34:1 |
+| `shadow` | `rgba(0,0,0,.12)` | — |
+
+纸纹实现（`reader.css`，仅 `html[data-theme="xuan"]`）：
+
+- 两层内联 SVG `feTurbulence`：低频 `baseFrequency="0.006 0.75"` 出纸帘横纤维，高频 `0.95` 出细颗粒
+- `feComponentTransfer` 把噪点压到 78–100% 亮度区间，`background-blend-mode: multiply`
+- 覆盖纸面 / 留白 / 目录 / 弹窗 / 设置 / 状态栏；实测画面标准差 ≈2.5（纯色约 0.9），
+  文字仍落在实色令牌上，不影响已校验的对比度
+- 主题圆点用 `pageBg` 暖米色 + 纸纹，避免与「纯净白 / 米白」两个浅色点混淆
+
+### 4.5 宣纸主题（v1.37.1 新增，第 7 套预设）
+
+参照古文岛一类国风站点的纸面观感新增：暖米纸底 + 极轻纸纹。令牌仍是同一套 12 枚，纹理只是**"面"上的一层
+`background-image`（multiply 混合）**，不改任何令牌、不参与对比度计算。
+
+| 令牌 | 取值 | 实测 |
+|---|---|---|
+| `bg` | `#f7f5ec` | 正文/bg 12.04:1 |
+| `fg` | `#33302a` | — |
+| `pageBg` | `#e7e3d5` | 纸面/留白台阶 1.19:1 |
+| `chromeBg` | `#efece0` | 纸面/面板台阶 1.08:1 |
+| `chromeBorder` | `#c7bda4` | 装饰线 1.58:1 |
+| `borderStrong` | `#92815f` | 控件边框 3.21:1 |
+| `accent`（赭石） | `#835529` | 强调/pageBg 4.96:1；强调/chromeBg 5.38:1 |
+| `accentFg` | `#ffffff` | 反白 6.37:1 |
+| `muted` | `#6d695d` | 次要/chromeBg 4.63:1 |
+| `panelHover` | `rgba(0,0,0,.045)` | — |
+| `danger` | `#8c1d18` | 危险色 8.34:1 |
+| `shadow` | `rgba(0,0,0,.12)` | — |
+
+纸纹实现（`reader.css`，仅 `html[data-theme="xuan"]`）：
+
+- 两层内联 SVG `feTurbulence`：低频 `baseFrequency="0.006 0.75"` 出纸帘横纤维，高频 `0.95` 出细颗粒
+- `feComponentTransfer` 把噪点压到 78–100% 亮度区间，`background-blend-mode: multiply`
+- 覆盖纸面 / 留白 / 目录 / 弹窗 / 设置 / 状态栏；实测画面标准差 ≈2.5（纯色约 0.9），
+  文字仍落在实色令牌上，不影响已校验的对比度
+- 主题圆点用 `pageBg` 暖米色 + 纸纹，避免与「纯净白 / 米白」两个浅色点混淆
+
 ## 五、验证方式
 
 ### 5.1 自动（`npm test`，已纳入 CI 链路）

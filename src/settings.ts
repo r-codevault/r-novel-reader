@@ -99,7 +99,7 @@ export interface FontDef {
 // 黑夜沿用深灰纸面 + 暖金主色。
 //
 // 2026-10 配色重构(依据 docs/color-audit.html):
-//  - 取消"固定品牌红 panelAccent", 强调色回到各自主题的色相, 六套主题共用一条规则;
+//  - 取消"固定品牌红 panelAccent", 强调色回到各自主题的色相, 七套主题共用一条规则;
 //  - 强调色统一按「作文字压在留白区(pageBg)上 ≥4.5:1」校准, 一个 accent 令牌通吃
 //    高亮文字 / 按钮底 / 进度条 / 焦点框, 不再需要第二枚强调色;
 //  - 次要文字改实色(原先 #RRGGBBAA 叠在底色上, 实测只有 3.07~4.12:1);
@@ -138,6 +138,22 @@ export const THEMES: ThemeDef[] = [
     panelHover: "rgba(0,0,0,.05)",
     danger: "#8f1d16",
     shadow: "rgba(0,0,0,.10)",
+  },
+  {
+    id: "xuan",
+    name: "宣纸",
+    bg: "#f7f5ec",
+    fg: "#33302a",
+    pageBg: "#e7e3d5",
+    chromeBg: "#efece0",
+    chromeBorder: "#c7bda4",
+    borderStrong: "#92815f",
+    accent: "#835529",
+    accentFg: "#ffffff",
+    muted: "#6d695d",
+    panelHover: "rgba(0,0,0,.045)",
+    danger: "#8c1d18",
+    shadow: "rgba(0,0,0,.12)",
   },
   {
     id: "sepia",

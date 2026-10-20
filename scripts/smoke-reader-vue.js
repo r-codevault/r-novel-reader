@@ -290,7 +290,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert($('#settingsPanel').classList.contains('open'), 'openSettings 消息应打开设置面板');
   // 主题圆点数量
   const dots = document.querySelectorAll('#settingsPanel .sp-dot');
-  assert(dots.length === 6, '应有 6 个主题圆点(实际 ' + dots.length + ')');
+  assert(dots.length === 7, '应有 7 个主题圆点(实际 ' + dots.length + ')');
   // 切主题: 点黑夜 -> 应立即发出 updateSettings(不吃 250ms 防抖, 侧边栏要即时跟随)
   const darkDot = Array.from(dots).find((d) => d.dataset.theme === 'dark');
   darkDot.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
