@@ -204,7 +204,12 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
 
       <div v-for="g in groups" :key="g.bookPath" class="nt-book" :class="{ collapsed: isCollapsed(g) }">
         <button class="nt-book-head" :aria-expanded="!isCollapsed(g)" @click="toggleGroup(g)">
-          <span class="nt-caret" aria-hidden="true">▸</span>
+          <span class="nt-caret" aria-hidden="true">
+            <svg viewBox="0 0 1024 1024" fill="currentColor">
+              <path d="M175.95 210.96c13.35-11.58 33.56-10.14 45.14 3.22l282.1 331.38c4 4.61 11.17 4.6 15.14-0.04l284.48-331.39c11.51-13.41 31.71-14.95 45.12-3.44 13.41 11.51 14.95 31.71 3.44 45.12L526.12 634.7c-7.96 9.27-22.29 9.3-30.29 0.07L172.73 256.1c-11.57-13.35-10.13-33.56 3.22-45.14z" />
+              <path d="M175.95 430.31c13.35-11.58 33.56-10.14 45.14 3.22l282.1 331.38c4 4.61 11.17 4.6 15.14-0.04l284.48-331.39c11.51-13.41 31.71-14.95 45.12-3.44 13.41 11.51 14.95 31.71 3.44 45.12L526.12 854.05c-7.96 9.27-22.29 9.3-30.29 0.07l-323.1-378.68c-11.57-13.34-10.13-33.55 3.22-45.13z" />
+            </svg>
+          </span>
           <span class="nt-book-title" :title="g.bookPath">{{ g.bookTitle }}</span>
           <span v-if="g.current" class="nt-tag">在读</span>
           <span v-else-if="g.orphan" class="nt-tag nt-tag-off">已移出书架</span>
@@ -217,7 +222,12 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
             :class="{ collapsed: isChapCollapsed(g.bookPath, c) }">
             <button class="nt-chap-head" :title="c.chapterTitle"
               :aria-expanded="!isChapCollapsed(g.bookPath, c)" @click="toggleChapter(g.bookPath, c)">
-              <span class="nt-caret" aria-hidden="true">▸</span>
+              <span class="nt-caret" aria-hidden="true">
+                <svg viewBox="0 0 1024 1024" fill="currentColor">
+                  <path d="M175.95 210.96c13.35-11.58 33.56-10.14 45.14 3.22l282.1 331.38c4 4.61 11.17 4.6 15.14-0.04l284.48-331.39c11.51-13.41 31.71-14.95 45.12-3.44 13.41 11.51 14.95 31.71 3.44 45.12L526.12 634.7c-7.96 9.27-22.29 9.3-30.29 0.07L172.73 256.1c-11.57-13.35-10.13-33.56 3.22-45.14z" />
+                  <path d="M175.95 430.31c13.35-11.58 33.56-10.14 45.14 3.22l282.1 331.38c4 4.61 11.17 4.6 15.14-0.04l284.48-331.39c11.51-13.41 31.71-14.95 45.12-3.44 13.41 11.51 14.95 31.71 3.44 45.12L526.12 854.05c-7.96 9.27-22.29 9.3-30.29 0.07l-323.1-378.68c-11.57-13.34-10.13-33.55 3.22-45.13z" />
+                </svg>
+              </span>
               <span class="nt-chap-title">{{ c.chapterTitle }}</span>
               <span v-if="c.current" class="nt-tag">在读</span>
               <span class="spacer"></span>
@@ -226,7 +236,8 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
             <div v-if="!isChapCollapsed(g.bookPath, c)" class="nt-items">
           <div v-for="n in c.items" :key="n.id" class="nt-item" :data-note-id="n.id"
             :class="{ editing: editingId === n.id }"
-            @click="editingId === n.id ? null : jumpTo(n)">
+            @click="editingId === n.id ? null : jumpTo(n)"
+            @mouseenter="showPreview(n, $event)" @mouseleave="hideSoon()">
             <template v-if="editingId === n.id">
               <textarea class="nt-edit-area" v-model="editingText" rows="3"
                 @keydown="onEditKey" @click.stop></textarea>
@@ -238,10 +249,9 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
               <div class="nt-quote-hint" :title="n.quote">原文：{{ n.quote }}</div>
             </template>
             <template v-else>
-              <p v-if="noteHasText(n)" class="nt-text"
-                @mouseenter="showPreview(n, $event)" @mouseleave="hideSoon()">{{ n.text }}</p>
+              <p v-if="noteHasText(n)" class="nt-text">{{ n.text }}</p>
               <div class="nt-meta">
-                <span class="nt-quote" @mouseenter="showPreview(n, $event)" @mouseleave="hideSoon()">原文：{{ n.quote }}</span>
+                <span class="nt-quote">原文：{{ n.quote }}</span>
                 <span class="nt-time">{{ relativeTime(n.updatedAt) }}</span>
               </div>
               <div class="nt-acts">

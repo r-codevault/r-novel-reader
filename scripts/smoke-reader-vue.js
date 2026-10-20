@@ -1300,27 +1300,25 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(320);
   assert(!document.querySelector('.para-note-tip'), '正文段落悬浮不应再显示笔记浮窗');
 
-  // 5) 悬浮笔记正文或原文行 → 右侧浮窗(完整笔记+原文); 原文行不再有原生 title 提示
+  // 5) 命中条目即出现浮窗(条目内移动不闪断); 原文行无原生 title 提示
   const nt1 = document.querySelector('#notesPopup .nt-item');
   const quoteEl = nt1.querySelector('.nt-quote');
-  quoteEl.dispatchEvent(new win.MouseEvent('mouseenter'));
+  nt1.dispatchEvent(new win.MouseEvent('mouseenter'));
   await sleep(320);
   const pvOnQuote = document.querySelector('.note-preview');
-  assert(pvOnQuote, '悬浮原文行应弹出预览浮窗');
-  assert(pvOnQuote.textContent.includes('乙段原文。'), '原文行触发的浮窗应显示完整原文');
-  quoteEl.dispatchEvent(new win.MouseEvent('mouseleave'));
-  await sleep(200);
-  assert(!document.querySelector('.note-preview'), '移出后浮窗应收起');
-  assert(!quoteEl.hasAttribute('title'), '原文行不应有原生 title 提示');
-  nt1.querySelector('.nt-text').dispatchEvent(new win.MouseEvent('mouseenter'));
-  await sleep(320);
-  const pv = document.querySelector('.note-preview');
-  assert(pv, '悬浮笔记正文应出现预览浮窗');
-  assert(pv.textContent.includes('笔记') && pv.textContent.includes('第一条笔记'), '预览应显示笔记正文');
-  assert(pv.textContent.includes('原文') && pv.textContent.includes('乙段原文。'), '预览应显示完整原文');
+  assert(pvOnQuote, '悬浮条目应弹出预览浮窗');
+  assert(pvOnQuote.textContent.includes('乙段原文。'), '浮窗应显示完整原文');
+  // 条目内从笔记正文移到原文行: 浮窗应保持显示, 不应反复触发(闪断)
   nt1.querySelector('.nt-text').dispatchEvent(new win.MouseEvent('mouseleave'));
+  quoteEl.dispatchEvent(new win.MouseEvent('mouseenter'));
+  await sleep(60);
+  assert(document.querySelector('.note-preview'), '条目内移动浮窗不应闪断');
+  await sleep(320);
+  assert(document.querySelector('.note-preview'), '条目内移动后浮窗应持续显示');
+  nt1.dispatchEvent(new win.MouseEvent('mouseleave'));
   await sleep(200);
-  assert(!document.querySelector('.note-preview'), '移出后预览浮窗应收起');
+  assert(!document.querySelector('.note-preview'), '移出条目后浮窗应收起');
+  assert(!quoteEl.hasAttribute('title'), '原文行不应有原生 title 提示');
   const goBtn = nt1.querySelector('.nt-go');
   assert(goBtn && goBtn.textContent.includes('定位到原文'), '条目内应有「定位到原文」按钮');
   assert(nt1.querySelector('.nt-quote').textContent.includes('原文：乙段原文。'), '条目原文应带「原文」前缀');
@@ -1474,6 +1472,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(openChaps.length === 1, '只有当前阅读章默认展开');
   assert(openChaps[0].querySelector('[data-note-id="note-1"]'), '展开的应是当前章分组');
   assert(openChaps[0].querySelector('.nt-chap-head .nt-tag'), '当前章分组应带「在读」标签');
+  assert(document.querySelector('#notesPopup .nt-caret svg'), '分组箭头应为双箭头 SVG 图标');
   // 点章头展开其它章
   const closedChap = chapGroups.find((c) => c !== openChaps[0]);
   closedChap.querySelector('.nt-chap-head').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));

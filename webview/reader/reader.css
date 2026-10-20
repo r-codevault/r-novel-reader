@@ -710,7 +710,9 @@
     display: inline-block; width: 12px; color: var(--fg-muted);
     transition: transform .12s ease;
   }
-  .nt-book:not(.collapsed) .nt-caret { transform: rotate(90deg); }
+  .nt-caret svg { width: 12px; height: 12px; display: block; }
+  /* 双箭头图标默认朝下=展开; 收起时旋转 180° 朝上 */
+  .nt-book.collapsed .nt-caret, .nt-chap-group.collapsed .nt-caret { transform: rotate(180deg); }
   .nt-book-title {
     max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font-weight: 600;
@@ -738,7 +740,6 @@
     font-size: var(--ui-font-sub);
   }
   .nt-chap-head:hover { background: var(--sp-hover); }
-  .nt-chap-group:not(.collapsed) .nt-caret { transform: rotate(90deg); }
   .nt-chap-title {
     max-width: 52%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     color: var(--fg-muted);
