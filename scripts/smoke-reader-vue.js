@@ -1280,14 +1280,20 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(20);
   assert(!document.querySelector('.para-note-tip'), '移出段落后预览应收起');
 
-  // 5) 条目内联「定位到原文」; 右侧悬浮预览窗已移除
+  // 5) 条目内联「定位到原文」+ 悬浮右侧浮窗显示完整笔记与原文
   const nt1 = document.querySelector('#notesPopup .nt-item');
   nt1.dispatchEvent(new win.MouseEvent('mouseenter'));
   await sleep(320);
-  assert(!document.querySelector('.note-preview'), '悬浮条目不应再弹出右侧预览窗');
+  const pv = document.querySelector('.note-preview');
+  assert(pv, '悬浮条目应出现右侧预览浮窗');
+  assert(pv.textContent.includes('笔记') && pv.textContent.includes('第一条笔记'), '预览应显示笔记正文');
+  assert(pv.textContent.includes('原文') && pv.textContent.includes('乙段原文。'), '预览应显示完整原文');
+  nt1.dispatchEvent(new win.MouseEvent('mouseleave'));
+  await sleep(200);
+  assert(!document.querySelector('.note-preview'), '移出条目后预览浮窗应收起');
   const goBtn = nt1.querySelector('.nt-go');
   assert(goBtn && goBtn.textContent.includes('定位到原文'), '条目内应有「定位到原文」按钮');
-  assert(nt1.querySelector('.nt-quote').textContent.includes('乙段原文。'), '条目 meta 应显示原文引用');
+  assert(nt1.querySelector('.nt-quote').textContent.includes('原文：乙段原文。'), '条目原文应带「原文」前缀');
 
   // 6) 两步删除: 第一次只变文案, 第二次才发 removeNote
   posted.length = 0;
@@ -1297,9 +1303,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#notesPopup .nt-act-danger').textContent.includes('确认删除'),
     '第一次点删除应变「确认删除」');
   assert(!posted.some((m) => m.type === 'removeNote'), '第一次点击不应发 removeNote');
+  // 预览浮窗打开时确认删除 → 浮窗应收起(条目移除后 mouseleave 不触发, 需主动收)
+  nt1.dispatchEvent(new win.MouseEvent('mouseenter'));
+  await sleep(320);
+  assert(document.querySelector('.note-preview'), '删除前预览浮窗应存在');
   document.querySelector('#notesPopup .nt-act-danger').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   assert(posted.some((m) => m.type === 'removeNote' && m.id === 'note-1'), '第二次点击应发 removeNote');
+  assert(!document.querySelector('.note-preview'), '确认删除后预览浮窗应收起');
   // 恢复该条, 供跳转测试
   sendMsg({ type: 'noteUpserted', item: noteItem });
   await sleep(30);
@@ -1362,7 +1373,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const emptyRow = document.querySelector('#notesPopup [data-note-id="note-empty"]');
   assert(emptyRow, '空笔记条目仍应渲染(保留原文锚点)');
   assert(!emptyRow.querySelector('.nt-text'), '空笔记不应显示正文行(占位文案已去掉)');
-  assert(emptyRow.querySelector('.nt-quote').textContent.includes('丙段。'), '空笔记 meta 应显示原文引用');
+  assert(emptyRow.querySelector('.nt-quote').textContent.includes('原文：丙段。'), '空笔记原文应带「原文」前缀');
 
   // 9c 行内编辑清空正文也能保存
   const firstRow = document.querySelector('#notesPopup [data-note-id="note-1"]');
@@ -1377,6 +1388,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   const clearUpdate = posted.find((m) => m.type === 'updateNote');
   assert(clearUpdate && clearUpdate.text === '', '编辑清空后保存应发 updateNote(text 为空串)');
+  assert(!document.querySelector('#notesPopup .nt-edit-area'), '保存一次即应退出编辑态(修复要点两次保存)');
   sendMsg({ type: 'noteUpserted', item: { ...noteItem, updatedAt: 2 } });
   await sleep(30);
 

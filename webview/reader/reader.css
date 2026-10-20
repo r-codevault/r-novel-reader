@@ -276,33 +276,33 @@
   /* ---------- 滚动条: 跟随阅读主题(默认 Chromium 深色滚动条会与浅色主题格格不入) ---------- */
   /* ---------- 滚动条: 与底部状态栏进度条同风格(细 + 高亮色 --sp-accent) ---------- */
   .cat-body, #settingsPanel, #catalogPanel,
-  #shelfPopup .popup-body, #storagePopup .popup-body, #notesPopup .popup-body {
+  #shelfPopup .popup-body, #storagePopup .popup-body, #notesPopup .popup-body, .note-preview {
     scrollbar-width: thin;
     scrollbar-color: var(--sp-accent) transparent; /* Firefox */
   }
   .cat-body::-webkit-scrollbar, #settingsPanel::-webkit-scrollbar,
   #catalogPanel::-webkit-scrollbar,
   #shelfPopup .popup-body::-webkit-scrollbar, #storagePopup .popup-body::-webkit-scrollbar,
-  #notesPopup .popup-body::-webkit-scrollbar {
+  #notesPopup .popup-body::-webkit-scrollbar, .note-preview::-webkit-scrollbar {
     width: 6px; height: 6px;
   }
   .cat-body::-webkit-scrollbar-track, #settingsPanel::-webkit-scrollbar-track,
   #catalogPanel::-webkit-scrollbar-track,
   #shelfPopup .popup-body::-webkit-scrollbar-track, #storagePopup .popup-body::-webkit-scrollbar-track,
-  #notesPopup .popup-body::-webkit-scrollbar-track {
+  #notesPopup .popup-body::-webkit-scrollbar-track, .note-preview::-webkit-scrollbar-track {
     background: transparent;
   }
   .cat-body::-webkit-scrollbar-thumb, #settingsPanel::-webkit-scrollbar-thumb,
   #catalogPanel::-webkit-scrollbar-thumb,
   #shelfPopup .popup-body::-webkit-scrollbar-thumb, #storagePopup .popup-body::-webkit-scrollbar-thumb,
-  #notesPopup .popup-body::-webkit-scrollbar-thumb {
+  #notesPopup .popup-body::-webkit-scrollbar-thumb, .note-preview::-webkit-scrollbar-thumb {
     background: var(--sp-accent); /* 与状态栏进度条填充同色: 浅色红 / 黑夜金 */
     border-radius: 3px;
   }
   .cat-body::-webkit-scrollbar-thumb:hover, #settingsPanel::-webkit-scrollbar-thumb:hover,
   #catalogPanel::-webkit-scrollbar-thumb:hover,
   #shelfPopup .popup-body::-webkit-scrollbar-thumb:hover, #storagePopup .popup-body::-webkit-scrollbar-thumb:hover,
-  #notesPopup .popup-body::-webkit-scrollbar-thumb:hover {
+  #notesPopup .popup-body::-webkit-scrollbar-thumb:hover, .note-preview::-webkit-scrollbar-thumb:hover {
     background: var(--accent);
   }
   /* 阅读页整体滚动条(同样风格, 稍宽便于拖拽)
@@ -744,11 +744,12 @@
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
     overflow: hidden; word-break: break-word;
   }
-  .nt-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .nt-meta { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
   .nt-quote {
     flex: 1 1 auto; min-width: 0;
-    color: var(--fg-muted); font-size: var(--ui-font-sub);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--fg-muted); font-size: var(--ui-font-sub); line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; word-break: break-word;
   }
   .nt-time { flex: none; color: var(--fg-muted); font-size: var(--ui-font-sub); }
 
@@ -798,6 +799,34 @@
   /* 头部/底部提示 */
   .nt-foot { padding: 8px 16px 10px; }
   .nt-foot-tip { color: var(--fg-muted); font-size: var(--ui-font-sub); }
+
+  /* 悬浮预览: 笔记 + 完整原文(内容多时各自滚动) */
+  .note-preview {
+    position: fixed; z-index: 47;
+    width: min(340px, calc(100vw - 32px));
+    max-height: calc(100vh - 24px); overflow: auto;
+    padding: 10px 12px;
+    background: var(--sp-bg); color: var(--sp-fg);
+    border: 1px solid var(--chrome-border); border-radius: 8px;
+    box-shadow: 0 8px 24px var(--shadow-color, rgba(0,0,0,.24));
+    box-sizing: border-box;
+  }
+  .np-label {
+    color: var(--fg-muted); font-size: calc(var(--ui-font-sub) - 1px);
+    font-weight: 600; letter-spacing: 1px;
+  }
+  .np-note {
+    margin: 5px 0 10px;
+    color: var(--fg); font-size: var(--ui-font-sub); line-height: 1.6;
+    white-space: pre-wrap; word-break: break-word;
+    max-height: 220px; overflow: auto;
+  }
+  .np-quote {
+    margin-top: 5px;
+    max-height: 200px; overflow: auto;
+    color: var(--fg); font-size: var(--ui-font-sub); line-height: 1.6;
+    white-space: pre-wrap; word-break: break-word;
+  }
 
   /* 新建笔记卡片 */
   .note-composer {

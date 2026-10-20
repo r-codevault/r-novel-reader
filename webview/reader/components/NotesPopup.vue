@@ -3,7 +3,7 @@
  * NotesPopup.vue — 阅读笔记浮层
  *
  * 结构: 头部(条数) → 书分组(可折叠) → 章分组(可折叠) → 条目(正文/原文/时间)
- * 交互: 点条目或「定位到原文」跳回原文; 行内编辑; 两步确认删除
+ * 交互: 点条目或「定位到原文」跳回原文; 悬浮条目右侧浮窗看完整笔记+原文; 行内编辑; 两步确认删除
  */
 import { computed, nextTick, ref, watch } from 'vue';
 import { state, send, type NoteItem } from '../composables/vscode';
@@ -33,9 +33,10 @@ function isCollapsed(g: NoteBookGroup): boolean {
   return !isGroupOpen(state.noteGroupOpen, g);
 }
 function toggleGroup(g: NoteBookGroup): void {
-  // 即将收起: 先收掉正在编辑的草稿, 避免它悬在已收起的分组上
+  // 即将收起: 先收掉正在编辑的草稿与悬浮预览, 避免它们悬在已收起的分组上
   if (!isCollapsed(g)) {
     cancelEdit();
+    hidePreview();
   }
   toggleGroupOpen(state.noteGroupOpen, g);
 }
@@ -45,6 +46,7 @@ function isChapCollapsed(bookPath: string, c: NoteChapterGroup): boolean {
 function toggleChapter(bookPath: string, c: NoteChapterGroup): void {
   if (!isChapCollapsed(bookPath, c)) {
     cancelEdit();
+    hidePreview();
   }
   toggleChapterOpen(state.noteChapterOpen, bookPath, c);
 }
@@ -78,6 +80,9 @@ function saveEdit(): void {
   if (!cur) { cancelEdit(); return; }
   if (text === cur.text) { cancelEdit(); return; }
   send({ type: 'updateNote', id: editingId.value, text });
+  // 立即退出编辑态: 之前要等 noteUpserted 回执, 期间编辑框还在,
+  // 用户以为没存上再点一次 → "保存要点击两次"的错觉(数据其实第一次就存了)
+  cancelEdit();
 }
 function onEditKey(e: KeyboardEvent): void {
   e.stopPropagation();
@@ -97,6 +102,8 @@ function requestDelete(n: NoteItem): void {
   if (pendingDeleteId.value === n.id) {
     clearDeleteTimer();
     pendingDeleteId.value = '';
+    // 该条目即将从列表移除: 元素被删除时 mouseleave 不会触发, 预览会一直悬在原地 → 主动收起
+    hidePreview();
     send({ type: 'removeNote', id: n.id });
     return;
   }
@@ -111,12 +118,60 @@ function clearDeleteTimer(): void {
   if (deleteTimer !== null) { window.clearTimeout(deleteTimer); deleteTimer = null; }
 }
 watch(function () { return state.notesOpen; }, function (open) {
-  if (!open) { cancelEdit(); pendingDeleteId.value = ''; clearDeleteTimer(); }
+  if (!open) { cancelEdit(); pendingDeleteId.value = ''; clearDeleteTimer(); hidePreview(); }
 });
+
+// ---------------------------------------------------------------- 悬浮预览(右侧浮窗: 笔记 + 完整原文)
+const previewNote = ref<NoteItem | null>(null);
+const previewPos = ref({ left: 0, top: 0 });
+let hoverTimer: number | null = null;
+let hideTimer: number | null = null;
+
+function showPreview(n: NoteItem, e: MouseEvent): void {
+  hidePreview();
+  const item = e.currentTarget as HTMLElement;
+  hoverTimer = window.setTimeout(function () {
+    const rect = item.getBoundingClientRect();
+    const popup = rootRef.value?.getBoundingClientRect();
+    const w = Math.min(340, window.innerWidth - 32);
+    const estimated = 260;
+    let left = (popup ? popup.right : rect.right) + 10;
+    if (left + w > window.innerWidth - 8) {
+      left = (popup ? popup.left : rect.left) - w - 10;
+    }
+    left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+    const top = Math.max(8, Math.min(rect.top, window.innerHeight - estimated - 8));
+    previewPos.value = { left, top };
+    previewNote.value = n;
+    hoverTimer = null;
+  }, 240);
+}
+function hidePreview(): void {
+  if (hoverTimer !== null) { window.clearTimeout(hoverTimer); hoverTimer = null; }
+  if (hideTimer !== null) { window.clearTimeout(hideTimer); hideTimer = null; }
+  previewNote.value = null;
+}
+/** 鼠标移出条目时留一点缓冲, 便于把指针移到浮窗里看完整内容 */
+function hideSoon(): void {
+  if (hoverTimer !== null) { window.clearTimeout(hoverTimer); hoverTimer = null; }
+  if (hideTimer !== null) { window.clearTimeout(hideTimer); }
+  hideTimer = window.setTimeout(function () { hideTimer = null; hidePreview(); }, 180);
+}
+function cancelHide(): void {
+  if (hideTimer !== null) { window.clearTimeout(hideTimer); hideTimer = null; }
+}
+// 兜底: 预览中的笔记被移除时收起。预览为 null 必须映射为 true,
+// 否则 showPreview 内部先 hidePreview 的正常流程会误触发本 watch 清掉 hover 定时器
+// (本段必须位于 previewNote 声明之后: watch 立即求值, 提前引用会踩 TDZ)
+watch(function () {
+  const id = previewNote.value?.id;
+  return id ? state.notes.some(function (n) { return n.id === id; }) : true;
+}, function (exists) { if (!exists) { hidePreview(); } });
 
 // ---------------------------------------------------------------- 跳转
 function jumpTo(n: NoteItem): void {
   if (n.bookPath !== (state.novel as { filePath?: string } | null)?.filePath) { return; }
+  hidePreview();
   emit('jump', n);
 }
 
@@ -170,7 +225,8 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
             <div v-if="!isChapCollapsed(g.bookPath, c)" class="nt-items">
           <div v-for="n in c.items" :key="n.id" class="nt-item" :data-note-id="n.id"
             :class="{ editing: editingId === n.id }"
-            @click="editingId === n.id ? null : jumpTo(n)">
+            @click="editingId === n.id ? null : jumpTo(n)"
+            @mouseenter="showPreview(n, $event)" @mouseleave="hideSoon()">
             <template v-if="editingId === n.id">
               <textarea class="nt-edit-area" v-model="editingText" rows="3"
                 @keydown="onEditKey" @click.stop></textarea>
@@ -184,7 +240,7 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
             <template v-else>
               <p v-if="noteHasText(n)" class="nt-text">{{ n.text }}</p>
               <div class="nt-meta">
-                <span class="nt-quote" :title="n.quote">{{ n.quote }}</span>
+                <span class="nt-quote" :title="n.quote">原文：{{ n.quote }}</span>
                 <span class="nt-time">{{ relativeTime(n.updatedAt) }}</span>
               </div>
               <div class="nt-acts">
@@ -204,6 +260,17 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
 
     <div class="popup-foot nt-foot">
       <span class="nt-foot-tip">在正文中单击任意段落即可记笔记</span>
+    </div>
+
+    <!-- 悬浮预览: 笔记 + 完整原文 -->
+    <div v-if="previewNote" class="note-preview" :style="{ left: previewPos.left + 'px', top: previewPos.top + 'px' }"
+      @mouseenter="cancelHide()" @mouseleave="hidePreview()">
+      <template v-if="noteHasText(previewNote)">
+        <div class="np-label">笔记</div>
+        <div class="np-note">{{ previewNote.text }}</div>
+      </template>
+      <div class="np-label">原文</div>
+      <div class="np-quote">{{ previewNote.quote }}</div>
     </div>
   </section>
 </template>
