@@ -49,6 +49,11 @@ function save(): void {
   const text = (c.text || '').trim();
   c.phase = 'saving';
   c.error = '';
+  if (c.editId) {
+    // 带入了已有笔记: 保存即更新该条
+    send({ type: 'updateNote', id: c.editId, text });
+    return;
+  }
   send({
     type: 'addNote',
     chapterTitle: c.chapterTitle,
@@ -77,7 +82,7 @@ function onKeydown(e: KeyboardEvent): void {
 <template>
   <div v-if="comp" class="note-composer" :style="cardStyle" @click.stop @keydown="onKeydown">
     <div class="nc-head">
-      <span class="nc-title">新建笔记</span>
+      <span class="nc-title">{{ comp.editId ? '编辑笔记' : '新建笔记' }}</span>
       <span class="spacer"></span>
       <span class="nc-chap" :title="comp.chapterTitle">{{ comp.chapterTitle }}</span>
     </div>

@@ -3,7 +3,7 @@
  * ReaderArea.vue — 正文阅读区(留白 + 纸面 + 左右宽度拖拽手柄)
  * 宽度拖拽与手柄定位自包含; resize 对齐由 App 调用 positionHandles()
  */
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { state, gotoChapter, type NoteItem } from '../composables/vscode';
 import { findParagraph } from '../../../src/noteAnchor';
 import { persistSettings, CONTENT_WIDTH, syncXScrollbar } from '../store';
@@ -56,39 +56,6 @@ const composerPara = computed<number>(function () {
   return c.paragraphIndex;
 });
 
-// ---------------------------------------------------------------- 笔记: 段落悬浮预览(已记笔记的段落)
-const paraTip = ref<{ index: number; top: number; left: number } | null>(null);
-let tipTimer: number | null = null;
-const TIP_EST_H = 110;
-const TIP_MAX_W = 340;
-
-function onParaEnter(index: number, e: MouseEvent): void {
-  if (!paraNotes.value.has(index)) { return; }
-  onParaLeave();
-  const item = e.currentTarget as HTMLElement;
-  tipTimer = window.setTimeout(function () {
-    const rect = item.getBoundingClientRect();
-    const w = Math.min(TIP_MAX_W, window.innerWidth - 32);
-    // 默认显示在段落上方; 空间不足(触顶)翻到段落下方
-    let top = rect.top - TIP_EST_H - 10;
-    if (top < 8) { top = rect.bottom + 10; }
-    const left = Math.max(8, Math.min(rect.left, window.innerWidth - w - 8));
-    paraTip.value = { index, top, left };
-    tipTimer = null;
-  }, 250);
-}
-function onParaLeave(): void {
-  if (tipTimer !== null) { window.clearTimeout(tipTimer); tipTimer = null; }
-  paraTip.value = null;
-}
-// 章变化/滚动时预览悬在错误位置, 直接收起
-watch(function () { return state.chapter; }, function () { onParaLeave(); });
-
-/** 空笔记占位: 与笔记浮层保持一致 */
-function tipText(n: NoteItem): string {
-  return n.text && n.text.trim() ? n.text : '（未填写内容）';
-}
-
 /** mousedown 时是否已有文本选区(拖选复制/查词时不应弹卡片) */
 let hadSelection = false;
 
@@ -102,7 +69,6 @@ function onParaMouseDown(): void {
 }
 
 function onParaClick(index: number, e: MouseEvent): void {
-  onParaLeave();
   if (hadSelection) { hadSelection = false; return; }
   if (selectionActive()) { return; }
   const ch = state.chapter;
@@ -111,13 +77,20 @@ function onParaClick(index: number, e: MouseEvent): void {
   if (!text) { return; }
   if (resizingWidth.value) { return; }
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  // 该段落已有笔记 → 带入最近编辑的一条内容(保存走 updateNote); 否则新建
+  const existing = paraNotes.value.get(index);
+  let latest: NoteItem | null = null;
+  if (existing && existing.length) {
+    latest = existing.reduce(function (a, b) { return (b.updatedAt || 0) > (a.updatedAt || 0) ? b : a; });
+  }
   state.noteComposer = {
     phase: 'composing',
     chapterTitle: ch.title,
     chapterIndex: ch.index,
     paragraphIndex: index,
     quote: text,
-    text: '',
+    text: latest ? latest.text : '',
+    editId: latest ? latest.id : undefined,
     anchorTop: rect.top,
     anchorBottom: rect.bottom,
     anchorLeft: rect.left,
@@ -215,8 +188,6 @@ onMounted(function () {
   document.addEventListener('pointermove', function (e: PointerEvent) { moveWidthDrag(e); });
   document.addEventListener('pointerup', function (e: PointerEvent) { endWidthDrag(e); });
   document.addEventListener('pointercancel', function (e: PointerEvent) { endWidthDrag(e); });
-  // 滚动时收起段落笔记预览(固定定位会悬在错误位置)
-  window.addEventListener('scroll', onParaLeave, { passive: true });
   window.addEventListener('resize', positionHandles);
   window.addEventListener('resize', syncXScrollbar);
   requestAnimationFrame(positionHandles);
@@ -232,8 +203,7 @@ defineExpose({ positionHandles, scrollToParagraph });
       <p v-if="paras.length === 0" class="empty-tip">(本章无内容)</p>
       <p v-for="(p, i) in paras" :key="i" class="rd-para" :data-p="i"
         :class="{ 'rd-para-noted': paraNotes.has(i), 'rd-para-active': composerPara === i }"
-        @mousedown="onParaMouseDown" @click="onParaClick(i, $event)"
-        @mouseenter="onParaEnter(i, $event)" @mouseleave="onParaLeave">{{ p }}</p>
+        @mousedown="onParaMouseDown" @click="onParaClick(i, $event)">{{ p }}</p>
     </article>
 
     <!-- 章节底部导航(纸面外侧, 跟随页面滚动) -->
@@ -245,13 +215,5 @@ defineExpose({ positionHandles, scrollToParagraph });
       @pointerdown="beginWidthDrag('left', $event)"></div>
     <div ref="handleRightRef" class="width-handle" :style="handleRightStyle" aria-hidden="true"
       @pointerdown="beginWidthDrag('right', $event)"></div>
-
-    <!-- 段落悬浮笔记预览: 显示在该段上方(触顶翻到下方), 不拦截指针 -->
-    <div v-if="paraTip" class="para-note-tip"
-      :style="{ top: paraTip.top + 'px', left: paraTip.left + 'px' }" aria-hidden="true">
-      <div v-for="n in (paraNotes.get(paraTip.index) || [])" :key="n.id" class="pnt-item">
-        <p class="pnt-text" :class="{ 'pnt-text-empty': !(n.text && n.text.trim()) }">{{ tipText(n) }}</p>
-      </div>
-    </div>
   </main>
 </template>

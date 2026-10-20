@@ -59,6 +59,8 @@ export interface NoteComposerState {
   paragraphIndex: number;
   quote: string;
   text: string;
+  /** 带入的已有笔记 id: 有值时保存走 updateNote(编辑), 无值走 addNote(新建) */
+  editId?: string;
   /** 段落锚点(视口坐标), 卡片据此定位 */
   anchorTop: number;
   anchorBottom: number;

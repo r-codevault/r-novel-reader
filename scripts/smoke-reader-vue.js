@@ -1270,24 +1270,49 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#notesPopup .nt-chap-group'), '书内应渲染章分组');
   assert(document.querySelector('#notesPopup .nt-chap-group:not(.collapsed)'), '在读章分组应默认展开');
   assert(document.querySelector('#notesPopup .nt-chap-head .nt-tag'), '在读章分组应带「在读」标签');
-  // 悬浮已记笔记的段落 → 顶部预览显示笔记正文
+  // 正文段落悬浮不再有笔记浮窗(hover content 效果已移除)
   p1After.dispatchEvent(new win.MouseEvent('mouseenter'));
   await sleep(320);
-  const pTip = document.querySelector('.para-note-tip');
-  assert(pTip, '悬浮已记笔记的段落应出现笔记预览');
-  assert(pTip.textContent.includes('第一条笔记'), '段落预览应显示笔记正文');
-  p1After.dispatchEvent(new win.MouseEvent('mouseleave'));
-  await sleep(20);
-  assert(!document.querySelector('.para-note-tip'), '移出段落后预览应收起');
+  assert(!document.querySelector('.para-note-tip'), '正文段落悬浮不应再显示笔记浮窗');
 
-  // 5) 条目内联「定位到原文」; 条目悬浮不再弹白色浮窗
+  // 5) 条目内联「定位到原文」; 悬浮条目 → 下方浮出完整笔记+原文浮窗(与浮层左对齐)
   const nt1 = document.querySelector('#notesPopup .nt-item');
   nt1.dispatchEvent(new win.MouseEvent('mouseenter'));
   await sleep(320);
-  assert(!document.querySelector('.note-preview'), '条目悬浮不应再弹出白色预览浮窗');
+  const pv = document.querySelector('.note-preview');
+  assert(pv, '悬浮条目应出现预览浮窗');
+  assert(pv.textContent.includes('笔记') && pv.textContent.includes('第一条笔记'), '预览应显示笔记正文');
+  assert(pv.textContent.includes('原文') && pv.textContent.includes('乙段原文。'), '预览应显示完整原文');
+  const pvLeft = Math.abs(pv.getBoundingClientRect().left - document.querySelector('#notesPopup').getBoundingClientRect().left);
+  assert(pvLeft < 2, '浮窗应与浮层左对齐(不外扩挡正文)');
+  nt1.dispatchEvent(new win.MouseEvent('mouseleave'));
+  await sleep(200);
+  assert(!document.querySelector('.note-preview'), '移出条目后预览浮窗应收起');
   const goBtn = nt1.querySelector('.nt-go');
   assert(goBtn && goBtn.textContent.includes('定位到原文'), '条目内应有「定位到原文」按钮');
   assert(nt1.querySelector('.nt-quote').textContent.includes('原文：乙段原文。'), '条目原文应带「原文」前缀');
+
+  // 5b) 点击已记笔记的段落 → 卡片带入已有内容, 保存走 updateNote
+  document.querySelector('#notesPopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  posted.length = 0;
+  p1After.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+  p1After.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  const editComposer = document.querySelector('.note-composer');
+  assert(editComposer, '点击已记笔记的段落应弹出卡片');
+  assert((editComposer.querySelector('.nc-title') || {}).textContent === '编辑笔记', '已有笔记时标题应为「编辑笔记」');
+  assert(editComposer.querySelector('.nc-text').value === '第一条笔记', '卡片应带入已有笔记内容');
+  const editTa = editComposer.querySelector('.nc-text');
+  editTa.value = '第一条笔记(改)';
+  editTa.dispatchEvent(new win.Event('input', { bubbles: true }));
+  editComposer.querySelector('.nc-btn-primary').click();
+  await sleep(30);
+  const updMsg = posted.find((m) => m.type === 'updateNote');
+  assert(updMsg && updMsg.id === 'note-1' && updMsg.text === '第一条笔记(改)', '已有笔记保存应发 updateNote');
+  sendMsg({ type: 'noteUpserted', item: { ...noteItem, text: '第一条笔记(改)', updatedAt: 2 } });
+  await sleep(30);
+  assert(!document.querySelector('.note-composer'), '编辑保存成功后卡片应关闭');
 
   // 6) 两步删除: 第一次只变文案, 第二次才发 removeNote
   posted.length = 0;

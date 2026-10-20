@@ -276,33 +276,33 @@
   /* ---------- 滚动条: 跟随阅读主题(默认 Chromium 深色滚动条会与浅色主题格格不入) ---------- */
   /* ---------- 滚动条: 与底部状态栏进度条同风格(细 + 高亮色 --sp-accent) ---------- */
   .cat-body, #settingsPanel, #catalogPanel,
-  #shelfPopup .popup-body, #storagePopup .popup-body, #notesPopup .popup-body {
+  #shelfPopup .popup-body, #storagePopup .popup-body, #notesPopup .popup-body, .note-preview {
     scrollbar-width: thin;
     scrollbar-color: var(--sp-accent) transparent; /* Firefox */
   }
   .cat-body::-webkit-scrollbar, #settingsPanel::-webkit-scrollbar,
   #catalogPanel::-webkit-scrollbar,
   #shelfPopup .popup-body::-webkit-scrollbar, #storagePopup .popup-body::-webkit-scrollbar,
-  #notesPopup .popup-body::-webkit-scrollbar {
+  #notesPopup .popup-body::-webkit-scrollbar, .note-preview::-webkit-scrollbar {
     width: 6px; height: 6px;
   }
   .cat-body::-webkit-scrollbar-track, #settingsPanel::-webkit-scrollbar-track,
   #catalogPanel::-webkit-scrollbar-track,
   #shelfPopup .popup-body::-webkit-scrollbar-track, #storagePopup .popup-body::-webkit-scrollbar-track,
-  #notesPopup .popup-body::-webkit-scrollbar-track {
+  #notesPopup .popup-body::-webkit-scrollbar-track, .note-preview::-webkit-scrollbar-track {
     background: transparent;
   }
   .cat-body::-webkit-scrollbar-thumb, #settingsPanel::-webkit-scrollbar-thumb,
   #catalogPanel::-webkit-scrollbar-thumb,
   #shelfPopup .popup-body::-webkit-scrollbar-thumb, #storagePopup .popup-body::-webkit-scrollbar-thumb,
-  #notesPopup .popup-body::-webkit-scrollbar-thumb {
+  #notesPopup .popup-body::-webkit-scrollbar-thumb, .note-preview::-webkit-scrollbar-thumb {
     background: var(--sp-accent); /* 与状态栏进度条填充同色: 浅色红 / 黑夜金 */
     border-radius: 3px;
   }
   .cat-body::-webkit-scrollbar-thumb:hover, #settingsPanel::-webkit-scrollbar-thumb:hover,
   #catalogPanel::-webkit-scrollbar-thumb:hover,
   #shelfPopup .popup-body::-webkit-scrollbar-thumb:hover, #storagePopup .popup-body::-webkit-scrollbar-thumb:hover,
-  #notesPopup .popup-body::-webkit-scrollbar-thumb:hover {
+  #notesPopup .popup-body::-webkit-scrollbar-thumb:hover, .note-preview::-webkit-scrollbar-thumb:hover {
     background: var(--accent);
   }
   /* 阅读页整体滚动条(同样风格, 稍宽便于拖拽)
@@ -801,6 +801,34 @@
   .nt-foot { padding: 8px 16px 10px; }
   .nt-foot-tip { color: var(--fg-muted); font-size: var(--ui-font-sub); }
 
+  /* 悬浮预览: 锚定条目下方(间距同新建卡片), 与浮层左对齐同宽; 笔记+原文各自滚动 */
+  .note-preview {
+    position: fixed; z-index: 47;
+    width: min(420px, calc(100vw - 32px));
+    max-height: calc(100vh - 24px); overflow: auto;
+    padding: 10px 12px;
+    background: var(--sp-bg); color: var(--sp-fg);
+    border: 1px solid var(--chrome-border); border-radius: 8px;
+    box-shadow: 0 8px 24px var(--shadow-color, rgba(0,0,0,.24));
+    box-sizing: border-box;
+  }
+  .np-label {
+    color: var(--fg-muted); font-size: calc(var(--ui-font-sub) - 1px);
+    font-weight: 600; letter-spacing: 1px;
+  }
+  .np-note {
+    margin: 5px 0 10px;
+    color: var(--fg); font-size: var(--ui-font-sub); line-height: 1.6;
+    white-space: pre-wrap; word-break: break-word;
+    max-height: 220px; overflow: auto;
+  }
+  .np-quote {
+    margin-top: 5px;
+    max-height: 220px; overflow: auto;
+    color: var(--fg); font-size: var(--ui-font-sub); line-height: 1.6;
+    white-space: pre-wrap; word-break: break-word;
+  }
+
   /* 新建笔记卡片 */
   .note-composer {
     position: fixed; z-index: 46;
@@ -863,29 +891,7 @@
     text-underline-offset: 5px;
   }
 
-  /* 段落悬浮笔记预览: 段落上方(触顶翻下方), 纯展示不拦截指针(低于卡片 46/弹窗 47) */
-  .para-note-tip {
-    position: fixed; z-index: 40;
-    max-width: 340px; box-sizing: border-box;
-    background: var(--bg); color: var(--fg);
-    border: 1px solid var(--border-strong);
-    border-radius: 6px;
-    box-shadow: 0 4px 16px var(--shadow-color);
-    padding: 8px 10px;
-    pointer-events: none;
-  }
-  .para-note-tip .pnt-item + .pnt-item {
-    margin-top: 6px; padding-top: 6px;
-    border-top: 1px dashed var(--chrome-border);
-  }
-  .para-note-tip .pnt-text {
-    margin: 0;
-    font-size: var(--ui-font); line-height: 1.55;
-    color: var(--fg); word-break: break-word;
-    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  .para-note-tip .pnt-text-empty { color: var(--fg-muted); }
+  /* 段落虚线下划线(不再有段落悬浮提示浮窗) */
 
   /* 返回上次阅读位置: 章名直接显示在条内, 右侧「关闭」(无原生悬浮提示) */
   .note-return {
