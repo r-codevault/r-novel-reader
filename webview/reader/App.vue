@@ -409,10 +409,9 @@ onMounted(function () {
       <NoteComposer />
       <ReaderArea ref="readerRef" />
       <StatusBar v-show="statusBarVisible()" />
-      <div v-if="state.noteReturn" class="note-return"
-        :title="'返回：' + state.noteReturn.chapterTitle">
-        <button class="nr-main" @click="backToReadingPos">↩ 返回上次阅读位置</button>
-        <button class="nr-close" title="关闭" @click="dismissNoteReturn">×</button>
+      <div v-if="state.noteReturn" class="note-return">
+        <button class="nr-main" @click="backToReadingPos">↩ 返回上次阅读位置 · {{ state.noteReturn.chapterTitle }}</button>
+        <button class="nr-close" @click="dismissNoteReturn">关闭</button>
       </div>
     </div>
   </div>

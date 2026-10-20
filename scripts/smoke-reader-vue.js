@@ -1280,17 +1280,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(20);
   assert(!document.querySelector('.para-note-tip'), '移出段落后预览应收起');
 
-  // 5) 条目内联「定位到原文」+ 悬浮右侧浮窗显示完整笔记与原文
+  // 5) 条目内联「定位到原文」; 条目悬浮不再弹白色浮窗
   const nt1 = document.querySelector('#notesPopup .nt-item');
   nt1.dispatchEvent(new win.MouseEvent('mouseenter'));
   await sleep(320);
-  const pv = document.querySelector('.note-preview');
-  assert(pv, '悬浮条目应出现右侧预览浮窗');
-  assert(pv.textContent.includes('笔记') && pv.textContent.includes('第一条笔记'), '预览应显示笔记正文');
-  assert(pv.textContent.includes('原文') && pv.textContent.includes('乙段原文。'), '预览应显示完整原文');
-  nt1.dispatchEvent(new win.MouseEvent('mouseleave'));
-  await sleep(200);
-  assert(!document.querySelector('.note-preview'), '移出条目后预览浮窗应收起');
+  assert(!document.querySelector('.note-preview'), '条目悬浮不应再弹出白色预览浮窗');
   const goBtn = nt1.querySelector('.nt-go');
   assert(goBtn && goBtn.textContent.includes('定位到原文'), '条目内应有「定位到原文」按钮');
   assert(nt1.querySelector('.nt-quote').textContent.includes('原文：乙段原文。'), '条目原文应带「原文」前缀');
@@ -1303,14 +1297,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#notesPopup .nt-act-danger').textContent.includes('确认删除'),
     '第一次点删除应变「确认删除」');
   assert(!posted.some((m) => m.type === 'removeNote'), '第一次点击不应发 removeNote');
-  // 预览浮窗打开时确认删除 → 浮窗应收起(条目移除后 mouseleave 不触发, 需主动收)
-  nt1.dispatchEvent(new win.MouseEvent('mouseenter'));
-  await sleep(320);
-  assert(document.querySelector('.note-preview'), '删除前预览浮窗应存在');
   document.querySelector('#notesPopup .nt-act-danger').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   assert(posted.some((m) => m.type === 'removeNote' && m.id === 'note-1'), '第二次点击应发 removeNote');
-  assert(!document.querySelector('.note-preview'), '确认删除后预览浮窗应收起');
   // 恢复该条, 供跳转测试
   sendMsg({ type: 'noteUpserted', item: noteItem });
   await sleep(30);
@@ -1323,8 +1312,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#content p[data-p="1"]').classList.contains('note-focus'),
     '目标段落应加 .note-focus 高亮');
   assert(document.querySelector('.note-return'), '跳转后应出现返回提示条');
-  assert(document.querySelector('.note-return .nr-main').textContent.includes('返回上次阅读位置'),
-    '返回提示条文案应为「返回上次阅读位置」');
+  const nrMain = document.querySelector('.note-return .nr-main');
+  assert(nrMain.textContent.includes('返回上次阅读位置'), '提示条文案应为「返回上次阅读位置」');
+  assert(nrMain.textContent.includes(novel.chapters[2].title), '提示条应直接显示章名(无原生悬浮提示)');
+  assert(document.querySelector('.note-return .nr-close').textContent.trim() === '关闭',
+    '右侧应为「关闭」按钮');
   assert(!posted.some((m) => m.type === 'saveProgress'), '跳转落位期间不应上报进度(避免污染书架位置)');
 
   // 8) 返回提示条: × 关闭 → 重新跳转 → 主按钮返回
