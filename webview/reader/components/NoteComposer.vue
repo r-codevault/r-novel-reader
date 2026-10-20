@@ -20,7 +20,7 @@ const cardStyle = computed(function () {
   if (!c) { return {}; }
   const margin = 8;
   const w = Math.min(420, window.innerWidth - 32);
-  const estH = 186; // 头部 + textarea + 底部按钮行(引用行已移除)
+  const estH = c.phase === 'viewing' ? 150 : 186;
   let top = c.anchorBottom + margin;
   if (top + estH > window.innerHeight - margin) {
     top = Math.max(margin, c.anchorTop - estH - margin);
@@ -42,9 +42,25 @@ function cancel(): void {
   state.noteComposer = null;
 }
 
+/** 查看卡片 → 编辑: 进入编辑态(textarea 带入内容) */
+function startEdit(): void {
+  const c = state.noteComposer;
+  if (!c || c.phase !== 'viewing') { return; }
+  c.phase = 'composing';
+  focusInput();
+}
+
+/** 查看卡片 → 删除: 直接移除该条笔记并关闭卡片 */
+function removeNote(): void {
+  const c = state.noteComposer;
+  if (!c || !c.editId) { return; }
+  send({ type: 'removeNote', id: c.editId });
+  state.noteComposer = null;
+}
+
 function save(): void {
   const c = state.noteComposer;
-  if (!c || c.phase === 'saving') { return; }
+  if (!c || c.phase !== 'composing') { return; }
   // 允许空正文: 只引用原文、不写想法也能存下来
   const text = (c.text || '').trim();
   c.phase = 'saving';
@@ -82,19 +98,28 @@ function onKeydown(e: KeyboardEvent): void {
 <template>
   <div v-if="comp" class="note-composer" :style="cardStyle" @click.stop @keydown="onKeydown">
     <div class="nc-head">
-      <span class="nc-title">{{ comp.editId ? '编辑笔记' : '新建笔记' }}</span>
+      <span class="nc-title">{{ comp.phase === 'viewing' ? '笔记' : (comp.editId ? '编辑笔记' : '新建笔记') }}</span>
       <span class="spacer"></span>
       <span class="nc-chap" :title="comp.chapterTitle">{{ comp.chapterTitle }}</span>
     </div>
-    <textarea ref="textRef" class="nc-text" v-model="comp.text" rows="3"
-      placeholder="写点什么…" @input="comp.error = ''"></textarea>
-    <div class="nc-foot">
-      <span class="nc-err">{{ comp.error || '' }}</span>
-      <span class="spacer"></span>
-      <span class="nc-hint">Esc 取消 · Ctrl+Enter 保存</span>
-      <button class="nc-btn" @click="cancel()">取消</button>
-      <button class="nc-btn nc-btn-primary" :disabled="comp.phase === 'saving'"
-        @click="save()">{{ comp.phase === 'saving' ? '保存中…' : '保存' }}</button>
-    </div>
+    <template v-if="comp.phase === 'viewing'">
+      <div class="nc-view-text">{{ comp.text && comp.text.trim() ? comp.text : '（未填写内容）' }}</div>
+      <div class="nc-foot">
+        <button class="nc-btn nc-btn-primary" @click="startEdit()">编辑</button>
+        <button class="nc-btn" @click="removeNote()">删除</button>
+      </div>
+    </template>
+    <template v-else>
+      <textarea ref="textRef" class="nc-text" v-model="comp.text" rows="3"
+        placeholder="写点什么…" @input="comp.error = ''"></textarea>
+      <div class="nc-foot">
+        <span class="nc-err">{{ comp.error || '' }}</span>
+        <span class="spacer"></span>
+        <span class="nc-hint">Esc 取消 · Ctrl+Enter 保存</span>
+        <button class="nc-btn" @click="cancel()">取消</button>
+        <button class="nc-btn nc-btn-primary" :disabled="comp.phase === 'saving'"
+          @click="save()">{{ comp.phase === 'saving' ? '保存中…' : '保存' }}</button>
+      </div>
+    </template>
   </div>
 </template>

@@ -133,6 +133,22 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.noteReturn = null;
       state.noteJump = null;
       // 折叠态是"用户显式选择", 换书/重发 init 都不清空(新书默认展开靠 current 推导)
+      // 跨书笔记跳转: 目标书 init 落地后按笔记章节定位
+      const pending = state.pendingNoteJump;
+      if (pending && pending.bookPath === state.novel.filePath) {
+        state.pendingNoteJump = null;
+        state.noteJump = {
+          id: pending.id,
+          chapterTitle: pending.chapterTitle,
+          chapterIndex: pending.chapterIndex,
+          paragraphIndex: pending.paragraphIndex,
+          quote: pending.quote,
+        };
+        gotoChapter(resolveChapterIndex(state.chapters, pending), 'jump');
+      } else if (pending) {
+        // 打开的书不是目标书(打开失败或用户手动换了书): 丢弃过期的待跳转
+        state.pendingNoteJump = null;
+      }
       break;
     }
     case 'chapter':
@@ -237,11 +253,21 @@ function onVisibilityChange(): void {
 }
 
 // ---------------------------------------------------------------- 笔记跳转 / 返回上次位置
-/** 从笔记跳回原文: 先记住当前阅读位置, 再定位章节与段落 */
+/** 从笔记跳回原文: 同书直接定位; 跨书先换书, init 落地后再定位 */
 function jumpToNote(note: NoteItem): void {
-  const cur = state.chapter;
+  if (!note) { return; }
   const currentPath = (state.novel && state.novel.filePath) || '';
-  if (!cur || !note || note.bookPath !== currentPath) { return; }
+  if (note.bookPath !== currentPath) {
+    // 跨书跳转: 先换书(openBook 复用当前面板并重发 init), 原返回点属于上一本书, 丢弃
+    state.noteReturn = null;
+    state.noteComposer = null;
+    state.pendingNoteJump = note;
+    state.notesOpen = false;
+    vscode.postMessage({ type: 'openBook', filePath: note.bookPath });
+    return;
+  }
+  const cur = state.chapter;
+  if (!cur) { return; }
 
   state.noteReturn = {
     chapterIndex: cur.index,

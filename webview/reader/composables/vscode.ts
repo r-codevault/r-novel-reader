@@ -53,7 +53,8 @@ export interface NoteItem {
 
 /** 新建笔记卡片的状态(仅内存, 取消即丢弃) */
 export interface NoteComposerState {
-  phase: 'composing' | 'saving';
+  /** composing=编辑(新建/编辑) viewing=只读查看(点「编辑」进入编辑) saving=保存中 */
+  phase: 'composing' | 'saving' | 'viewing';
   chapterTitle: string;
   chapterIndex: number;
   paragraphIndex: number;
@@ -134,6 +135,8 @@ export const state = reactive({
   noteReturn: null as NoteReturnPos | null,
   /** 待落位跳转 */
   noteJump: null as NoteJumpTarget | null,
+  /** 跨书跳转: 待目标书 init 落地后再按笔记定位 */
+  pendingNoteJump: null as NoteItem | null,
 });
 
 /** 发消息给扩展(自由格式, 字段与协议一一对应) */

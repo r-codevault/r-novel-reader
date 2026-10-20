@@ -83,14 +83,15 @@ function onParaClick(index: number, e: MouseEvent): void {
   if (!text) { return; }
   if (resizingWidth.value) { return; }
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-  // 该段落已有笔记 → 带入最近编辑的一条内容(保存走 updateNote); 否则新建
+  // 该段落已有笔记 → 带入最近编辑的一条: 有内容先「查看」, 点编辑再改; 空内容直接进入编辑
   const existing = paraNotes.value.get(index);
   let latest: NoteItem | null = null;
   if (existing && existing.length) {
     latest = existing.reduce(function (a, b) { return (b.updatedAt || 0) > (a.updatedAt || 0) ? b : a; });
   }
+  const hasContent = !!(latest && latest.text && latest.text.trim());
   state.noteComposer = {
-    phase: 'composing',
+    phase: hasContent ? 'viewing' : 'composing',
     chapterTitle: ch.title,
     chapterIndex: ch.index,
     paragraphIndex: index,

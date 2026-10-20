@@ -865,6 +865,14 @@
     max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     color: var(--fg-muted); font-size: var(--ui-font-sub);
   }
+  .nc-view-text {
+    margin-bottom: 8px; padding: 6px 8px;
+    max-height: 200px; overflow: auto;
+    background: var(--sp-control-bg); color: var(--fg);
+    border-left: 2px solid var(--accent); border-radius: 3px;
+    font-size: var(--ui-font); line-height: 1.6;
+    white-space: pre-wrap; word-break: break-word;
+  }
   .nc-text {
     width: 100%; box-sizing: border-box;
     padding: 7px 9px; resize: vertical; min-height: 76px;

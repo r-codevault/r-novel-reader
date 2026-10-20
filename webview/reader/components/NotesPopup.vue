@@ -171,7 +171,7 @@ watch(function () {
 
 // ---------------------------------------------------------------- 跳转
 function jumpTo(n: NoteItem): void {
-  if (n.bookPath !== (state.novel as { filePath?: string } | null)?.filePath) { return; }
+  // 跨书条目也允许: App.jumpToNote 会先换书再按笔记定位
   hidePreview();
   emit('jump', n);
 }

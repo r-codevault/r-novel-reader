@@ -1323,27 +1323,51 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(goBtn && goBtn.textContent.includes('定位到原文'), '条目内应有「定位到原文」按钮');
   assert(nt1.querySelector('.nt-quote').textContent.includes('原文：乙段原文。'), '条目原文应带「原文」前缀');
 
-  // 5b) 点击已记笔记的段落 → 卡片带入已有内容, 保存走 updateNote
+  // 5b) 点击已有「有内容」笔记的段落 → 查看卡片(笔记正文+编辑/删除), 点编辑才进入编辑
   document.querySelector('#notesPopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   posted.length = 0;
   p1After.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
   p1After.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
+  const viewCard = document.querySelector('.note-composer');
+  assert(viewCard, '点击已记笔记的段落应弹出卡片');
+  assert((viewCard.querySelector('.nc-title') || {}).textContent === '笔记', '有内容笔记应显示「笔记」查看卡片');
+  assert((viewCard.querySelector('.nc-view-text') || {}).textContent.includes('第一条笔记'), '查看卡片应显示笔记内容');
+  assert(!viewCard.querySelector('.nc-text'), '查看卡片不应有编辑框');
+  assert(!viewCard.querySelector('.nt-quote') && !viewCard.querySelector('.nt-go'), '查看卡片不应有原文行与定位到原文');
+  const viewBtns = Array.from(viewCard.querySelectorAll('.nc-btn')).map((b) => b.textContent.trim());
+  assert(viewBtns.join(',') === '编辑,删除', '查看卡片按钮应为 编辑/删除(实际 ' + viewBtns.join(',') + ')');
+  // 点「编辑」→ 变为编辑卡片并带入内容
+  viewCard.querySelector('.nc-btn-primary').click();
+  await sleep(30);
   const editComposer = document.querySelector('.note-composer');
-  assert(editComposer, '点击已记笔记的段落应弹出卡片');
-  assert((editComposer.querySelector('.nc-title') || {}).textContent === '编辑笔记', '已有笔记时标题应为「编辑笔记」');
-  assert(editComposer.querySelector('.nc-text').value === '第一条笔记', '卡片应带入已有笔记内容');
+  assert(editComposer && (editComposer.querySelector('.nc-title') || {}).textContent === '编辑笔记', '点「编辑」应变为编辑卡片');
   const editTa = editComposer.querySelector('.nc-text');
+  assert(editTa.value === '第一条笔记', '编辑卡片应带入笔记内容');
   editTa.value = '第一条笔记(改)';
   editTa.dispatchEvent(new win.Event('input', { bubbles: true }));
   editComposer.querySelector('.nc-btn-primary').click();
   await sleep(30);
   const updMsg = posted.find((m) => m.type === 'updateNote');
-  assert(updMsg && updMsg.id === 'note-1' && updMsg.text === '第一条笔记(改)', '已有笔记保存应发 updateNote');
+  assert(updMsg && updMsg.id === 'note-1' && updMsg.text === '第一条笔记(改)', '编辑保存应发 updateNote');
   sendMsg({ type: 'noteUpserted', item: { ...noteItem, text: '第一条笔记(改)', updatedAt: 2 } });
   await sleep(30);
   assert(!document.querySelector('.note-composer'), '编辑保存成功后卡片应关闭');
+
+  // 5c) 查看卡片「删除」→ 直接移除该条并关卡片
+  posted.length = 0;
+  p1After.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+  p1After.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  const viewCard2 = document.querySelector('.note-composer');
+  assert(viewCard2 && viewCard2.querySelector('.nc-view-text'), '再次点击段落应弹出查看卡片');
+  Array.from(viewCard2.querySelectorAll('.nc-btn')).find((b) => b.textContent.trim() === '删除').click();
+  await sleep(30);
+  assert(posted.some((m) => m.type === 'removeNote' && m.id === 'note-1'), '查看卡片删除应发 removeNote');
+  assert(!document.querySelector('.note-composer'), '删除后卡片应关闭');
+  sendMsg({ type: 'noteUpserted', item: { ...noteItem, text: '第一条笔记(改)', updatedAt: 3 } });
+  await sleep(30);
 
   // 6) 两步删除: 第一次只变文案, 第二次才发 removeNote
   posted.length = 0;
@@ -1503,11 +1527,36 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(20);
   assert(!bookByTitle(novel.bookTitle).classList.contains('collapsed'), '再点应恢复展开');
 
+  // 9g 跨书跳转: 点击其它书的条目 → openBook 换书 → init 落地后按笔记章节跳转
+  const otherBookEl = bookByTitle('另一本书');
+  // 该书非在读 → 章分组默认收起, 先点开章头让条目进 DOM
+  otherBookEl.querySelector('.nt-chap-head').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  posted.length = 0;
+  otherBookEl.querySelector('[data-note-id="note-other"]')
+    .dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(!$('#notesPopup').classList.contains('open'), '跨书跳转后浮层应收起');
+  const openBookMsg = posted.find((m) => m.type === 'openBook');
+  assert(openBookMsg && openBookMsg.filePath === 'D:/b.txt', '跨书跳转应发 openBook 换书');
+  // 模拟目标书 init 落地(openBook 复用当前面板, 换书会重发 init)
+  sendMsg({ type: 'init', payload: {
+    filePath: 'D:/b.txt', bookTitle: '另一本书', author: '',
+    chapters: [{ index: 0, title: '第1章 起' }], chapterIndex: 0, chapterTitle: '第1章 起',
+    paragraphs: ['另一本第一段。'], totalChapters: 1, totalWords: 100, scrollRatio: 0, chapterWords: 10,
+    settings: { ...defaults }, shelf: [], libraryPath: '', notes: [],
+  } });
+  await sleep(40);
+  const jumpMsg = posted.find((m) => m.type === 'getChapter' && m.dir === 'jump');
+  assert(jumpMsg, '换书落地后应按笔记章节发起跳转');
+  assert(jumpMsg.index === 0, '跳转章节应指向笔记所在章');
+  console.log('跨书跳转(换书/落地定位): 通过');
+
   console.log('笔记补充(空内容保存/空笔记不显示正文/编辑清空/分组默认态/会话保留): 通过');
 
   console.log('\n阅读面板 Vue 冒烟测试全部通过 ✔');
   process.exit(0);
 })().catch((err) => {
-  console.error(err && err.message ? err.message : err);
+  console.error(err && err.stack ? err.stack : err);
   process.exit(1);
 });
