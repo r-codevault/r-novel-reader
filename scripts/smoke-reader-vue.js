@@ -1379,12 +1379,24 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(Array.from(viewCard2.querySelectorAll('.nc-btn')).some((b) => b.textContent.trim() === '删除'),
     '点取消应回退到「删除」');
   assert(!posted.some((m) => m.type === 'removeNote'), '取消不应发 removeNote');
-  // 再走完整两步删除
-  Array.from(viewCard2.querySelectorAll('.nc-btn')).find((b) => b.textContent.trim() === '删除').click();
-  await sleep(20);
-  Array.from(viewCard2.querySelectorAll('.nc-btn')).find((b) => b.textContent.trim() === '确认删除').click();
+
+  // 5d) 编辑卡片(editId)内也可删除: 两步确认, 第二次点击才移除并关卡片
+  Array.from(viewCard2.querySelectorAll('.nc-btn')).find((b) => b.textContent.trim() === '编辑').click();
   await sleep(30);
-  assert(posted.some((m) => m.type === 'removeNote' && m.id === 'note-1'), '第二次点击应发 removeNote');
+  const editCard2 = document.querySelector('.note-composer');
+  assert(editCard2 && editCard2.querySelector('.nc-text'), '点编辑应进入编辑卡片');
+  const editDelBtn = Array.from(editCard2.querySelectorAll('.nc-btn'))
+    .find((b) => b.textContent.trim() === '删除');
+  assert(editDelBtn, '编辑卡片应有「删除」按钮(空笔记也能删)');
+  editDelBtn.click();
+  await sleep(20);
+  const editConfirm = Array.from(editCard2.querySelectorAll('.nc-btn'))
+    .find((b) => b.textContent.trim() === '确认删除');
+  assert(editConfirm, '编辑卡片删除也应两步确认');
+  assert(!posted.some((m) => m.type === 'removeNote'), '确认前不应发 removeNote');
+  editConfirm.click();
+  await sleep(30);
+  assert(posted.some((m) => m.type === 'removeNote' && m.id === 'note-1'), '编辑卡片确认删除应发 removeNote');
   assert(!document.querySelector('.note-composer'), '删除后卡片应关闭');
   sendMsg({ type: 'noteUpserted', item: { ...noteItem, text: '第一条笔记(改)', updatedAt: 3 } });
   await sleep(30);

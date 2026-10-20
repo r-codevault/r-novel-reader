@@ -47,6 +47,7 @@ function startEdit(): void {
   const c = state.noteComposer;
   if (!c || c.phase !== 'viewing') { return; }
   c.phase = 'composing';
+  pendingDelete.value = false;
   focusInput();
 }
 
@@ -74,6 +75,8 @@ watch(function () { return state.noteComposer; }, function (c) {
 function save(): void {
   const c = state.noteComposer;
   if (!c || c.phase !== 'composing') { return; }
+  // 保存前回退删除确认态, 避免确认残留
+  pendingDelete.value = false;
   // 允许空正文: 只引用原文、不写想法也能存下来
   const text = (c.text || '').trim();
   c.phase = 'saving';
@@ -129,6 +132,9 @@ function onKeydown(e: KeyboardEvent): void {
         placeholder="写点什么…" @input="comp.error = ''"></textarea>
       <div class="nc-foot">
         <span class="nc-err">{{ comp.error || '' }}</span>
+        <button v-if="comp.editId" class="nc-btn" :class="{ 'nc-btn-danger': pendingDelete }"
+          @click="requestDelete()">{{ pendingDelete ? '确认删除' : '删除' }}</button>
+        <button v-if="pendingDelete" class="nc-btn" data-cancel @click="cancelDelete()">取消</button>
         <span class="spacer"></span>
         <span class="nc-hint">Esc 取消 · Ctrl+Enter 保存</span>
         <button class="nc-btn" @click="cancel()">取消</button>
