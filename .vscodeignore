@@ -14,3 +14,6 @@ tsconfig.json
 README.md
 media/**/*.json
 media/**/*.json
+.playwright-cli
+.shots
+.vite-dev.log
