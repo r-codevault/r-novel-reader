@@ -18,6 +18,9 @@ const handleLeftRef = ref<HTMLElement | null>(null);
 const handleRightRef = ref<HTMLElement | null>(null);
 const handleLeftStyle = reactive({ left: 'auto', right: 'auto' });
 const handleRightStyle = reactive({ left: 'auto', right: 'auto' });
+/** 两侧章节箭头: 跟随正文(纸面)左右边缘, 而非窗口边缘 */
+const sidePrevStyle = reactive({ left: 'auto', right: 'auto' });
+const sideNextStyle = reactive({ left: 'auto', right: 'auto' });
 const resizingWidth = ref(false);
 
 const chapter = computed(() => state.chapter);
@@ -136,6 +139,13 @@ function positionHandles(): void {
   handleLeftStyle.right = 'auto';
   handleRightStyle.right = readerRect.right - rect.right + 'px';
   handleRightStyle.left = 'auto';
+  // 两侧章节箭头: 锚在纸面左右边缘外侧(而非窗口边缘); 内容宽过窗口时贴边
+  const NAV_W = 88;
+  const NAV_GAP = 6;
+  sidePrevStyle.left = Math.max(4, rect.left - NAV_W - NAV_GAP) + 'px';
+  sidePrevStyle.right = 'auto';
+  sideNextStyle.right = Math.max(4, window.innerWidth - rect.right - NAV_W - NAV_GAP) + 'px';
+  sideNextStyle.left = 'auto';
 }
 
 let widthDrag: { side: 'left' | 'right'; startX: number; startW: number; handle: HTMLElement } | null = null;
@@ -209,15 +219,15 @@ defineExpose({ positionHandles, scrollToParagraph });
         @mousedown="onParaMouseDown" @click="onParaClick(i, $event)">{{ p }}</p>
     </article>
 
-    <!-- 正文两侧: 上/下一章箭头(垂直居中; 阅读设置可切换 常驻/悬浮显示) -->
-    <button class="side-nav side-nav-prev" :class="{ 'hover-only': sideNavHoverOnly }" :disabled="isFirst"
-      title="上一章 (Alt+←)" aria-label="上一章" @click="prevChapter">
+    <!-- 正文两侧: 上/下一章箭头(垂直居中, 跟随正文左右边缘; 阅读设置可切换 常驻/悬浮显示) -->
+    <button class="side-nav side-nav-prev" :class="{ 'hover-only': sideNavHoverOnly }" :style="sidePrevStyle"
+      :disabled="isFirst" title="上一章 (Alt+←)" aria-label="上一章" @click="prevChapter">
       <svg viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true">
         <path d="M213.752501 517.216385a90.360598 90.360598 0 0 0 2.336192 12.265012 60.490705 60.490705 0 0 0 15.185253 27.366829l3.504289 3.504289L695.759123 1003.895393A65.16309 65.16309 0 0 0 747.071928 1023.753031a63.911558 63.911558 0 0 0 61.825672-66.748364 65.413397 65.413397 0 0 0-20.441686-41.717727L373.197655 516.632336c-1.168096-1.168096-2.336193-1.752145-4.672386-4.088337a20.942299 20.942299 0 0 0 5.256434-2.920241Q581.786292 310.296457 789.62401 110.301671a66.748364 66.748364 0 0 0 21.025735-39.047793c0-0.584048 0.584048-0.584048 0.584048-1.168096l0-13.099366c0-0.584048-0.584048-1.168096-0.584048-2.336193a62.826898 62.826898 0 0 0-47.808516-51.312805l-9.928819-2.336193-14.017157-1e-8c0 0.584048-0.584048 0.584048-1.168096 0.58404901a64.745913 64.745913 0 0 0-40.799937 20.942299c-29.703022 29.118974-60.073527 57.737335-90.360598 86.856308l-369.53563 355.601909a55.317707 55.317707 0 0 0-15.769301 22.694444c-2.920241 8.34354499-5.256434 16.687091-7.592626 24.446588z" />
       </svg>
     </button>
-    <button class="side-nav side-nav-next" :class="{ 'hover-only': sideNavHoverOnly }" :disabled="isLast"
-      title="下一章 (Alt+→)" aria-label="下一章" @click="nextChapter">
+    <button class="side-nav side-nav-next" :class="{ 'hover-only': sideNavHoverOnly }" :style="sideNextStyle"
+      :disabled="isLast" title="下一章 (Alt+→)" aria-label="下一章" @click="nextChapter">
       <svg viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true">
         <path d="M810.247499 506.783615a90.360598 90.360598 0 0 0-2.336192-12.265012 60.490705 60.490705 0 0 0-15.185253-27.366829l-3.504289-3.504289L328.240877 20.104607A65.16309 65.16309 0 0 0 276.928072 0.246969a63.911558 63.911558 0 0 0-61.825672 66.748364 65.413397 65.413397 0 0 0 20.441686 41.717727L650.802345 507.367664c1.168096 1.168096 2.336193 1.752145 4.672386 4.088337a20.942299 20.942299 0 0 0-5.256434 2.920241Q442.213708 713.703543 234.37599 913.698329a66.748364 66.748364 0 0 0-21.025735 39.047793c0 0.584048-0.584048 0.584048-0.584048 1.168096v13.099366c0 0.584048 0.584048 1.168096 0.584048 2.336193a62.826898 62.826898 0 0 0 47.808516 51.312805l9.928819 2.336193h14.017157c0-0.584048 0.584048-0.584048 1.168096-0.584049a64.745913 64.745913 0 0 0 40.799937-20.942299c29.703022-29.118974 60.073527-57.737335 90.360598-86.856308l369.53563-355.601909a55.317707 55.317707 0 0 0 15.769301-22.694444c2.920241-8.343545 5.256434-16.687091 7.592626-24.446588z" />
       </svg>

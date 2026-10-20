@@ -957,6 +957,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(sidePrev && sideNext, '正文两侧应有上/下一章箭头');
   assert(!sidePrev.classList.contains('hover-only') && !sideNext.classList.contains('hover-only'),
     '默认应常驻显示');
+  assert(sidePrev.style.left && sidePrev.style.left !== 'auto' && sideNext.style.right !== 'auto',
+    '箭头位置应动态跟随正文左右边缘');
   assert(!sidePrev.disabled && !sideNext.disabled, '中间章节两侧箭头均应可用');
   assert(sideNext.querySelector('svg path'), '箭头应使用 SVG 图标');
   posted.length = 0;

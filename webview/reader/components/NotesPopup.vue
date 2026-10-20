@@ -245,7 +245,7 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
                 <span class="nt-time">{{ relativeTime(n.updatedAt) }}</span>
               </div>
               <div class="nt-acts">
-                <button class="nt-act nt-go" @click.stop="jumpTo(n)">定位到原文 →</button>
+                <button class="nt-act nt-go" @click.stop="jumpTo(n)">定位到原文</button>
                 <span class="spacer"></span>
                 <button class="nt-act" @click.stop="beginEdit(n)">编辑</button>
                 <button class="nt-act nt-act-danger" :class="{ confirming: pendingDeleteId === n.id }"

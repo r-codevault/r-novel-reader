@@ -475,20 +475,18 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
-  /* ---------- 正文两侧: 上/下一章箭头(垂直居中; 阅读设置可切 常驻/悬浮显示) ---------- */
+  /* ---------- 正文两侧: 上/下一章箭头(垂直居中, 跟随正文左右边缘; 阅读设置可切 常驻/悬浮显示) ---------- */
   .side-nav {
     position: fixed; top: 50%; transform: translateY(-50%);
     z-index: 30;
-    width: 44px; height: 96px;
+    width: 88px; height: 192px;
     display: flex; align-items: center; justify-content: center;
     padding: 0;
     background: transparent; color: var(--fg-muted);
     border: 0; cursor: pointer;
     transition: opacity .15s ease, color .15s ease;
   }
-  .side-nav-prev { left: calc(var(--menu-w, 48px) + 10px); }
-  .side-nav-next { right: 10px; }
-  .side-nav svg { width: 26px; height: 26px; display: block; }
+  .side-nav svg { width: 52px; height: 52px; display: block; }
   .side-nav:hover { color: var(--accent); }
   .side-nav:disabled { opacity: .25; cursor: default; }
   .side-nav:disabled:hover { color: var(--fg-muted); }
@@ -915,29 +913,31 @@
 
   /* 段落虚线下划线(不再有段落悬浮提示浮窗) */
 
-  /* 返回上次阅读位置: 金色边框固定, 章名直接显示在条内(两行截断), 右侧「关闭」同主题色 */
+  /* 返回上次阅读位置: 边框固定灰色(与界面一致), 悬停哪个文字哪个变金; 章名两行截断 */
   .note-return {
     position: fixed; z-index: 44;
     right: 18px; bottom: calc(var(--x-sb, 0px) + 56px);
     display: flex; align-items: stretch;
     max-width: calc(100vw - 36px);
     background: var(--sp-bg);
-    border: 1px solid var(--accent); border-radius: 16px;
+    border: 1px solid var(--input-border); border-radius: 16px;
     box-shadow: 0 6px 18px var(--shadow-color, rgba(0,0,0,.22));
     overflow: hidden;
   }
   .note-return .nr-main {
     padding: 6px 12px;
-    background: transparent; color: var(--accent);
+    background: transparent; color: var(--fg);
     border: 0; cursor: pointer;
     font-size: var(--ui-font-sub);
     text-align: left;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
     overflow: hidden; word-break: break-all;
   }
+  .note-return .nr-main:hover { color: var(--accent); }
   .note-return .nr-close {
     padding: 6px 12px;
-    background: transparent; color: var(--accent);
-    border: 0; border-left: 1px solid var(--accent); cursor: pointer;
+    background: transparent; color: var(--fg-muted);
+    border: 0; border-left: 1px solid var(--chrome-border); cursor: pointer;
     font-size: var(--ui-font-sub); line-height: 1;
   }
+  .note-return .nr-close:hover { color: var(--accent); }
