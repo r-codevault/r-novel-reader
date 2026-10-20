@@ -614,26 +614,26 @@
   /* 传统节日菜单: 4 列 5 行(日景 18 项, 夜场不进列表) */
   .sp-festival-menu { grid-template-columns: repeat(4, auto); }
 
+  /* 宣纸纸纹: 384×384 无缝贴图, 只声明一次(避免同一张图在 CSS 里重复内联两遍) */
+  :root { --paper-xuan: url("./assets/paper-xuan.png"); }
   /* ---------- 宣纸主题: 纸纹质感 ----------
-     两层: 低频横纤维(纸帘纹) + 高频细颗粒, 都用 multiply 与底色混合。
-     强度上限 ~18%, 只落在"面"的颜色上, 不改任何令牌 → 不参与对比度计算。 */
+     真实纸纹贴图(assets/paper-xuan.png, 384×384 无缝, X/Y 双向平铺),
+     用 multiply 与各面底色混合; 只改"面"的质感, 不动令牌 → 不参与对比度计算。 */
   html[data-theme="xuan"] #reader,
   html[data-theme="xuan"] #content,
   html[data-theme="xuan"] #catalogPanel,
   html[data-theme="xuan"] .popup,
   html[data-theme="xuan"] .settings-panel,
   html[data-theme="xuan"] .statusbar {
-    background-image:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.75' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.22' intercept='0.78'/%3E%3CfeFuncG type='linear' slope='0.22' intercept='0.78'/%3E%3CfeFuncB type='linear' slope='0.22' intercept='0.78'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='420' height='420' filter='url(%23f)'/%3E%3C/svg%3E"),
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.22' intercept='0.78'/%3E%3CfeFuncG type='linear' slope='0.22' intercept='0.78'/%3E%3CfeFuncB type='linear' slope='0.22' intercept='0.78'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23g)'/%3E%3C/svg%3E");
-    background-repeat: repeat, repeat;
-    background-size: 420px 420px, 260px 260px;
+    background-image: var(--paper-xuan);
+    background-repeat: repeat;
+    background-size: 384px 384px;
     background-blend-mode: multiply;
   }
-  /* 主题圆点也带一点纸纹, 让它和"纯净白/米白"一眼区分开 */
+  /* 主题圆点也贴同一张纸纹, 让它和"纯净白/米白"一眼区分开 */
   .sp-dot[data-theme="xuan"] {
-    /* 圆点直接用留白区的暖米色 + 纸纹, 否则与"纯净白/米白"几乎分不出来 */
     background-color: #e7e3d5 !important;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.18' intercept='0.82'/%3E%3CfeFuncG type='linear' slope='0.18' intercept='0.82'/%3E%3CfeFuncB type='linear' slope='0.18' intercept='0.82'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='40' height='40' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-image: var(--paper-xuan);
+    background-size: 96px 96px;
     background-blend-mode: multiply;
   }

@@ -103,7 +103,17 @@ const fsx = require('fs');
 const pathx = require('path');
 const cssText = fsx.readFileSync(pathx.join(__dirname, '..', 'webview', 'reader', 'reader.css'), 'utf8');
 assert(cssText.indexOf('html[data-theme="xuan"]') >= 0, '宣纸主题应带纸纹层规则');
-assert(cssText.indexOf('data:image/svg+xml') >= 0, '宣纸纸纹应使用内联 SVG 噪点(不依赖外部资源)');
+assert(cssText.indexOf('assets/paper-xuan.png') >= 0, '宣纸纸纹应引用 assets/paper-xuan.png 贴图');
+// 贴图必须被构建期内联(webview 无 localResourceRoots, 外链图片会 404)
+const builtCssPath = pathx.join(__dirname, '..', 'dist-webview', 'reader.css');
+if (fsx.existsSync(builtCssPath)) {
+  const builtCss = fsx.readFileSync(builtCssPath, 'utf8');
+  assert(builtCss.indexOf('data:image/png;base64') >= 0, '构建产物应把纸纹贴图内联成 data URI');
+  assert(builtCss.indexOf('url(./assets/paper-xuan.png)') < 0, '构建产物不应残留贴图外链');
+}
+// webview CSP 必须放行 data: 图片, 否则背景图被 default-src none 直接拦截
+const panelTs = fsx.readFileSync(pathx.join(__dirname, '..', 'src', 'readerPanel.ts'), 'utf8');
+assert(panelTs.indexOf('img-src data:') >= 0, 'readerPanel 的 CSP 应包含 img-src data: (否则纸纹不显示)');
 const xuanTheme = THEMES.find((t) => t.id === 'xuan');
 assert(xuanTheme, '应存在 id=xuan 的宣纸主题');
 assert.strictEqual(THEMES[THEMES.findIndex((t) => t.id === 'xuan') - 1].id, 'beige', '宣纸应紧挨在米白右侧');

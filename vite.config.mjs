@@ -109,6 +109,8 @@ export default defineConfig(function ({ command }) {
       outDir: 'dist-webview',
       emptyOutDir: true,
       target: 'es2020',
+      // webview 通过内联 HTML 提供 JS/CSS, 没有 localResourceRoots:/n      // 图片资源必须内联成 data URI, 否则运行时会 404
+      assetsInlineLimit: Number.MAX_SAFE_INTEGER,
       lib: {
         entry: path.join(__dirname, 'webview', 'reader', 'main.ts'),
         name: 'NovelReaderPanel',

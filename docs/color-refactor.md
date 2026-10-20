@@ -166,11 +166,15 @@ danger       = ensure(#b3261e, bg, 4.5)
 | `danger` | `#8c1d18` | 危险色 8.34:1 |
 | `shadow` | `rgba(0,0,0,.12)` | — |
 
-纸纹实现（`reader.css`，仅 `html[data-theme="xuan"]`）：
+纸纹实现（`reader.css` + `assets/paper-xuan.png`，仅 `html[data-theme="xuan"]`）：
 
-- 两层内联 SVG `feTurbulence`：低频 `baseFrequency="0.006 0.75"` 出纸帘横纤维，高频 `0.95` 出细颗粒
-- `feComponentTransfer` 把噪点压到 78–100% 亮度区间，`background-blend-mode: multiply`
-- 覆盖纸面 / 留白 / 目录 / 弹窗 / 设置 / 状态栏；实测画面标准差 ≈2.5（纯色约 0.9），
+- 384×384 **无缝贴图**（周期正弦叠加生成：低频纸浆斑驳 + 高频横纤维 + 细颗粒），
+  `background-repeat: repeat` X/Y 双向平铺，`background-blend-mode: multiply`
+- 构建期由 Vite 内联为 data URI（`assetsInlineLimit` 拉满）——webview 没有
+  `localResourceRoots`，外链图片会 404
+- **CSP 必须放行图片**：readerPanel 的 `default-src 'none'` 会拦掉 data: 背景图，
+  已补 `img-src data:`（这是"本地 dev 有纹理、装进 VS Code 却没有"的真正原因）
+- 覆盖纸面 / 留白 / 目录 / 弹窗 / 设置 / 状态栏；实测画面标准差 ≈4.7（纯色约 0.9），
   文字仍落在实色令牌上，不影响已校验的对比度
 - 主题圆点用 `pageBg` 暖米色 + 纸纹，避免与「纯净白 / 米白」两个浅色点混淆
 
