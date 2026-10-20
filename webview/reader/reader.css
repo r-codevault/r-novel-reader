@@ -708,8 +708,25 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* 章分组(书内二级) */
+  .nt-chap-group + .nt-chap-group { border-top: 1px dashed var(--chrome-border); }
+  .nt-chap-head {
+    display: flex; align-items: center; gap: 6px;
+    width: 100%; padding: 7px 16px 7px 26px;
+    background: transparent; color: var(--fg);
+    border: 0; cursor: pointer; text-align: left;
+    font-size: var(--ui-font-sub);
+  }
+  .nt-chap-head:hover { background: var(--sp-hover); }
+  .nt-chap-group:not(.collapsed) .nt-caret { transform: rotate(90deg); }
+  .nt-chap-title {
+    max-width: 52%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--fg-muted);
+  }
+
   /* 条目 */
   .nt-items { padding: 0 0 4px; }
+  .nt-chap-group > .nt-items { padding-left: 10px; }
   .nt-item {
     position: relative;
     padding: 8px 16px 9px 28px;
@@ -824,14 +841,6 @@
     max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     color: var(--fg-muted); font-size: var(--ui-font-sub);
   }
-  .nc-quote {
-    margin-bottom: 8px; padding: 6px 8px;
-    max-height: 72px; overflow: hidden;
-    background: var(--sp-control-bg); color: var(--fg-muted);
-    border-left: 2px solid var(--accent); border-radius: 3px;
-    font-size: var(--ui-font-sub); line-height: 1.55;
-    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
-  }
   .nc-text {
     width: 100%; box-sizing: border-box;
     padding: 7px 9px; resize: vertical; min-height: 76px;
@@ -879,6 +888,30 @@
     text-decoration-thickness: 1.5px;
     text-underline-offset: 5px;
   }
+
+  /* 段落悬浮笔记预览: 段落上方(触顶翻下方), 纯展示不拦截指针(低于卡片 46/弹窗 47) */
+  .para-note-tip {
+    position: fixed; z-index: 40;
+    max-width: 340px; box-sizing: border-box;
+    background: var(--bg); color: var(--fg);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px var(--shadow-color);
+    padding: 8px 10px;
+    pointer-events: none;
+  }
+  .para-note-tip .pnt-item + .pnt-item {
+    margin-top: 6px; padding-top: 6px;
+    border-top: 1px dashed var(--chrome-border);
+  }
+  .para-note-tip .pnt-text {
+    margin: 0;
+    font-size: var(--ui-font); line-height: 1.55;
+    color: var(--fg); word-break: break-word;
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .para-note-tip .pnt-text-empty { color: var(--fg-muted); }
 
   /* 返回上一次阅读位置 */
   .note-return {

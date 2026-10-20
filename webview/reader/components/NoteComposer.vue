@@ -20,7 +20,7 @@ const cardStyle = computed(function () {
   if (!c) { return {}; }
   const margin = 8;
   const w = Math.min(420, window.innerWidth - 32);
-  const estH = 214;
+  const estH = 186; // 头部 + textarea + 底部按钮行(引用行已移除)
   let top = c.anchorBottom + margin;
   if (top + estH > window.innerHeight - margin) {
     top = Math.max(margin, c.anchorTop - estH - margin);
@@ -81,7 +81,6 @@ function onKeydown(e: KeyboardEvent): void {
       <span class="spacer"></span>
       <span class="nc-chap" :title="comp.chapterTitle">{{ comp.chapterTitle }}</span>
     </div>
-    <div class="nc-quote" :title="comp.quote">{{ comp.quote }}</div>
     <textarea ref="textRef" class="nc-text" v-model="comp.text" rows="3"
       placeholder="写点什么…" @input="comp.error = ''"></textarea>
     <div class="nc-foot">

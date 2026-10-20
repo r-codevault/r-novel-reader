@@ -3,8 +3,8 @@
  * ReaderArea.vue — 正文阅读区(留白 + 纸面 + 左右宽度拖拽手柄)
  * 宽度拖拽与手柄定位自包含; resize 对齐由 App 调用 positionHandles()
  */
-import { computed, onMounted, reactive, ref } from 'vue';
-import { state, gotoChapter } from '../composables/vscode';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { state, gotoChapter, type NoteItem } from '../composables/vscode';
 import { findParagraph } from '../../../src/noteAnchor';
 import { persistSettings, CONTENT_WIDTH, syncXScrollbar } from '../store';
 
@@ -30,18 +30,20 @@ const isLast = computed(() =>
 
 // ---------------------------------------------------------------- 笔记: 段落下划线标记
 /**
- * 当前章节里被笔记锚定的段落集合 → 持久虚线下划线。
- * 用章节标题匹配(与笔记锚定策略一致), 引文必须精确命中才标记, 避免错标。
+ * 当前章节每个段落锚定的笔记(引文精确命中才收录)。
+ * 持久下划线与悬浮预览共用这一份数据。
  */
-const notedParas = computed<Set<number>>(function () {
+const paraNotes = computed<Map<number, NoteItem[]>>(function () {
   const ch = state.chapter;
-  if (!ch) { return new Set(); }
+  const out = new Map<number, NoteItem[]>();
+  if (!ch) { return out; }
   const filePath = (state.novel as { filePath?: string } | null)?.filePath || '';
-  const out = new Set<number>();
   for (const n of state.notes) {
     if (n.bookPath !== filePath || n.chapterTitle !== ch.title) { continue; }
     const found = findParagraph(ch.paragraphs, n.paragraphIndex, n.quote);
-    if (found.exact) { out.add(found.index); }
+    if (!found.exact) { continue; }
+    const list = out.get(found.index);
+    if (list) { list.push(n); } else { out.set(found.index, [n]); }
   }
   return out;
 });
@@ -53,6 +55,39 @@ const composerPara = computed<number>(function () {
   if (!c || !ch || c.chapterTitle !== ch.title) { return -1; }
   return c.paragraphIndex;
 });
+
+// ---------------------------------------------------------------- 笔记: 段落悬浮预览(已记笔记的段落)
+const paraTip = ref<{ index: number; top: number; left: number } | null>(null);
+let tipTimer: number | null = null;
+const TIP_EST_H = 110;
+const TIP_MAX_W = 340;
+
+function onParaEnter(index: number, e: MouseEvent): void {
+  if (!paraNotes.value.has(index)) { return; }
+  onParaLeave();
+  const item = e.currentTarget as HTMLElement;
+  tipTimer = window.setTimeout(function () {
+    const rect = item.getBoundingClientRect();
+    const w = Math.min(TIP_MAX_W, window.innerWidth - 32);
+    // 默认显示在段落上方; 空间不足(触顶)翻到段落下方
+    let top = rect.top - TIP_EST_H - 10;
+    if (top < 8) { top = rect.bottom + 10; }
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - w - 8));
+    paraTip.value = { index, top, left };
+    tipTimer = null;
+  }, 250);
+}
+function onParaLeave(): void {
+  if (tipTimer !== null) { window.clearTimeout(tipTimer); tipTimer = null; }
+  paraTip.value = null;
+}
+// 章变化/滚动时预览悬在错误位置, 直接收起
+watch(function () { return state.chapter; }, function () { onParaLeave(); });
+
+/** 空笔记占位: 与笔记浮层保持一致 */
+function tipText(n: NoteItem): string {
+  return n.text && n.text.trim() ? n.text : '（未填写内容）';
+}
 
 /** mousedown 时是否已有文本选区(拖选复制/查词时不应弹卡片) */
 let hadSelection = false;
@@ -67,6 +102,7 @@ function onParaMouseDown(): void {
 }
 
 function onParaClick(index: number, e: MouseEvent): void {
+  onParaLeave();
   if (hadSelection) { hadSelection = false; return; }
   if (selectionActive()) { return; }
   const ch = state.chapter;
@@ -179,6 +215,8 @@ onMounted(function () {
   document.addEventListener('pointermove', function (e: PointerEvent) { moveWidthDrag(e); });
   document.addEventListener('pointerup', function (e: PointerEvent) { endWidthDrag(e); });
   document.addEventListener('pointercancel', function (e: PointerEvent) { endWidthDrag(e); });
+  // 滚动时收起段落笔记预览(固定定位会悬在错误位置)
+  window.addEventListener('scroll', onParaLeave, { passive: true });
   window.addEventListener('resize', positionHandles);
   window.addEventListener('resize', syncXScrollbar);
   requestAnimationFrame(positionHandles);
@@ -193,8 +231,9 @@ defineExpose({ positionHandles, scrollToParagraph });
       <h2 class="chapter-title">{{ chapter ? chapter.title : '' }}</h2>
       <p v-if="paras.length === 0" class="empty-tip">(本章无内容)</p>
       <p v-for="(p, i) in paras" :key="i" class="rd-para" :data-p="i"
-        :class="{ 'rd-para-noted': notedParas.has(i), 'rd-para-active': composerPara === i }"
-        @mousedown="onParaMouseDown" @click="onParaClick(i, $event)">{{ p }}</p>
+        :class="{ 'rd-para-noted': paraNotes.has(i), 'rd-para-active': composerPara === i }"
+        @mousedown="onParaMouseDown" @click="onParaClick(i, $event)"
+        @mouseenter="onParaEnter(i, $event)" @mouseleave="onParaLeave">{{ p }}</p>
     </article>
 
     <!-- 章节底部导航(纸面外侧, 跟随页面滚动) -->
@@ -206,5 +245,13 @@ defineExpose({ positionHandles, scrollToParagraph });
       @pointerdown="beginWidthDrag('left', $event)"></div>
     <div ref="handleRightRef" class="width-handle" :style="handleRightStyle" aria-hidden="true"
       @pointerdown="beginWidthDrag('right', $event)"></div>
+
+    <!-- 段落悬浮笔记预览: 显示在该段上方(触顶翻到下方), 不拦截指针 -->
+    <div v-if="paraTip" class="para-note-tip"
+      :style="{ top: paraTip.top + 'px', left: paraTip.left + 'px' }" aria-hidden="true">
+      <div v-for="n in (paraNotes.get(paraTip.index) || [])" :key="n.id" class="pnt-item">
+        <p class="pnt-text" :class="{ 'pnt-text-empty': !(n.text && n.text.trim()) }">{{ tipText(n) }}</p>
+      </div>
+    </div>
   </main>
 </template>

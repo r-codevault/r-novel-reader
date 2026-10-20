@@ -124,6 +124,8 @@ export const state = reactive({
   notesOpen: false,
   /** 笔记分组展开态(仅内存, 只记用户显式操作过的书) */
   noteGroupOpen: {} as NoteGroupOpenMap,
+  /** 章分组展开态(键含书路径; 换书/重发 init 不清空, 与书折叠态同策略) */
+  noteChapterOpen: {} as NoteGroupOpenMap,
   /** 新建笔记卡片 */
   noteComposer: null as NoteComposerState | null,
   /** 跳转前位置 */

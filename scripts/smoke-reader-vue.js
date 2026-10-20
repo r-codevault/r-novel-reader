@@ -1220,9 +1220,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   let composer = document.querySelector('.note-composer');
   assert(composer, '单击段落应弹出新建笔记卡片');
-  assert(composer.querySelector('.nc-quote').textContent.trim() === '乙段原文。', '卡片应默认引用整段原文');
+  assert(!composer.querySelector('.nc-quote'), '新建卡片不应再显示引用行(引用在预览里看)');
   assert(para1.classList.contains('rd-para-active'), '选中段落应加虚线下划线(选中态)');
   assert(!para1.classList.contains('rd-para-noted'), '尚无笔记时不应有持久下划线');
+  // 点卡片外任意处 → 自动关闭; 再点段落 → 重新弹出
+  document.querySelector('.chapter-title').dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+  await sleep(20);
+  assert(!document.querySelector('.note-composer'), '点击卡片外任意处应自动关闭新建卡片');
+  para1.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+  para1.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  composer = document.querySelector('.note-composer');
+  assert(composer, '重新单击段落应再次弹出新建卡片');
 
   // 3) Ctrl+Enter 保存 → addNote(不带 bookPath)
   const ta = composer.querySelector('.nc-text');
@@ -1257,6 +1266,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const p1After = document.querySelector('#content p[data-p="1"]');
   assert(p1After.classList.contains('rd-para-noted'), '有笔记锚定的段落应保持持久虚线下划线');
   assert(!p1After.classList.contains('rd-para-active'), '卡片关闭后选中态下划线应消失');
+  // 章分组: 在读章默认展开
+  assert(document.querySelector('#notesPopup .nt-chap-group'), '书内应渲染章分组');
+  assert(document.querySelector('#notesPopup .nt-chap-group:not(.collapsed)'), '在读章分组应默认展开');
+  assert(document.querySelector('#notesPopup .nt-chap-head .nt-tag'), '在读章分组应带「在读」标签');
+  // 悬浮已记笔记的段落 → 顶部预览显示笔记正文
+  p1After.dispatchEvent(new win.MouseEvent('mouseenter'));
+  await sleep(320);
+  const pTip = document.querySelector('.para-note-tip');
+  assert(pTip, '悬浮已记笔记的段落应出现笔记预览');
+  assert(pTip.textContent.includes('第一条笔记'), '段落预览应显示笔记正文');
+  p1After.dispatchEvent(new win.MouseEvent('mouseleave'));
+  await sleep(20);
+  assert(!document.querySelector('.para-note-tip'), '移出段落后预览应收起');
 
   // 5) 悬浮预览: 展示引用的整段原文 + 章节
   const nt1 = document.querySelector('#notesPopup .nt-item');
@@ -1354,13 +1376,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   sendMsg({ type: 'noteUpserted', item: { ...noteItem, updatedAt: 2 } });
   await sleep(30);
 
-  // 9d 分组默认态: 在读展开 / 其它收起
+  // 9d 分组默认态: 在读展开 / 其它收起; 章分组: 在读章展开 / 其它章收起
   const otherItem = {
     id: 'note-other', bookPath: 'D:/b.txt', bookTitle: '另一本书',
     chapterTitle: '第1章 起', chapterIndex: 0, paragraphIndex: 0,
     quote: '另一本原文。', text: '另一本的笔记', createdAt: 1, updatedAt: 1,
   };
-  sendMsg({ type: 'notes', items: [{ ...noteItem, updatedAt: 2 }, emptyItem, otherItem] });
+  const otherChapItem = {
+    id: 'note-ch9', bookPath: novel.filePath, bookTitle: novel.bookTitle,
+    chapterTitle: '第9章 远方', chapterIndex: 8, paragraphIndex: 0,
+    quote: '第九章原文。', text: '另一章的笔记', createdAt: 1, updatedAt: 1,
+  };
+  sendMsg({ type: 'notes', items: [{ ...noteItem, updatedAt: 2 }, emptyItem, otherItem, otherChapItem] });
   await sleep(40);
   const books = Array.from(document.querySelectorAll('#notesPopup .nt-book'));
   assert(books.length === 2, '应渲染 2 个书分组(实际 ' + books.length + ')');
@@ -1374,6 +1401,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!otherBook.querySelector('.nt-items'), '非在读分组不应渲染条目');
   assert(otherBook.querySelector('.nt-book-head').getAttribute('aria-expanded') === 'false', '收起分组 aria-expanded 应为 false');
   assert(otherBook.querySelector('.nt-book-count').textContent.trim() === '1', '收起后仍应显示条目数');
+  // 章分组默认态: 在读章展开, 其它章收起
+  const chapGroups = Array.from(curBook.querySelectorAll('.nt-chap-group'));
+  assert(chapGroups.length === 2, '在读书内应渲染 2 个章分组(实际 ' + chapGroups.length + ')');
+  const openChaps = chapGroups.filter((c) => !c.classList.contains('collapsed'));
+  assert(openChaps.length === 1, '只有当前阅读章默认展开');
+  assert(openChaps[0].querySelector('[data-note-id="note-1"]'), '展开的应是当前章分组');
+  assert(openChaps[0].querySelector('.nt-chap-head .nt-tag'), '当前章分组应带「在读」标签');
+  // 点章头展开其它章
+  const closedChap = chapGroups.find((c) => c !== openChaps[0]);
+  closedChap.querySelector('.nt-chap-head').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(!closedChap.classList.contains('collapsed'), '点章头应展开该章分组');
+  closedChap.querySelector('.nt-chap-head').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(closedChap.classList.contains('collapsed'), '再点章头应收起');
 
   // 9e 点组头展开其它书, 关闭再打开保持选择
   const bookByTitle = (name) => Array.from(document.querySelectorAll('#notesPopup .nt-book'))

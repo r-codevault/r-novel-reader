@@ -7,7 +7,11 @@
  */
 import { computed, nextTick, ref, watch } from 'vue';
 import { state, send, type NoteItem } from '../composables/vscode';
-import { groupNotes, isGroupOpen, relativeTime, toggleGroupOpen, type NoteBookGroup } from '../composables/notesView';
+import {
+  groupNotes, isChapterOpen, isGroupOpen, relativeTime,
+  toggleChapterOpen, toggleGroupOpen,
+  type NoteBookGroup, type NoteChapterGroup,
+} from '../composables/notesView';
 
 const emit = defineEmits<{ (e: 'jump', note: NoteItem): void }>();
 
@@ -16,8 +20,10 @@ defineExpose({ el: rootRef });
 
 const groups = computed<NoteBookGroup[]>(function () {
   const shelfPaths = new Set(state.shelf.map(function (b) { return b.filePath; }));
-  const current = state.novel && (state.novel as { filePath?: string }).filePath || '';
-  return groupNotes(state.notes, current, shelfPaths);
+  const novel = state.novel as { filePath?: string } | null;
+  const current = novel && novel.filePath || '';
+  const chapterTitle = state.chapter ? state.chapter.title : '';
+  return groupNotes(state.notes, current, shelfPaths, chapterTitle);
 });
 const total = computed(function () {
   return state.notes.length;
@@ -33,6 +39,16 @@ function toggleGroup(g: NoteBookGroup): void {
     hidePreview();
   }
   toggleGroupOpen(state.noteGroupOpen, g);
+}
+function isChapCollapsed(bookPath: string, c: NoteChapterGroup): boolean {
+  return !isChapterOpen(state.noteChapterOpen, bookPath, c);
+}
+function toggleChapter(bookPath: string, c: NoteChapterGroup): void {
+  if (!isChapCollapsed(bookPath, c)) {
+    cancelEdit();
+    hidePreview();
+  }
+  toggleChapterOpen(state.noteChapterOpen, bookPath, c);
 }
 
 /** 空笔记占位: 允许只记原文锚点、不写正文 */
@@ -198,7 +214,18 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
         </button>
 
         <div v-if="!isCollapsed(g)" class="nt-items">
-          <div v-for="n in g.items" :key="n.id" class="nt-item" :data-note-id="n.id"
+          <div v-for="c in g.chapters" :key="c.chapterTitle" class="nt-chap-group"
+            :class="{ collapsed: isChapCollapsed(g.bookPath, c) }">
+            <button class="nt-chap-head" :title="c.chapterTitle"
+              :aria-expanded="!isChapCollapsed(g.bookPath, c)" @click="toggleChapter(g.bookPath, c)">
+              <span class="nt-caret" aria-hidden="true">▸</span>
+              <span class="nt-chap-title">{{ c.chapterTitle }}</span>
+              <span v-if="c.current" class="nt-tag">在读</span>
+              <span class="spacer"></span>
+              <span class="nt-book-count">{{ c.items.length }}</span>
+            </button>
+            <div v-if="!isChapCollapsed(g.bookPath, c)" class="nt-items">
+          <div v-for="n in c.items" :key="n.id" class="nt-item" :data-note-id="n.id"
             :class="{ editing: editingId === n.id }"
             @click="editingId === n.id ? null : jumpTo(n)"
             @mouseenter="showPreview(n, $event)" @mouseleave="hideSoon()" @focusin="showPreview(n, $event)">
@@ -225,8 +252,10 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
               </div>
             </template>
           </div>
+          </div>
         </div>
       </div>
+    </div>
     </div>
 
     <div class="popup-foot nt-foot">

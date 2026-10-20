@@ -290,9 +290,14 @@ function backToReadingPos(): void {
 }
 
 function onDocMouseDown(e: MouseEvent): void {
-  if (!anyPopupOpen()) { return; }
   const target = e.target as Node;
   const el = e.target as HTMLElement;
+  // 新建笔记卡片: 点卡片外任意处即关闭。
+  // 若点的是另一个段落, 随后的 click 会为该段落重开新卡片, 不受影响
+  if (state.noteComposer && !(el.closest && el.closest('.note-composer'))) {
+    state.noteComposer = null;
+  }
+  if (!anyPopupOpen()) { return; }
   const inside =
     (catalogRef.value?.el && catalogRef.value.el.contains(target)) ||
     (settingsRef.value?.el && settingsRef.value.el.contains(target)) ||
