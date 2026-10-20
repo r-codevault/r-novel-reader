@@ -10,6 +10,7 @@
 import * as vscode from "vscode";
 import { PROVINCES, DEFAULT_PROVINCE_CODE } from "./provinceColors";
 import { SOLAR_TERMS, DEFAULT_TERM_ID } from "./solarTerms";
+import { FESTIVALS, DEFAULT_FESTIVAL_ID } from "./festivals";
 
 /**
  * 正文栏宽(px): 预设档位 + 合法区间。
@@ -53,31 +54,39 @@ export interface ReadingSettings {
   province: string;
   /** 廿四节气主题: 节气 id(见 solarTerms.ts), theme=term 时生效 */
   term: string;
+  /** 传统节日主题: 节日 id(见 festivals.ts, 含 -night 后缀), theme=festival 时生效 */
+  festival: string;
 }
 
 export interface ThemeDef {
   id: string;
   name: string;
-  /** 阅读区背景色 */
+  /** 阅读区背景色(纸面) */
   bg: string;
   /** 正文文字色 */
   fg: string;
-  /** 留白区域底色(正文"纸面"四周, 与 bg 区分出层次) */
+  /** 留白区域底色(正文"纸面"四周, 与 bg 至少差 1.25:1 才有层次) */
   pageBg: string;
-  /** 面板/状态栏底色(设置面板、目录面板、悬浮球等) */
+  /** 面板/状态栏/侧栏底色(比 bg 暗一档, 与 pageBg 再暗一档) */
   chromeBg: string;
-  /** 面板/状态栏边框色 */
+  /** 装饰性边框/分隔线: 只做分割, 不承担"可识别控件边界"的职责(约 1.55:1) */
   chromeBorder: string;
-  /** 主题主色(悬浮球、进度条、当前章高亮) */
+  /** 结构性边框: 输入框/按钮/主题色点/进度条槽, 对 chromeBg ≥ 3:1 (WCAG 1.4.11) */
+  borderStrong: string;
+  /** 主题强调色: 同时满足「作文字对 pageBg ≥4.5:1」与「作底色时 accentFg 可读」 */
   accent: string;
-  /** 主色上的文字色 */
+  /** 强调色上的文字色(对 accent ≥4.5:1) */
   accentFg: string;
-  /** 次要文字色(设置面板标签/说明文字) */
+  /** 次要文字色: 实色, 对 chromeBg ≥4.5:1。禁止再叠加 opacity */
   muted: string;
-  /** 设置面板强调色(选中态描边、当前主题对勾等) */
-  panelAccent: string;
   /** 面板悬停态底色 */
   panelHover: string;
+  /** 危险操作色(删除等), 对 bg ≥4.5:1 */
+  danger: string;
+  /** 浮层/纸面投影颜色(深色主题需更重, 否则投影不可见) */
+  shadow: string;
+  /** 深色主题: 明度推导方向相反 */
+  isDark?: boolean;
 }
 
 export interface FontDef {
@@ -87,91 +96,113 @@ export interface FontDef {
 }
 
 // 主题色同步起点中文网: 纯净白 / 米白 / 羊皮纸 / 护眼绿 / 浅蓝 / 黑夜
-// 黑夜按用户要求沿用原配色(深灰纸面 + 暖金主色)
+// 黑夜沿用深灰纸面 + 暖金主色。
+//
+// 2026-10 配色重构(依据 docs/color-audit.html):
+//  - 取消"固定品牌红 panelAccent", 强调色回到各自主题的色相, 六套主题共用一条规则;
+//  - 强调色统一按「作文字压在留白区(pageBg)上 ≥4.5:1」校准, 一个 accent 令牌通吃
+//    高亮文字 / 按钮底 / 进度条 / 焦点框, 不再需要第二枚强调色;
+//  - 次要文字改实色(原先 #RRGGBBAA 叠在底色上, 实测只有 3.07~4.12:1);
+//  - 背景拆成三级台阶: 纸面 bg → 侧栏 chromeBg → 留白 pageBg, 逐级变暗;
+//  - 边框拆成两支: chromeBorder(装饰, ~1.55:1) 与 borderStrong(控件边界, ≥3:1);
+//  - 新增 danger / shadow, 让删除色与投影也跟随主题。
 export const THEMES: ThemeDef[] = [
   {
     id: "white",
     name: "纯净白",
     bg: "#ffffff",
     fg: "#262626",
-    pageBg: "#f3f3f3",
-    chromeBg: "#f7f7f7",
-    chromeBorder: "#e4e4e4",
-    accent: "#262626",
+    pageBg: "#e9e6e0",
+    chromeBg: "#f2f0eb",
+    chromeBorder: "#c5c3b6",
+    borderStrong: "#928978",
+    accent: "#b83729",
     accentFg: "#ffffff",
-    muted: "#26262699",
-    panelAccent: "#f56c6c",
+    muted: "#6e6d67",
     panelHover: "rgba(0,0,0,.05)",
+    danger: "#8f1d16",
+    shadow: "rgba(0,0,0,.10)",
   },
   {
     id: "beige",
     name: "米白",
     bg: "#f8f4ea",
     fg: "#33302a",
-    pageBg: "#efe9db",
-    chromeBg: "#f4f0e5",
-    chromeBorder: "#e0d9c6",
-    accent: "#33302a",
+    pageBg: "#e2dbc9",
+    chromeBg: "#f2ecdd",
+    chromeBorder: "#c9bfa5",
+    borderStrong: "#95865e",
+    accent: "#8c4423",
     accentFg: "#ffffff",
-    muted: "#33302a99",
-    panelAccent: "#f56c6c",
+    muted: "#6e6b62",
     panelHover: "rgba(0,0,0,.05)",
+    danger: "#8f1d16",
+    shadow: "rgba(0,0,0,.10)",
   },
   {
     id: "sepia",
     name: "羊皮纸",
     bg: "#f4e8cd",
     fg: "#4b3f2a",
-    pageBg: "#eadbb4",
-    chromeBg: "#f0e3c2",
-    chromeBorder: "#dbc79c",
-    accent: "#4b3f2a",
-    accentFg: "#fdf6e3",
-    muted: "#4b3f2a99",
-    panelAccent: "#f56c6c",
+    pageBg: "#dfcfa6",
+    chromeBg: "#eee1c0",
+    chromeBorder: "#c5b58e",
+    borderStrong: "#917f51",
+    accent: "#8d3f22",
+    accentFg: "#ffffff",
+    muted: "#6e634f",
     panelHover: "rgba(0,0,0,.05)",
+    danger: "#8c1d18",
+    shadow: "rgba(0,0,0,.13)",
   },
   {
     id: "green",
     name: "护眼绿",
     bg: "#d5ecd0",
     fg: "#2c3f2c",
-    pageBg: "#c3e0ba",
-    chromeBg: "#cde6c6",
-    chromeBorder: "#a8cfa0",
-    accent: "#2c3f2c",
-    accentFg: "#f0fff2",
-    muted: "#2c3f2c99",
-    panelAccent: "#f56c6c",
+    pageBg: "#b9d5ae",
+    chromeBg: "#cbe5c3",
+    chromeBorder: "#9eba94",
+    borderStrong: "#64875b",
+    accent: "#2b6135",
+    accentFg: "#ffffff",
+    muted: "#53674e",
     panelHover: "rgba(0,0,0,.05)",
+    danger: "#8c1d18",
+    shadow: "rgba(0,0,0,.13)",
   },
   {
     id: "blue",
     name: "浅蓝",
     bg: "#e4eef5",
     fg: "#2c3944",
-    pageBg: "#d3e2ec",
-    chromeBg: "#dfeaf2",
-    chromeBorder: "#c3d5e1",
-    accent: "#2c3944",
+    pageBg: "#c5d7e3",
+    chromeBg: "#dae7ef",
+    chromeBorder: "#aabdcb",
+    borderStrong: "#68879a",
+    accent: "#2c5a8a",
     accentFg: "#ffffff",
-    muted: "#2c394499",
-    panelAccent: "#f56c6c",
+    muted: "#5b6872",
     panelHover: "rgba(0,0,0,.05)",
+    danger: "#8c1d18",
+    shadow: "rgba(0,0,0,.13)",
   },
   {
     id: "dark",
     name: "黑夜",
     bg: "#232323",
     fg: "#bababa",
-    pageBg: "#141414",
+    pageBg: "#121212",
     chromeBg: "#1c1c1c",
-    chromeBorder: "#333333",
-    accent: "#c9963f",
+    chromeBorder: "#433c3c",
+    borderStrong: "#756a6a",
+    accent: "#d8a84e",
     accentFg: "#191919",
     muted: "#8a8a8a",
-    panelAccent: "#c9963f",
     panelHover: "rgba(255,255,255,.08)",
+    danger: "#ff9d93",
+    shadow: "rgba(0,0,0,.55)",
+    isDark: true,
   },
 ];
 
@@ -226,6 +257,7 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
   widthRatio: 0,
   province: DEFAULT_PROVINCE_CODE,
   term: DEFAULT_TERM_ID,
+  festival: DEFAULT_FESTIVAL_ID,
 };
 
 const STORAGE_KEY = "novelReader.settings";
@@ -246,6 +278,7 @@ const SETTING_KEYS: (keyof ReadingSettings)[] = [
   "widthRatio",
   "province",
   "term",
+  "festival",
 ];
 
 function clamp(n: number, min: number, max: number, fallback: number): number {
@@ -299,6 +332,7 @@ function configDefaults(): ReadingSettings {
     widthRatio: 0,
     province: DEFAULT_SETTINGS.province,
     term: DEFAULT_SETTINGS.term,
+    festival: DEFAULT_SETTINGS.festival,
   };
 }
 
@@ -333,8 +367,9 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
       DEFAULT_SETTINGS.paragraphSpacing,
     );
   }
-  // 主题白名单: 6 个预设 + province(地域色彩, 不在 THEMES 里但合法)
-  if (typeof s.theme === "string" && (s.theme === "province" || s.theme === "term" || THEMES.some((t) => t.id === s.theme))) {
+  // 主题白名单: 6 个预设 + province(地域色彩) / term(廿四节气) / festival(传统节日)
+  // —— 漏放行会导致"设置静默不生效"(历史踩坑点)
+  if (typeof s.theme === "string" && (s.theme === "province" || s.theme === "term" || s.theme === "festival" || THEMES.some((t) => t.id === s.theme))) {
     out.theme = s.theme;
   }
   if (typeof s.restoreOnStartup === "boolean") {
@@ -349,6 +384,9 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
   }
   if (typeof s.term === "string" && SOLAR_TERMS.some((t) => t.id === s.term)) {
     out.term = s.term;
+  }
+  if (typeof s.festival === "string" && FESTIVALS.some((f) => f.id === s.festival)) {
+    out.festival = s.festival;
   }
   if (typeof s.contentWidth === "number") {
     out.contentWidth = clamp(
@@ -435,12 +473,24 @@ export class SettingsStore {
   }
 }
 
-export function themeById(id: string, provinceCode?: string, termId?: string): ThemeDef {
+/**
+ * 主题分发: 预设 / 地域色彩 / 廿四节气 / 传统节日。
+ * 第 2~4 参可缺省 —— 旧的 1~3 参调用(如 themeById('sepia'))行为完全不变。
+ */
+export function themeById(
+  id: string,
+  provinceCode?: string,
+  termId?: string,
+  festivalId?: string,
+): ThemeDef {
   if (id === "province") {
     return provinceTheme(provinceCode);
   }
   if (id === "term") {
     return termTheme(termId);
+  }
+  if (id === "festival") {
+    return festivalTheme(festivalId);
   }
   return THEMES.find((t) => t.id === id) ?? THEMES[0];
 }
@@ -451,17 +501,8 @@ export function themeById(id: string, provinceCode?: string, termId?: string): T
 // 必然出现文字不可读。所以只用它推导"色相", 明度一律由算法锁定:
 //   - 纸面/留白: 取该省主色相, 压到极浅(明度 0.91~0.96) -> 深色字始终清晰
 //   - 正文色: 同色相压到很深(明度 0.16) -> 与纸面对比度通常在 12:1 以上
-//   - 强调色: 原色若与纸面对比不足 4.5:1 则逐步压暗, 保证图标/当前章可辨认
-// 这样 34 个省都能得到"有地域色相但可长时间阅读"的配色。
-
-function hexToRgbTriple(hex: string): [number, number, number] {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) {
-    return [0, 0, 0];
-  }
-  const n = parseInt(m[1], 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
+//   - 强调色: 原色若与留白区对比不足 4.5:1 则逐步压暗, 保证文字型高亮可辨认
+// 这样 58 套(省 + 节气)都能得到"有地域色相但可长时间阅读"的配色。
 
 /** rgb -> {h:0~360, s:0~1, l:0~1} */
 function rgbToHsl([r, g, b]: [number, number, number]): { h: number; s: number; l: number } {
@@ -512,19 +553,89 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${to(rgb[0])}${to(rgb[1])}${to(rgb[2])}`;
 }
 
-/** WCAG 相对亮度 */
-function relativeLuminance(hex: string): number {
-  const [r, g, b] = hexToRgbTriple(hex).map((v) => {
-    const c = v / 255;
-    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+/**
+ * 解析颜色: 支持 #rgb / #rgba / #rrggbb / #rrggbbaa / rgb() / rgba()。
+ * 返回 [r, g, b, a]，r/g/b 为 0~255，a 为 0~1。
+ */
+function parseColor(input: string): [number, number, number, number] {
+  const s = (input || "").trim();
+  const hex = /^#([0-9a-f]{3,8})$/i.exec(s);
+  if (hex) {
+    let h = hex[1];
+    if (h.length === 3 || h.length === 4) {
+      h = h.split("").map((c) => c + c).join("");
+    }
+    if (h.length === 6 || h.length === 8) {
+      return [
+        parseInt(h.slice(0, 2), 16),
+        parseInt(h.slice(2, 4), 16),
+        parseInt(h.slice(4, 6), 16),
+        h.length === 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1,
+      ];
+    }
+  }
+  const fn = /^rgba?\(([^)]+)\)$/i.exec(s);
+  if (fn) {
+    const parts = fn[1].split(",").map((v) => v.trim());
+    const num = (v: string, max: number): number =>
+      v.endsWith("%") ? (parseFloat(v) / 100) * max : parseFloat(v);
+    return [
+      num(parts[0], 255),
+      num(parts[1], 255),
+      num(parts[2], 255),
+      parts[3] === undefined ? 1 : num(parts[3], 1),
+    ];
+  }
+  return [0, 0, 0, 1];
+}
+
+/** 把带透明度的前景色合成到背景上(alpha 混合) */
+function composite(fg: [number, number, number, number], bg: [number, number, number, number]): [number, number, number, number] {
+  const a = fg[3];
+  return [
+    fg[0] * a + bg[0] * (1 - a),
+    fg[1] * a + bg[1] * (1 - a),
+    fg[2] * a + bg[2] * (1 - a),
+    1,
+  ];
+}
+
+function rgbToHslOf(hex: string): { h: number; s: number; l: number } {
+  const [r, g, b] = parseColor(hex);
+  return rgbToHsl([r, g, b]);
+}
+
+/** WCAG 相对亮度(带 alpha 时先合成到不透明白底) */
+function relativeLuminance(color: string, backdrop = "#ffffff"): number {
+  const c = parseColor(color);
+  const base = parseColor(backdrop);
+  const solid = c[3] < 1 ? composite(c, base) : c;
+  const [r, g, b] = solid.slice(0, 3).map((v) => {
+    const x = v / 255;
+    return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
   });
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-/** 对比度(1~21) */
+/**
+ * 对比度(1~21)。
+ * 支持 #RRGGBBAA 与 rgba(): 前景带 alpha 时按 bg 合成后再算,
+ * 背景带 alpha 时按白底合成 —— 与浏览器实际渲染一致。
+ */
 export function contrastRatio(fg: string, bg: string): number {
-  const a = relativeLuminance(fg);
-  const b = relativeLuminance(bg);
+  const bgColor = parseColor(bg);
+  const bgSolid = bgColor[3] < 1 ? composite(bgColor, [255, 255, 255, 1]) : bgColor;
+  const fgColor = parseColor(fg);
+  const fgSolid = fgColor[3] < 1 ? composite(fgColor, bgSolid) : fgColor;
+  const lumOf = (c: [number, number, number, number]): number => {
+    const [r, g, b] = c.slice(0, 3).map((v) => {
+      const x = v / 255;
+      return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const a = lumOf(fgSolid);
+  const b = lumOf(bgSolid);
   const hi = Math.max(a, b);
   const lo = Math.min(a, b);
   return (hi + 0.05) / (lo + 0.05);
@@ -538,7 +649,7 @@ export function contrastRatio(fg: string, bg: string): number {
 function pickRepresentative(colors: { hex: string }[]): { hex: string } {
   const first = colors[0];
   if (first) {
-    const hsl = rgbToHsl(hexToRgbTriple(first.hex));
+    const hsl = rgbToHslOf(first.hex);
     if (hsl.s >= 0.12 && hsl.l >= 0.15 && hsl.l <= 0.82) {
       return first;
     }
@@ -546,7 +657,7 @@ function pickRepresentative(colors: { hex: string }[]): { hex: string } {
   let best: { hex: string } | null = null;
   let bestScore = -1;
   for (const c of colors) {
-    const hsl = rgbToHsl(hexToRgbTriple(c.hex));
+    const hsl = rgbToHslOf(c.hex);
     if (hsl.l < 0.15 || hsl.l > 0.82) {
       continue;
     }
@@ -559,47 +670,58 @@ function pickRepresentative(colors: { hex: string }[]): { hex: string } {
   return best || first || { hex: "#8A8A8A" };
 }
 
-/** 把强调色压暗到与纸面对比度达标(默认 4.5:1, 正文级) */
+/**
+ * 把颜色推到与目标底色的对比度达标。
+ * 方向自动判断: 底色偏暗就提亮, 偏亮就压暗 —— 深色主题的边框必须比底更亮,
+ * 否则沿用"只压暗"的旧逻辑会得到一个几乎看不见的近黑线。
+ */
 function ensureContrast(fg: string, bg: string, target: number): string {
   if (contrastRatio(fg, bg) >= target) {
     return fg;
   }
-  const hsl = rgbToHsl(hexToRgbTriple(fg));
+  const hsl = rgbToHslOf(fg);
+  const bgIsDark = relativeLuminance(bg) < 0.18;
+  const step = bgIsDark ? 0.01 : -0.01;
   let l = hsl.l;
-  for (let i = 0; i < 40 && l > 0.06; i += 1) {
-    l -= 0.02;
+  for (let i = 0; i < 100; i += 1) {
+    l += step;
+    if (l <= 0.02 || l >= 0.98) {
+      break;
+    }
     const next = hslToHex(hsl.h, hsl.s, l);
     if (contrastRatio(next, bg) >= target) {
       return next;
     }
   }
-  return hslToHex(hsl.h, hsl.s, 0.12);
+  return bgIsDark ? hslToHex(hsl.h, hsl.s, 0.96) : hslToHex(hsl.h, hsl.s, 0.12);
 }
 
 /**
- * 按省份推导完整的阅读色板。
- * @param provinceCode 省级行政区代码(如 110000); 缺省用北京
- */
-/**
  * 由"一个代表色 + 主题名"生成完整阅读色板(地域色彩 / 廿四节气共用)。
- * 只借色相, 明度饱和度由算法锁定; 强调色对比度不足则自动压暗。
+ *
+ * 与预设主题共用同一套硬约束(2026-10 重构后):
+ *   正文 fg / bg ≥ 11:1      次要 muted / chromeBg ≥ 4.5:1
+ *   强调 accent / pageBg ≥ 4.5:1(作文字), accentFg / accent ≥ 4.5:1
+ *   控件边框 borderStrong / chromeBg ≥ 3:1, 装饰线 chromeBorder / chromeBg ≈ 1.55:1
+ *   危险色 danger / bg ≥ 4.5:1
+ * 明度/饱和度全部锁定, 只借代表色的色相, 因此 58 套派生主题都能长时间阅读。
  */
 function paintTheme(repHex: string, name: string, id: string): ThemeDef {
-  const h = rgbToHsl(hexToRgbTriple(repHex)).h;
-  // 纸面/留白/面板: 同一色相不同明度(层次可辨), 饱和度取到"看得出地域色、又不喧宾夺主"
-  // 注: 明度不能太高(>0.96 时不同色相在 8bit 下会被量化成同一个颜色, 省份之间就没区别了);
-  //     地域辨识度主要由留白区(pageBg)承担, 纸面保持偏白的"纸感"
+  const h = rgbToHslOf(repHex).h;
+  // 三级背景台阶: 纸面 .925 → 侧栏 .895 → 留白 .830, 逐级变暗(约 1.07 / 1.18)
   const bg = hslToHex(h, 0.26, 0.925);
-  const pageBg = hslToHex(h, 0.3, 0.85);
-  const chromeBg = hslToHex(h, 0.24, 0.915);
-  const chromeBorder = hslToHex(h, 0.32, 0.76);
-  // 正文/次要文字: 深色。次要文字同样要过对比度门槛(4.5:1), 不够就自动加暗
+  const chromeBg = hslToHex(h, 0.24, 0.895);
+  const pageBg = hslToHex(h, 0.3, 0.83);
+  // 装饰线只负责分割; 结构性边框要过 3:1, 否则输入框/按钮边界等于不存在
+  const chromeBorder = ensureContrast(hslToHex(h, 0.32, 0.76), chromeBg, 1.55);
+  const borderStrong = ensureContrast(hslToHex(h, 0.3, 0.6), chromeBg, 3);
+  // 正文与次要文字: 深色; muted 按更暗的 chromeBg 校准, 顺带覆盖纸面
   const fg = hslToHex(h, 0.32, 0.16);
-  const muted = ensureContrast(hslToHex(h, 0.12, 0.44), bg, 4.5);
-  // 强调色: 代表色压暗到达标(与纸面同色相, 整体协调)
-  const rawPrimary = repHex;
-  const accent = ensureContrast(rawPrimary, bg, 4.5);
-  const accentFg = contrastRatio("#ffffff", accent) >= 3 ? "#ffffff" : "#1a1a1a";
+  const muted = ensureContrast(hslToHex(h, 0.12, 0.44), chromeBg, 4.5);
+  // 强调色: 代表色压深到"作文字压在留白区"仍达标 —— 这是所有文字型高亮的最差底色
+  const accent = ensureContrast(repHex, pageBg, 4.5);
+  const accentFg = contrastRatio("#ffffff", accent) >= 4.5 ? "#ffffff" : "#191919";
+  const danger = ensureContrast("#b3261e", bg, 4.5);
   return {
     id,
     name,
@@ -608,11 +730,13 @@ function paintTheme(repHex: string, name: string, id: string): ThemeDef {
     pageBg,
     chromeBg,
     chromeBorder,
+    borderStrong,
     accent,
     accentFg,
     muted,
-    panelAccent: ensureContrast(rawPrimary, chromeBg, 3),
     panelHover: hslToHex(h, 0.18, 0.9),
+    danger,
+    shadow: "rgba(0,0,0,.13)",
   };
 }
 
@@ -632,6 +756,63 @@ export function termTheme(termId?: string): ThemeDef {
     SOLAR_TERMS.find((t) => t.id === DEFAULT_TERM_ID) ??
     SOLAR_TERMS[0];
   return paintTheme(term ? term.hex : "#8A8A8A", term ? term.name : "二十四节气", "term");
+}
+
+// ---------------------------------------------------------------- 传统节日主题
+//
+// 分两支:
+//   - 日景(18): 直接复用 paintTheme —— 只借主色色相, 明度/对比度由算法锁定,
+//     与地域色彩 / 廿四节气走完全同一条规则, 不另写一套配色逻辑。
+//   - 夜场(5): 走 paintFestivalNight —— 深色推导。夜场的"最差底色"是 chromeBg
+//     (最亮的深色面, 侧栏/状态栏), 不是 bg: 文字压在面板上时对比度最低,
+//     所以边框/次要文字/强调色一律按 chromeBg 校准。
+
+/**
+ * 夜场(深色)推导。
+ *
+ * 明度全部锁定, 只借主色色相; 强调色用 nightAccent(缺省 = 主色)并校准到 4.5:1。
+ * 三级背景台阶: 纸面 .13 → 面板 .165(最亮) → 留白 .09(最深)。
+ */
+function paintFestivalNight(repHex: string, accentHex: string, name: string, id: string): ThemeDef {
+  const h = rgbToHslOf(repHex).h;
+  const bg = hslToHex(h, 0.2, 0.13); // 纸面
+  const pageBg = hslToHex(h, 0.22, 0.09); // 留白(更深)
+  const chromeBg = hslToHex(h, 0.18, 0.165); // 侧栏/面板(最亮, 作为校准基准)
+  const chromeBorder = ensureContrast(hslToHex(h, 0.14, 0.28), chromeBg, 1.5);
+  const borderStrong = ensureContrast(hslToHex(h, 0.1, 0.45), chromeBg, 3.0);
+  const fg = hslToHex(h, 0.05, 0.86);
+  const muted = ensureContrast(hslToHex(h, 0.08, 0.55), chromeBg, 4.5);
+  const accent = ensureContrast(accentHex, chromeBg, 4.5);
+  const accentFg = contrastRatio("#161310", accent) >= 4.5 ? "#161310" : "#ffffff";
+  const danger = ensureContrast("#ff9d93", bg, 4.5);
+  return {
+    id,
+    name,
+    bg,
+    fg,
+    pageBg,
+    chromeBg,
+    chromeBorder,
+    borderStrong,
+    accent,
+    accentFg,
+    muted,
+    panelHover: hslToHex(h, 0.12, 0.22),
+    danger,
+    shadow: "rgba(0,0,0,.55)",
+    isDark: true,
+  };
+}
+
+/** 传统节日主题: 日景复用 paintTheme, 夜场走深色推导 */
+export function festivalTheme(id?: string): ThemeDef {
+  const f =
+    FESTIVALS.find((x) => x.id === id) ??
+    FESTIVALS.find((x) => x.id === DEFAULT_FESTIVAL_ID) ??
+    FESTIVALS[0];
+  return f.night
+    ? paintFestivalNight(f.main.hex, f.nightAccent ?? f.main.hex, f.name, f.id)
+    : paintTheme(f.main.hex, f.name, f.id);
 }
 
 export function fontStackById(id: string): string {

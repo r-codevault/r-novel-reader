@@ -37,9 +37,13 @@ for (const p of PROVINCES) {
 
   const t = provinceTheme(p.code);
   const bodyContrast = contrastRatio(t.fg, t.bg);
-  const mutedContrast = contrastRatio(t.muted, t.bg);
-  const accentContrast = contrastRatio(t.accent, t.bg);
+  // 次要文字与控件边框的最差底色都是更暗的面板底 chromeBg
+  const mutedContrast = contrastRatio(t.muted, t.chromeBg);
+  // 强调色要当"当前章文字"用, 压在更暗的留白区 pageBg 上
+  const accentContrast = contrastRatio(t.accent, t.pageBg);
   const accentFgContrast = contrastRatio(t.accentFg, t.accent);
+  const borderContrast = contrastRatio(t.borderStrong, t.chromeBg);
+  const dangerContrast = contrastRatio(t.danger, t.bg);
   if (bodyContrast < 7) {
     failures.push(`${p.name} 正文对比度 ${bodyContrast.toFixed(2)} < 7`);
   }
@@ -47,10 +51,22 @@ for (const p of PROVINCES) {
     failures.push(`${p.name} 次要文字对比度 ${mutedContrast.toFixed(2)} < 4.5`);
   }
   if (accentContrast < 4.5) {
-    failures.push(`${p.name} 强调色对比度 ${accentContrast.toFixed(2)} < 4.5`);
+    failures.push(`${p.name} 强调色作文字 ${accentContrast.toFixed(2)} < 4.5`);
   }
-  if (accentFgContrast < 3) {
-    failures.push(`${p.name} 主色文字对比度 ${accentFgContrast.toFixed(2)} < 3`);
+  if (accentFgContrast < 4.5) {
+    failures.push(`${p.name} 强调色上的文字 ${accentFgContrast.toFixed(2)} < 4.5`);
+  }
+  if (borderContrast < 3) {
+    failures.push(`${p.name} 控件边框 ${borderContrast.toFixed(2)} < 3`);
+  }
+  if (dangerContrast < 4.5) {
+    failures.push(`${p.name} 危险色 ${dangerContrast.toFixed(2)} < 4.5`);
+  }
+  // 三级背景台阶: 纸面 → 面板 → 留白 必须逐级可辨
+  const step1 = contrastRatio(t.bg, t.chromeBg);
+  const step2 = contrastRatio(t.chromeBg, t.pageBg);
+  if (step1 < 1.05 || step2 < 1.08) {
+    failures.push(`${p.name} 背景台阶不足 (纸面/面板 ${step1.toFixed(2)}, 面板/留白 ${step2.toFixed(2)})`);
   }
   assert.strictEqual(t.id, 'province', '主题 id 应为 province');
   assert.strictEqual(t.name, p.name, '主题名应等于省份名');

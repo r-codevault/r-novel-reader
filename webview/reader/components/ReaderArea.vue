@@ -28,10 +28,10 @@ const isLast = computed(() =>
 );
 
 function prevChapter(): void {
-  if (state.chapter && !isFirst.value) { gotoChapter(state.chapter.index - 1); }
+  if (state.chapter && !isFirst.value) { gotoChapter(state.chapter.index - 1, 'prev'); }
 }
 function nextChapter(): void {
-  if (state.chapter && !isLast.value) { gotoChapter(state.chapter.index + 1); }
+  if (state.chapter && !isLast.value) { gotoChapter(state.chapter.index + 1, 'next'); }
 }
 
 function positionHandles(): void {

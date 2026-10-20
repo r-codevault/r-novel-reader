@@ -143,13 +143,23 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
   }
 }
 
-/** 章节变化: 恢复滚动位置 + 对齐手柄 + 立即上报进度 */
+/**
+ * 章节变化: 定位滚动位置 + 对齐手柄 + 立即上报进度
+ *
+ * 时序要点: nextTick 只保证 DOM 已更新, **不保证布局已完成** ——
+ * 此刻 scrollHeight 可能还是上一章的高度, 导致 scrollTo 落点算错
+ * (切章后停在"和上一章差不多的位置")。必须再等一帧让布局落定。
+ */
 watch(function () { return state.chapter; }, function (ch) {
   if (!ch) { return; }
+  const ratio = ch.scrollRatio || 0;
   nextTick(function () {
-    const max = document.body.scrollHeight - window.innerHeight;
-    window.scrollTo(0, max > 0 ? (ch.scrollRatio || 0) * max : 0);
-    readerRef.value?.positionHandles();
+    requestAnimationFrame(function () {
+      const max = Math.max(0, document.body.scrollHeight - window.innerHeight);
+      window.scrollTo(0, max > 0 ? ratio * max : 0);
+      // 手柄位置按最终滚动结果对齐
+      requestAnimationFrame(function () { readerRef.value?.positionHandles(); });
+    });
   });
   sendProgress(true);
 });

@@ -76,7 +76,18 @@ export function send(msg: Record<string, unknown>): void {
   vscode.postMessage(msg);
 }
 
-/** 章节跳转请求 */
-export function gotoChapter(index: number): void {
-  send({ type: 'getChapter', index });
+/** 章节跳转请求(dir: 按钮方向; curRatio: 离开时的章内位置, 供扩展记住本章进度) */
+export function gotoChapter(index: number, dir?: 'prev' | 'next' | 'jump'): void {
+  send({
+    type: 'getChapter',
+    index,
+    dir,
+    curRatio: currentScrollRatio(),
+  });
+}
+
+/** 当前章内滚动位置 0~1(与上报进度同一算法, 章不足一屏时为 0) */
+function currentScrollRatio(): number {
+  const max = document.body.scrollHeight - window.innerHeight;
+  return max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
 }

@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小说阅读器 · 配色审计</title>
+<style>
+  :root{
+    --ink:#1c1b19; --ink-2:#4a4742; --ink-3:#7a756c; --line:#e2ded6;
+    --paper:#fbfaf7; --card:#ffffff; --tint:#f3f1ec;
+    --fail:#b23a2f; --warn:#a5761b; --pass:#2f6b3a;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    font-size:14px; line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px;margin:0 auto;padding:56px 32px 96px}
+  header{border-bottom:2px solid var(--ink);padding-bottom:22px;margin-bottom:8px}
+  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)}
+  h1{font-size:34px;line-height:1.25;margin:10px 0 6px;letter-spacing:-.01em}
+  .sub{color:var(--ink-2);font-size:14px}
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:0;border-bottom:1px solid var(--line);margin-bottom:44px}
+  .kpi{padding:22px 14px 20px;border-right:1px solid var(--line)}
+  .kpi:last-child{border-right:none}
+  .kpi b{display:block;font-size:28px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .kpi span{display:block;font-size:11.5px;color:var(--ink-3);letter-spacing:.04em;margin-top:2px}
+  h2{font-size:19px;margin:56px 0 6px;letter-spacing:.01em}
+  h2 .n{color:var(--ink-3);font-weight:400;margin-right:10px;font-variant-numeric:tabular-nums}
+  h3{font-size:14px;margin:28px 0 8px;color:var(--ink)}
+  p{margin:8px 0;color:var(--ink-2)}
+  p strong{color:var(--ink);font-weight:600}
+  .lede{font-size:15px;color:var(--ink-2);max-width:78ch}
+  table{width:100%;border-collapse:collapse;margin:14px 0 6px;font-size:12.5px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{font-weight:600;color:var(--ink-3);font-size:11px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid #cfc9be}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  tr:hover td{background:#f7f5f0}
+  .sw{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+  .chip{width:15px;height:15px;border-radius:3px;border:1px solid rgba(0,0,0,.14);flex:none;display:inline-block}
+  .mono{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:11.5px;color:var(--ink)}
+  .tag{display:inline-block;font-size:10.5px;padding:1px 6px;border-radius:3px;letter-spacing:.03em;white-space:nowrap}
+  .t-fail{background:#f6e3e0;color:var(--fail)}
+  .t-warn{background:#f7eed8;color:var(--warn)}
+  .t-pass{background:#e5efe6;color:var(--pass)}
+  .t-neutral{background:var(--tint);color:var(--ink-2)}
+  .callout{border-left:3px solid var(--ink);background:var(--card);padding:16px 20px;margin:18px 0}
+  .callout.bad{border-color:var(--fail)}
+  .callout.ok{border-color:var(--pass)}
+  .callout p{margin:4px 0}
+  ul{margin:8px 0 8px 20px;padding:0;color:var(--ink-2)}
+  li{margin:4px 0}
+  li strong{color:var(--ink)}
+  code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--tint);padding:1px 5px;border-radius:3px;color:#3b3730}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 32px}
+  .issue{border-top:1px solid var(--line);padding:14px 0 6px;display:grid;grid-template-columns:26px 1fr;gap:12px}
+  .issue .idx{font-variant-numeric:tabular-nums;color:var(--ink-3);font-size:12px;padding-top:2px}
+  .issue h4{margin:0 0 3px;font-size:13.5px}
+  .issue p{margin:3px 0;font-size:13px}
+  .fix{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:16px 18px;margin:12px 0}
+  .fix h4{margin:0 0 6px;font-size:13px}
+  .fix p{margin:4px 0;font-size:13px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-3);margin:10px 0 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  footer{margin-top:64px;padding-top:18px;border-top:1px solid var(--line);color:var(--ink-3);font-size:11.5px}
+  @media (max-width:900px){
+    .kpis{grid-template-columns:repeat(3,1fr)}
+    .kpi:nth-child(3n){border-right:none}
+    .grid2{grid-template-columns:1fr}
+    .wrap{padding:32px 18px 64px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">配色审计 · Color Audit</div>
+  <h1>小说阅读器 · 主题色分布与可用性评估</h1>
+  <p class="sub">分析范围：<code>novel-reader/webview/reader/**</code> + <code>src/settings.ts</code> + <code>src/provinceColors.ts</code> + <code>src/solarTerms.ts</code></p>
+</header>
+
+<div class="kpis">
+  <div class="kpi"><b>6</b><span>预设主题</span></div>
+  <div class="kpi"><b>58</b><span>派生主题（34 省 + 24 节气）</span></div>
+  <div class="kpi"><b>16</b><span>语义令牌</span></div>
+  <div class="kpi"><b>32</b><span>着色部位</span></div>
+  <div class="kpi"><b>629</b><span>落地色值（去重前）</span></div>
+  <div class="kpi"><b>12</b><span>不达标项（对比度 / 层次）</span></div>
+</div>
+
+<h2><span class="n">01</span>结论</h2>
+<p class="lede">色彩模型本身是干净的：10 个语义令牌驱动全部界面，58 套主题零 CSS 分支。问题不在颜色好不好看，而在<strong>令牌角色重叠</strong>与<strong>校准目标用错</strong>——同一枚令牌在 A 处当图标色（3:1 够）、在 B 处当正文色（需 4.5:1），于是大面积低估。</p>
+
+<div class="callout bad">
+  <p><strong>① 双强调色并行。</strong>浅色 5 套主题里 <code>accent</code> 等于正文色（无彩黑），<code>panelAccent</code> 固定为品牌红 <span class="mono">#f56c6c</span>。于是“当前项”这一语义在不同部位换成两种颜色：目录当前章用黑、侧栏激活项用红、书架当前书用黑条、省份选中项用红底。</p>
+  <p><strong>② 可读性系统性偏低。</strong>11–12px 次要文字全部落在 3.07–4.12:1；红色强调在纸面上仅 2.31–2.90:1；58 套派生主题中 38 套的强调色作文字时 &lt;4.5:1。</p>
+  <p><strong>③ 层次靠 1.1:1 的底色差撑。</strong>纸面 / 留白 / 侧栏三层底色对比 1.04–1.17，边线 1.19–1.38，均低于 3:1 的界面元素可辨阈值。</p>
+</div>
+
+<h2><span class="n">02</span>色彩从哪来：三条供给线</h2>
+<table>
+  <thead><tr><th style="width:170px">来源</th><th style="width:90px" class="num">色值数</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td><strong>预设主题</strong></td><td class="num">54 + 2</td><td><code>THEMES</code> 中 6 套 × 10 令牌；54 个十六进制 + 2 个 rgba（<code>panelHover</code>）。去重后仅 <strong>41</strong> 个真实色值。</td></tr>
+    <tr><td><strong>派生主题</strong></td><td class="num">580</td><td>34 省 + 24 节气 = 58 个代表色，经 <code>paintTheme()</code> 由色相推导 10 令牌。源色共 <strong>215</strong> 个（191 省色 + 24 节气色）。</td></tr>
+    <tr><td><strong>硬编码旁路</strong></td><td class="num">8</td><td>Logo 三色、删除按钮红、手柄灰、4 档黑色阴影 —— 不参与主题，切换主题时不变。</td></tr>
+  </tbody>
+</table>
+
+<h3>语义令牌（每套主题 10 个，运行时映射为 16 个 CSS 变量）</h3>
+<table>
+  <thead><tr><th style="width:130px">令牌</th><th style="width:190px">映射变量</th><th>职责</th></tr></thead>
+  <tbody>
+    <tr><td><code>bg</code></td><td><code>--bg</code> / <code>--sp-bg</code>(浮层) / <code>--input-bg</code></td><td>纸面底色；浮层与菜单激活项底</td></tr>
+    <tr><td><code>fg</code></td><td><code>--fg</code> / <code>--chrome-fg</code> / <code>--sp-fg</code></td><td>正文与界面文字（只有一级）</td></tr>
+    <tr><td><code>pageBg</code></td><td><code>--page-bg</code> / <code>--sp-control-bg</code></td><td>纸面外留白；控件底、目录选中底</td></tr>
+    <tr><td><code>chromeBg</code></td><td><code>--chrome-bg</code> / <code>--fab-bg</code></td><td>侧栏、状态栏、章节导航底</td></tr>
+    <tr><td><code>chromeBorder</code></td><td><code>--chrome-border</code> / <code>--sp-border</code> / <code>--input-border</code></td><td>边线、分隔线、进度条槽</td></tr>
+    <tr><td><code>accent</code></td><td><code>--accent</code> / <code>--fab-fg</code></td><td>主按钮底、目录当前章、章节导航图标</td></tr>
+    <tr><td><code>accentFg</code></td><td><code>--accent-fg</code></td><td>主按钮上的文字</td></tr>
+    <tr><td><code>muted</code></td><td><code>--sp-muted</code></td><td>标签 / 提示（仅 3 处使用）</td></tr>
+    <tr><td><code>panelAccent</code></td><td><code>--sp-accent</code></td><td>侧栏激活、进度条、滚动条、焦点框、选中态</td></tr>
+    <tr><td><code>panelHover</code></td><td><code>--sp-hover</code></td><td>悬停底色</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">03</span>六套预设色板</h2>
+<p>5 套浅色共享同一枚红色 <span class="mono">#f56c6c</span> 与同一枚悬停黑 <span class="mono">rgba(0,0,0,.05)</span>；只有黑夜主题换成暖金 <span class="mono">#c9963f</span>，且<strong>它的两枚强调色恰好相等</strong>——所以 6 套里 5 套与 1 套的规则不一致。</p>
+<table>
+  <thead>
+    <tr>
+      <th style="width:104px">主题</th>
+      <th>纸面 bg</th><th>正文 fg</th><th>留白 page</th><th>面板 chrome</th>
+      <th>边线</th><th>强调 accent</th><th>辅强调 sp-accent</th><th>次要 muted</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>纯净白</strong></td>
+      <td><span class="sw"><i class="chip" style="background:#ffffff"></i><span class="mono">#ffffff</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#262626"></i><span class="mono">#262626</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#f3f3f3"></i><span class="mono">#f3f3f3</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#f7f7f7"></i><span class="mono">#f7f7f7</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#e4e4e4"></i><span class="mono">#e4e4e4</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#262626"></i><span class="mono">#262626</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#f56c6c"></i><span class="mono">#f56c6c</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#262626;opacity:.6"></i><span class="mono">#26262699</span></span></td>
+    </tr>
+    <tr>
+      <td><strong>米白</strong></td>
+      <td><span class="sw"><i class="chip" style="background:#f8f4ea"></i><span class="mono">#f8f4ea</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#33302a"></i><span class="mono">#33302a</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#efe9db"></i><span class="mono">#efe9db</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#f4f0e5"></i><span class="mono">#f4f0e5</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#e0d9c6"></i><span class="mono">#e0d9c6</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#33302a"></i><span class="mono">#33302a</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#f56c6c"></i><span class="mono">#f56c6c</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#33302a;opacity:.6"></i><span class="mono">#33302a99</span></span></td>
+    </tr>
+    <tr>
+      <td><strong>羊皮纸</strong></td>
+      <td><span class="sw"><i class="chip" style="background:#f4e8cd"></i><span class="mono">#f4e8cd</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#4b3f2a"></i><span class="mono">#4b3f2a</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#eadbb4"></i><span class="mono">#eadbb4</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#f0e3c2"></i><span class="mono">#f0e3c2</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#dbc79c"></i><span class="mono">#dbc79c</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#4b3f2a"></i><span class="mono">#4b3f2a</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#f56c6c"></i><span class="mono">#f56c6c</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#4b3f2a;opacity:.6"></i><span class="mono">#4b3f2a99</span></span></td>
+    </tr>
+    <tr>
+      <td><strong>护眼绿</strong></td>
+      <td><span class="sw"><i class="chip" style="background:#d5ecd0"></i><span class="mono">#d5ecd0</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#2c3f2c"></i><span class="mono">#2c3f2c</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#c3e0ba"></i><span class="mono">#c3e0ba</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#cde6c6"></i><span class="mono">#cde6c6</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#a8cfa0"></i><span class="mono">#a8cfa0</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#2c3f2c"></i><span class="mono">#2c3f2c</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#f56c6c"></i><span class="mono">#f56c6c</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#2c3f2c;opacity:.6"></i><span class="mono">#2c3f2c99</span></span></td>
+    </tr>
+    <tr>
+      <td><strong>浅蓝</strong></td>
+      <td><span class="sw"><i class="chip" style="background:#e4eef5"></i><span class="mono">#e4eef5</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#2c3944"></i><span class="mono">#2c3944</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#d3e2ec"></i><span class="mono">#d3e2ec</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#dfeaf2"></i><span class="mono">#dfeaf2</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#c3d5e1"></i><span class="mono">#c3d5e1</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#2c3944"></i><span class="mono">#2c3944</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#f56c6c"></i><span class="mono">#f56c6c</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#2c3944;opacity:.6"></i><span class="mono">#2c394499</span></span></td>
+    </tr>
+    <tr>
+      <td><strong>黑夜</strong></td>
+      <td><span class="sw"><i class="chip" style="background:#232323"></i><span class="mono">#232323</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#bababa"></i><span class="mono">#bababa</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#141414"></i><span class="mono">#141414</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#1c1c1c"></i><span class="mono">#1c1c1c</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#333333"></i><span class="mono">#333333</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#c9963f"></i><span class="mono">#c9963f</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#c9963f"></i><span class="mono">#c9963f</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#8a8a8a"></i><span class="mono">#8a8a8a</span></span></td>
+    </tr>
+  </tbody>
+</table>
+<div class="legend">
+  <span><i class="chip" style="background:#f56c6c"></i>同一枚品牌红横跨 5 套主题，与绿/蓝/羊皮纸的色相无关</span>
+  <span><i class="chip" style="background:#262626"></i>accent 与 fg 同值 → 强调无色相差异</span>
+</div>
+
+<h2><span class="n">04</span>32 处着色部位</h2>
+<p>按层级拆成 5 组：阅读层 6 处、常驻框架 9 处、状态栏 3 处、浮层 11 处、主题/滚动 3 处。</p>
+
+<h3>A · 阅读层（6）</h3>
+<table>
+  <thead><tr><th style="width:190px">部位</th><th style="width:190px">实现</th><th style="width:200px">取色</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr><td>阅读区外围留白</td><td><code>#reader</code></td><td><code>--page-bg</code></td><td>与纸面仅差 1.11–1.17</td></tr>
+    <tr><td>正文纸面</td><td><code>#content</code></td><td><code>--bg</code></td><td>—</td></tr>
+    <tr><td>正文 / 章节标题</td><td><code>#content</code></td><td><code>--fg</code></td><td>8.1–15.1:1，唯一稳定达标的层级</td></tr>
+    <tr><td>纸面描边</td><td><code>#content</code></td><td><code>--chrome-border</code></td><td>1.24–1.38:1，几乎不可见</td></tr>
+    <tr><td>纸面投影</td><td><code>box-shadow</code></td><td class="mono">rgba(0,0,0,.14)</td><td>硬编码；黑夜下失效</td></tr>
+    <tr><td>栏宽拖拽手柄</td><td><code>.width-handle:hover</code></td><td class="mono">rgba(127,127,127,.05)</td><td>硬编码中性灰</td></tr>
+  </tbody>
+</table>
+
+<h3>B · 常驻框架（9）</h3>
+<table>
+  <thead><tr><th style="width:190px">部位</th><th style="width:190px">实现</th><th style="width:200px">取色</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr><td>侧边菜单底</td><td><code>.menu</code></td><td><code>--sp-bg</code>（根＝chromeBg）</td><td>同名令牌在浮层内被覆写为 bg</td></tr>
+    <tr><td>菜单图标 / 文字</td><td><code>.menu-item</code></td><td><code>--sp-fg</code></td><td>仅一级文字</td></tr>
+    <tr><td>菜单激活文字 / 图标 / 3px 左条</td><td><code>.menu-item.active</code></td><td><code>--sp-accent</code></td><td>浅色下 2.31–2.90:1</td></tr>
+    <tr><td>菜单激活项底</td><td><code>.menu-item.active</code></td><td><code>--sp-control-bg</code></td><td>与菜单底差 1.04–1.08</td></tr>
+    <tr><td>菜单悬停底</td><td><code>:hover</code></td><td><code>--sp-hover</code></td><td>rgba 黑 / 白，无主题色参与</td></tr>
+    <tr><td>菜单分隔线</td><td><code>.menu-divider</code></td><td><code>--sp-border</code></td><td>—</td></tr>
+    <tr><td>Logo 色块</td><td rowspan="3"><code>SideMenu.vue</code> 内联 SVG</td><td class="mono">#ED8F27</td><td>硬编码橙</td></tr>
+    <tr><td>Logo 线稿 / 书脊</td><td class="mono">#300604</td><td>黑夜下 1.07:1</td></tr>
+    <tr><td>Logo 书页 / 放射线</td><td class="mono">#FCE3C3</td><td>浅色侧栏 1.02–1.16:1</td></tr>
+  </tbody>
+</table>
+
+<h3>C · 状态栏（3）</h3>
+<table>
+  <thead><tr><th style="width:190px">部位</th><th style="width:190px">实现</th><th style="width:200px">取色</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr><td>状态栏底 / 字 / 上边线</td><td><code>.statusbar</code></td><td>chromeBg / fg / chromeBorder</td><td>—</td></tr>
+    <tr><td>进度条槽</td><td><code>.progress-track</code></td><td><code>--chrome-border</code></td><td>边线色被当填充色用，1.19–1.35:1</td></tr>
+    <tr><td>进度条填充</td><td><code>.progress-fill</code></td><td><code>--sp-accent</code></td><td>—</td></tr>
+  </tbody>
+</table>
+
+<h3>D · 浮层：目录 / 设置 / 书架 / 存储（11）</h3>
+<table>
+  <thead><tr><th style="width:190px">部位</th><th style="width:190px">实现</th><th style="width:200px">取色</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr><td>浮层底</td><td>四个面板</td><td><code>--bg</code></td><td>与正文纸面同色，靠阴影浮起</td></tr>
+    <tr><td>浮层边线 / 分隔线</td><td>各 <code>*-head / *-foot</code></td><td><code>--sp-border</code></td><td>1.19–1.38:1</td></tr>
+    <tr><td>控件底（分段键 / 步进器 / 输入框 / 下拉项）</td><td><code>.sp-seg-btn</code> 等</td><td><code>--sp-control-bg</code> / <code>--page-bg</code></td><td>与浮层底差 1.04–1.17</td></tr>
+    <tr><td>次要文字</td><td><code>.sp-label</code> / <code>.cat-sub</code> / <code>.bk-sub</code> / <code>.popup-tip</code></td><td><code>--sp-muted</code> 与 <code>opacity .55/.6</code> 并存</td><td>两套降级机制，3.07–4.12:1</td></tr>
+    <tr><td>选中态描边 / 文字 / 焦点框</td><td><code>.sp-seg-btn.active</code> 等</td><td><code>--sp-accent</code></td><td>小字 2.31–2.90:1</td></tr>
+    <tr><td>主按钮</td><td><code>.popup-primary</code></td><td><code>--accent</code> + <code>--accent-fg</code></td><td>浅色主题下等于深灰按钮</td></tr>
+    <tr><td>次按钮</td><td><code>.popup-secondary</code></td><td><code>--page-bg</code> + <code>--fg</code></td><td>—</td></tr>
+    <tr><td>目录当前章底</td><td><code>.cat-item.cur</code></td><td><code>--page-bg</code></td><td>—</td></tr>
+    <tr><td>目录当前章文字 / 序号</td><td><code>.cat-item.cur .cat-no</code></td><td><code>--accent</code></td><td>58 套派生主题中 48 套 &lt;4.5:1</td></tr>
+    <tr><td>删除按钮悬停</td><td><code>.bp-del:hover</code></td><td class="mono">#d9534f</td><td>硬编码红，3.16–3.97:1</td></tr>
+    <tr><td>省份 / 节气色条</td><td><code>.sp-province-item</code></td><td>191 省色 + 24 节气原色</td><td>唯一直接暴露原色的位置</td></tr>
+  </tbody>
+</table>
+
+<h3>E · 主题选择与滚动（3）</h3>
+<table>
+  <thead><tr><th style="width:190px">部位</th><th style="width:190px">实现</th><th style="width:200px">取色</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr><td>主题色点（6 个）</td><td><code>.sp-dot</code></td><td>各主题 bg / fg + <code>--sp-check</code></td><td>黑夜点硬编码 <span class="mono">#1c1c1c</span></td></tr>
+    <tr><td>下拉选中项</td><td><code>.sp-province-item.active</code></td><td><code>--sp-accent</code> 底 + <code>#fff</code></td><td><code>--sp-accent-fg</code> 从未定义，靠 fallback</td></tr>
+    <tr><td>滚动条滑块</td><td>全局 <code>::-webkit-scrollbar-thumb</code></td><td><code>--sp-accent</code>（hover → <code>--accent</code>）</td><td>两套强调色在此处直接混用</td></tr>
+  </tbody>
+</table>
+<p style="font-size:12.5px;color:var(--ink-3)">另有章节导航按钮（<code>.ch-nav-btn</code>）复用 <code>--fab-*</code> 三枚令牌 + 硬编码黑色投影 —— 计入 D 组主/次按钮同族，不单列。</p>
+
+<h2><span class="n">05</span>对比度审计</h2>
+<p>按 WCAG 2.1 计算：正文 4.5:1（AA）、大字号/图形 3:1。数值为实际合成后的结果（带 alpha 的色值按底色混合后计算）。</p>
+
+<h3>5.1 六套预设</h3>
+<table>
+  <thead><tr>
+    <th>主题</th><th class="num">正文<br>fg/bg</th><th class="num">正文<br>fg/page</th><th class="num">强调<br>accent/chrome</th>
+    <th class="num">按钮字<br>accentFg/accent</th><th class="num">次要字<br>muted/bg</th><th class="num">小字<br>opacity .55</th><th class="num">品牌红<br>#f56c6c/bg</th>
+  </tr></thead>
+  <tbody>
+    <tr><td>纯净白</td><td class="num">15.13</td><td class="num">13.64</td><td class="num">14.13</td><td class="num">15.13</td><td class="num"><span class="tag t-warn">4.12</span></td><td class="num"><span class="tag t-warn">3.54</span></td><td class="num"><span class="tag t-fail">2.90</span></td></tr>
+    <tr><td>米白</td><td class="num">11.97</td><td class="num">10.86</td><td class="num">11.55</td><td class="num">13.15</td><td class="num"><span class="tag t-fail">3.68</span></td><td class="num"><span class="tag t-warn">3.21</span></td><td class="num"><span class="tag t-fail">2.64</span></td></tr>
+    <tr><td>羊皮纸</td><td class="num">8.45</td><td class="num">7.48</td><td class="num">8.06</td><td class="num">9.53</td><td class="num"><span class="tag t-fail">3.07</span></td><td class="num"><span class="tag t-fail">2.76</span></td><td class="num"><span class="tag t-fail">2.38</span></td></tr>
+    <tr><td>护眼绿</td><td class="num">9.03</td><td class="num">7.92</td><td class="num">8.48</td><td class="num">10.94</td><td class="num"><span class="tag t-fail">3.21</span></td><td class="num"><span class="tag t-fail">2.85</span></td><td class="num"><span class="tag t-fail">2.31</span></td></tr>
+    <tr><td>浅蓝</td><td class="num">10.05</td><td class="num">8.93</td><td class="num">9.68</td><td class="num">11.83</td><td class="num"><span class="tag t-fail">3.38</span></td><td class="num"><span class="tag t-fail">2.99</span></td><td class="num"><span class="tag t-fail">2.46</span></td></tr>
+    <tr><td>黑夜</td><td class="num">8.10</td><td class="num">9.49</td><td class="num">6.43</td><td class="num">6.63</td><td class="num"><span class="tag t-pass">4.55</span></td><td class="num"><span class="tag t-warn">3.46</span></td><td class="num"><span class="tag t-neutral">5.42</span></td></tr>
+  </tbody>
+</table>
+<div class="legend">
+  <span><span class="tag t-pass">≥4.5 达标</span></span>
+  <span><span class="tag t-warn">3.0–4.5 仅够大字/图形</span></span>
+  <span><span class="tag t-fail">&lt;3 不可用</span></span>
+</div>
+
+<h3>5.2 58 套派生主题（省 / 节气）</h3>
+<table>
+  <thead><tr><th style="width:280px">检查项</th><th class="num" style="width:110px">不达标</th><th>最差样本</th><th>根因</th></tr></thead>
+  <tbody>
+    <tr><td>正文 fg / 纸面 bg</td><td class="num"><span class="tag t-pass">0 / 58</span></td><td>安徽 11.1:1</td><td>锁定明度 0.16，安全</td></tr>
+    <tr><td>次要字 muted / bg</td><td class="num"><span class="tag t-pass">0 / 58</span></td><td>—</td><td><code>ensureContrast(…,4.5)</code> 生效</td></tr>
+    <tr><td>强调色 accent / bg（作文字）</td><td class="num"><span class="tag t-pass">0 / 58</span></td><td>—</td><td>压暗至 4.5</td></tr>
+    <tr><td><strong>强调色 accent / 选中底 page-bg</strong></td><td class="num"><span class="tag t-fail">48 / 58</span></td><td>谷雨 3.64、芒种 3.65、惊蛰 3.67</td><td>只对了 bg 校准，漏掉更深的 page-bg</td></tr>
+    <tr><td><strong>panelAccent 作文字</strong></td><td class="num"><span class="tag t-fail">38 / 58</span></td><td>霜降 3.00、小雪 3.02、甘肃 3.03</td><td>校准目标写的是 3:1（图形级），实际用途是文字</td></tr>
+    <tr><td>按钮字 accentFg / accent</td><td class="num"><span class="tag t-pass">0 / 58</span></td><td>—</td><td>但判据是 3:1，非 4.5</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <p><strong>测试为什么没报错：</strong><code>scripts/test-province-theme.js</code> 只断言 <code>fg/bg</code>、<code>muted/bg</code>、<code>accent/bg</code>、<code>accentFg/accent</code> —— 恰好都不是出问题的组合。另外 <code>contrastRatio()</code> 的正则只吃 6 位十六进制，5 套浅色主题的 <code>muted</code>（<span class="mono">#RRGGBBAA</span>）会解析成黑色并算出 21:1 的假通过。</p>
+</div>
+
+<h3>5.3 硬编码色</h3>
+<table>
+  <thead><tr><th style="width:200px">色值</th><th style="width:220px">用途</th><th>实测</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">#ED8F27</td><td>Logo 橙色块</td><td>浅色侧栏 1.84–2.29:1；仅黑夜可用（6.95）</td></tr>
+    <tr><td class="mono">#FCE3C3</td><td>Logo 书页 / 放射线</td><td>浅色侧栏 1.02–1.16:1，几乎与底同色</td></tr>
+    <tr><td class="mono">#300604</td><td>Logo 线稿</td><td>黑夜 1.07:1，轮廓消失</td></tr>
+    <tr><td class="mono">#d9534f</td><td>删除按钮悬停</td><td>3.16–3.97:1，且不在任何主题色板中</td></tr>
+    <tr><td class="mono">rgba(0,0,0,.12/.14/.18/.25/.35)</td><td>按钮 / 纸面 / 下拉 / 浮层 / 浮层</td><td>5 种黑，黑夜主题下全部不可见</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">06</span>三个维度的问题</h2>
+
+<h3>一致性</h3>
+<div class="issue"><div class="idx">01</div><div>
+  <h4>两套强调色并行，同一语义两种颜色</h4>
+  <p><code>accent</code>（浅色下＝正文黑）与 <code>panelAccent</code>（红）同时承担“选中/当前”语义。目录当前章是黑，侧栏激活是红，书架当前书是黑边条，省份选中是红底 —— 用户无法建立“高亮＝某一种颜色”的稳定预期。</p>
+</div></div>
+<div class="issue"><div class="idx">02</div><div>
+  <h4>品牌红不跟随主题</h4>
+  <p><span class="mono">#f56c6c</span> 硬写在 5 套浅色主题里。切到护眼绿/浅蓝时，红点、红进度条、红焦点框与整体色相冲突，看起来像“主题没生效”。</p>
+</div></div>
+<div class="issue"><div class="idx">03</div><div>
+  <h4>同一令牌在不同作用域含义不同</h4>
+  <p><code>--sp-bg</code> 在根元素＝<code>chromeBg</code>，在浮层内被覆写为 <code>bg</code>；<code>--sp-control-bg</code> 根＝<code>bg</code>、浮层内＝<code>page-bg</code>。同名不同义，后续加组件极易取错。</p>
+</div></div>
+<div class="issue"><div class="idx">04</div><div>
+  <h4>次要文字两套降级机制</h4>
+  <p>一边有 <code>--sp-muted</code>（3 处），一边用 <code>opacity: .35/.55/.6/.65/.7/.85</code> 共 30 处。透明度叠加在深浅底上结果不可控，也无法参与对比度校验。</p>
+</div></div>
+
+<h3>可读性</h3>
+<div class="issue"><div class="idx">05</div><div>
+  <h4>小字全部低于 AA</h4>
+  <p>11–12px 的卷名、字数、路径提示、快捷键说明，在 6 套主题下只有 3.07–4.12:1。羊皮纸最差（3.07），护眼绿次之（3.21）。</p>
+</div></div>
+<div class="issue"><div class="idx">06</div><div>
+  <h4>强调色校准目标用错</h4>
+  <p><code>paintTheme</code> 给 <code>panelAccent</code> 只校到 3:1，但它在 CSS 里是侧栏激活文字、目录当前章文字、分段键文字 —— 都属正文级。38/58 套因此不达标。</p>
+</div></div>
+<div class="issue"><div class="idx">07</div><div>
+  <h4>强调色只对纸面校准，漏掉选中底</h4>
+  <p>目录当前章的文字压在 <code>page-bg</code> 上（比纸面更深），而对比度只按 <code>bg</code> 算过。48/58 套在真实组合下 &lt;4.5。</p>
+</div></div>
+<div class="issue"><div class="idx">08</div><div>
+  <h4>红底白字不成立</h4>
+  <p>省份/节气下拉选中项用 <code>--sp-accent</code> 底 + <code>--sp-accent-fg</code>，但该变量从未定义，永远落到 <code>#fff</code>；白字在 <span class="mono">#f56c6c</span> 上仅 2.90:1。</p>
+</div></div>
+<div class="issue"><div class="idx">09</div><div>
+  <h4>删除按钮红越界</h4>
+  <p><span class="mono">#d9534f</span> 不属于任何主题色板，3.16–3.97:1；同时也让“红＝危险”与“红＝强调”在同一界面里打架。</p>
+</div></div>
+
+<h3>视觉层次</h3>
+<div class="issue"><div class="idx">10</div><div>
+  <h4>三层背景几乎同色</h4>
+  <p>纸面 / 留白 / 侧栏：白 1.11 / 1.07 / 1.06，羊皮纸 1.13 / 1.05 / 1.05。层次全靠 1px 边线，而边线本身也只有 1.19–1.38:1。</p>
+</div></div>
+<div class="issue"><div class="idx">11</div><div>
+  <h4>阴影在黑夜主题失效</h4>
+  <p>5 档黑色投影没有主题化。<code>#1c1c1c</code> 底上叠 <span class="mono">rgba(0,0,0,.25)</span> 几乎无变化，浮层与纸面之间失去高度差，只剩边线可用 —— 而边线也不到 1.4:1。</p>
+</div></div>
+<div class="issue"><div class="idx">12</div><div>
+  <h4>Logo 在多数主题下“半消失”</h4>
+  <p>米白书页在浅色侧栏 1.02–1.16:1，橙色块 1.84–2.29:1；深棕线稿在黑夜 1.07:1。只有 <code>.logo-spark</code> 做了 dark 分支，其余 6 个 path 硬编码。</p>
+</div></div>
+<div class="issue"><div class="idx">13</div><div>
+  <h4>进度条槽＝边线色</h4>
+  <p><code>.progress-track</code> 直接复用 <code>--chrome-border</code>，1.19–1.35:1；未填充段几乎不可见，进度条的“总量”信息丢失。</p>
+</div></div>
+<div class="issue"><div class="idx">14</div><div>
+  <h4>58 套主题只产出 25 种纸面色</h4>
+  <p>同色相在 8bit 下被量化重合（测试里也承认“34 省实际只能区分 ~17 种”）。切换省份/节气时，正文区和纸面看不出变化，地域辨识度实际由留白区独自承担。</p>
+</div></div>
+
+<h2><span class="n">07</span>优化建议</h2>
+
+<div class="fix">
+  <h4>P0 · 先把“错误的校准”修掉（改动最小，收益最大）</h4>
+  <ul>
+    <li><code>paintTheme</code> 中 <code>panelAccent</code> 的校准目标 3 → <strong>4.5</strong>；<code>accentFg</code> 的判据 3 → <strong>4.5</strong>。</li>
+    <li>新增一次对 <code>page-bg</code> 的校准：<code>accentText = ensureContrast(accent, pageBg, 4.5)</code>，专门供“选中底上的文字”使用（目录当前章、分段键激活态）。</li>
+    <li>补上 <code>--sp-accent-fg</code> 的定义（<code>accentFg</code>），去掉 <code>#fff</code> fallback。</li>
+    <li>把 <code>contrastRatio()</code> 的解析改成支持 8 位十六进制并做 alpha 合成，否则 <code>muted</code> 永远是假通过。</li>
+    <li>测试补三条断言：<code>panelAccent/chromeBg</code>、<code>accent/pageBg</code>、<code>muted 合成后/bg</code>。</li>
+  </ul>
+</div>
+
+<div class="fix">
+  <h4>P1 · 统一强调色：一套颜色，两个强度</h4>
+  <p>取消“固定品牌红”，让强调色回到主题自己的色相；用强度区分用途，而不是用两枚不相干的颜色：</p>
+  <table>
+    <thead><tr><th style="width:110px">主题</th><th style="width:130px">accent-strong（文字级 4.5:1）</th><th style="width:120px">对比</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>纯净白</td><td><span class="sw"><i class="chip" style="background:#c0392b"></i><span class="mono">#c0392b</span></span></td><td>5.44</td><td>起点红压深，保留品牌记忆</td></tr>
+      <tr><td>米白</td><td><span class="sw"><i class="chip" style="background:#8a5a2b"></i><span class="mono">#8a5a2b</span></span></td><td>5.34</td><td>赭石，同暖色相</td></tr>
+      <tr><td>羊皮纸</td><td><span class="sw"><i class="chip" style="background:#8a4b2a"></i><span class="mono">#8a4b2a</span></span></td><td>5.53</td><td>棕红，贴纸感</td></tr>
+      <tr><td>护眼绿</td><td><span class="sw"><i class="chip" style="background:#2b6135"></i><span class="mono">#2b6135</span></span></td><td>5.13（于留白）</td><td>墨绿，替代红</td></tr>
+      <tr><td>浅蓝</td><td><span class="sw"><i class="chip" style="background:#2c5a8a"></i><span class="mono">#2c5a8a</span></span></td><td>6.08</td><td>靛蓝</td></tr>
+      <tr><td>黑夜</td><td><span class="sw"><i class="chip" style="background:#c9963f"></i><span class="mono">#c9963f</span></span></td><td>5.93</td><td>保持暖金不变</td></tr>
+    </tbody>
+  </table>
+  <p>令牌拆成两枚：<code>accent</code>（可作图标/描边/大面积填充，≥3:1）与 <code>accentText</code>（任何文字，≥4.5:1）。<code>panelAccent</code> 直接等于 <code>accentText</code>，不再单独存在。这样 6 套主题与 58 套派生主题走同一条规则，“当前项”永远是同一种颜色。</p>
+</div>
+
+<div class="fix">
+  <h4>P1 · 次要文字改成实色，别再叠透明度</h4>
+  <p>把 <code>opacity: .55/.6</code> 全部替换为一枚计算好的 <code>--fg-muted</code>（实色，保证 4.5:1）。6 套主题的建议值：</p>
+  <table>
+    <thead><tr><th>主题</th><th>纯净白</th><th>米白</th><th>羊皮纸</th><th>护眼绿</th><th>浅蓝</th><th>黑夜</th></tr></thead>
+    <tbody>
+      <tr><td>现方案</td><td class="mono">#26262699 → 4.12</td><td class="mono">#33302a99 → 3.68</td><td class="mono">#4b3f2a99 → 3.07</td><td class="mono">#2c3f2c99 → 3.21</td><td class="mono">#2c394499 → 3.38</td><td class="mono">#8a8a8a → 4.55</td></tr>
+      <tr><td>建议值</td><td><span class="sw"><i class="chip" style="background:#767676"></i><span class="mono">#767676 → 4.54</span></span></td><td><span class="sw"><i class="chip" style="background:#726f67"></i><span class="mono">#726f67 → 4.57</span></span></td><td><span class="sw"><i class="chip" style="background:#746851"></i><span class="mono">#746851 → 4.50</span></span></td><td><span class="sw"><i class="chip" style="background:#586c57"></i><span class="mono">#586c57 → 4.53</span></span></td><td><span class="sw"><i class="chip" style="background:#616d77"></i><span class="mono">#616d77 → 4.50</span></span></td><td><span class="sw"><i class="chip" style="background:#8a8a8a"></i><span class="mono">#8a8a8a → 4.55</span></span></td></tr>
+    </tbody>
+  </table>
+  <p>同时把 30 处 opacity 收敛为 3 档语义：<code>--fg-muted</code>（次要说明）、<code>--fg-subtle</code>（占位/禁用，可用透明度）、<code>--fg</code>（正文）。</p>
+</div>
+
+<div class="fix">
+  <h4>P1 · 重建三级背景台阶</h4>
+  <p>目标：纸面 → 留白 ≥1.25、浮层 → 留白 ≥1.15；需要用户识别的控件边界 ≥3:1，纯装饰分隔线可以放宽。以纯净白为例：</p>
+  <ul>
+    <li>纸面 <span class="mono">#ffffff</span>（不变）</li>
+    <li>留白 <span class="mono">#f3f3f3</span> → <span class="mono">#e8e4dd</span>（对比 1.27，带一点暖灰）</li>
+    <li>侧栏/浮层 <span class="mono">#f7f7f7</span> → <span class="mono">#f1efe9</span>（对纸面 1.15、对留白 1.12）</li>
+    <li>边线 <span class="mono">#e4e4e4</span> → 装饰分隔 <span class="mono">#cfcac0</span>（1.63）；输入框/按钮/浮层外框 <span class="mono">#968f85</span>（3.20）</li>
+  </ul>
+  <p>派生主题同步调整 <code>paintTheme</code>：<code>pageBg</code> 明度 0.85 → 0.83、<code>chromeBg</code> 0.915 → 0.90，即可让三层在 58 套主题里都拉开距离，同时不破坏“同色相”的地域感。</p>
+</div>
+
+<div class="fix">
+  <h4>P2 · 阴影、Logo、硬编码色收进主题</h4>
+  <ul>
+    <li>阴影改为 <code>--shadow-color</code>：浅色 <span class="mono">rgba(0,0,0,.10)</span>，黑夜 <span class="mono">rgba(0,0,0,.55)</span> 且额外加 1px 顶部亮边；统一 3 档（浮层 32/按钮 8/纸面 16）。</li>
+    <li>Logo 三色提炼为品牌令牌 <code>--brand-1/2/3</code>，并提供 light/dark 两组值：浅色底用“深棕 + 橙”、隐藏米白或改成描边；黑夜底用“米白 + 橙”。不要把 6 个 path 写死。</li>
+    <li>删除按钮改用 <code>--danger</code>（如 <span class="mono">#b3261e</span>，在纸面 6.54:1），与强调色共享色相规则但保留语义区分。</li>
+    <li>进度条槽改用 <code>--page-bg</code> 或 <code>--fg-muted</code> 的低透明度版本，别再用边线色。</li>
+  </ul>
+</div>
+
+<div class="fix">
+  <h4>P2 · 结构清理</h4>
+  <ul>
+    <li>删除死令牌 <code>--btn-hover</code>（定义 0 使用）；<code>--fab-*</code> 重命名为 <code>--nav-btn-*</code>（现已不含悬浮球）。</li>
+    <li><code>--sp-bg</code> 的浮层覆写改为独立令牌（如 <code>--panel-bg</code>），避免同名不同义。</li>
+    <li>主题色点对 dark 的 <span class="mono">#1c1c1c</span> 硬编码改为读 <code>chromeBg</code>。</li>
+    <li>为“主题辨识度”加回归阈值：任意两套主题的 <code>pageBg</code> ΔL ≥ 0.03，或至少在主题按钮上常驻显示色名，弥补 25/58 的量化撞色。</li>
+  </ul>
+</div>
+
+<footer>
+  数据来源：<code>src/settings.ts</code>（THEMES / paintTheme）、<code>src/provinceColors.ts</code>（34 省 191 色）、<code>src/solarTerms.ts</code>（24 节气）、<code>webview/reader/reader.css</code>（615 行，161 处变量引用）、6 个 Vue 组件。
+  对比度按 WCAG 2.1 相对亮度公式计算，带 alpha 的色值先与底色合成。
+</footer>
+
+</div>
+</body>
+</html>

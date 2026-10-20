@@ -4,7 +4,7 @@
  */
 import { computed, ref, watch, nextTick } from 'vue';
 import { state, gotoChapter } from '../composables/vscode';
-import { chapterParts, buildCatalogGroups } from '../composables/catalog';
+import { chapterParts, buildCatalogGroups, isVolumeTitle } from '../composables/catalog';
 
 interface DisplayItem { index: number; no: string; name: string; title: string }
 interface DisplayGroup {
@@ -25,24 +25,23 @@ const groups = computed<DisplayGroup[]>(function () {
       .map(function (g) { return { name: g.name, entry: g.entry, items: g.items.slice().reverse() }; });
   }
   return gs.map(function (g) {
-    const parts = g.entry >= 0 ? chapterParts(g.name) : { no: '', name: '' };
     return {
       name: g.name,
       entry: g.entry,
       collapsed: (state.catCollapsed || []).indexOf(g.name) >= 0,
-      total: g.items.length + (g.entry >= 0 ? 1 : 0),
+      total: g.items.length, // 卷名行不算一章, 只计真实章节
       items: g.items.map(function (c) {
         const p = chapterParts(c.title);
         return { index: c.index, no: p.no, name: p.name || c.title, title: c.title };
       }),
-      entryNo: parts.no,
-      entryName: g.entry >= 0 ? (parts.name || g.name) : '',
     };
   });
 });
 
+/** 总章数不含卷/篇标题行(篇名不算一章) */
 const subText = computed(function () {
-  return state.chapters.length > 0 ? '共 ' + state.chapters.length + ' 章' : '';
+  const n = state.chapters.filter(function (c) { return !isVolumeTitle(c.title); }).length;
+  return n > 0 ? '共 ' + n + ' 章' : '';
 });
 
 const posText = computed(function () {
@@ -101,10 +100,10 @@ watch(function () { return state.catalogOpen; }, function (open) {
         {{ state.catReverse ? '正序' : '倒序' }}
       </button>
       <button class="cat-btn" :disabled="!state.chapter || state.chapter.index <= 0"
-        @click="state.chapter && gotoChapter(state.chapter.index - 1)">上一章</button>
+        @click="state.chapter && gotoChapter(state.chapter.index - 1, 'prev')">上一章</button>
       <button class="cat-btn"
         :disabled="!state.chapter || !state.novel || state.chapter.index >= state.novel.totalChapters - 1"
-        @click="state.chapter && gotoChapter(state.chapter.index + 1)">下一章</button>
+        @click="state.chapter && gotoChapter(state.chapter.index + 1, 'next')">下一章</button>
       <button class="cat-btn" @click="state.catalogOpen = false">关闭</button>
     </div>
     <div ref="catBodyRef" class="cat-body">
@@ -121,12 +120,8 @@ watch(function () { return state.catalogOpen; }, function (open) {
             </span>
           </div>
           <div class="cat-items">
-            <div v-if="g.entry >= 0" class="cat-item" :data-i="g.entry" :title="g.name"
-              :class="{ cur: state.chapter && state.chapter.index === g.entry }"
-              @click="onItemClick({ index: g.entry, no: g.entryNo, name: g.entryName, title: g.name })">
-              <span v-if="g.entryNo" class="cat-no">{{ g.entryNo }}</span>
-              <span class="cat-name">{{ g.entryName }}</span>
-            </div>
+            <!-- 卷/篇标题行不再作为目录条目(它是分组头, 不是一章);
+                 其卷首引子内容仍保留在章节流里, 从组内第一章「上一章」可达 -->
             <div v-for="c in g.items" :key="c.index" class="cat-item" :data-i="c.index" :title="c.title"
               :class="{ cur: state.chapter && state.chapter.index === c.index }" @click="onItemClick(c)">
               <span v-if="c.no" class="cat-no">{{ c.no }}</span>

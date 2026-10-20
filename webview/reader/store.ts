@@ -7,12 +7,12 @@ import { state, send, saveRestoreState, type ChapterPayload } from './composable
 import { parseShortcut } from './composables/shortcut';
 
 /** 由构建期注入的常量(虚拟模块, 见 vite.config.mjs; 单一来源 src/settings.ts) */
-import { THEMES, FONT_STACKS, DEFAULT_SETTINGS, CONTENT_WIDTH, PROVINCES, PROVINCE_THEMES, SOLAR_TERMS, TERM_THEMES } from 'virtual:novel-constants';
-export { THEMES, FONT_STACKS, DEFAULT_SETTINGS, CONTENT_WIDTH, PROVINCES, PROVINCE_THEMES, SOLAR_TERMS, TERM_THEMES };
+import { THEMES, FONT_STACKS, DEFAULT_SETTINGS, CONTENT_WIDTH, PROVINCES, PROVINCE_THEMES, SOLAR_TERMS, TERM_THEMES, FESTIVALS, FESTIVAL_THEMES } from 'virtual:novel-constants';
+export { THEMES, FONT_STACKS, DEFAULT_SETTINGS, CONTENT_WIDTH, PROVINCES, PROVINCE_THEMES, SOLAR_TERMS, TERM_THEMES, FESTIVALS, FESTIVAL_THEMES };
 
 export { state };
 
-export function themeOf(id: string, province?: string, term?: string): ThemeDef {
+export function themeOf(id: string, province?: string, term?: string, festival?: string): ThemeDef {
   if (id === 'province') {
     // 地域色彩主题: 色板在构建期按 34 个省算好(vite.config), 端上直接查表
     return PROVINCE_THEMES[province || ''] || PROVINCE_THEMES['110000'] || THEMES[0];
@@ -20,6 +20,10 @@ export function themeOf(id: string, province?: string, term?: string): ThemeDef 
   if (id === 'term') {
     // 廿四节气主题: 同样构建期算好 24 套色板
     return TERM_THEMES[term || ''] || TERM_THEMES['lichun'] || THEMES[0];
+  }
+  if (id === 'festival') {
+    // 传统节日主题: 构建期算好 23 套(18 日景 + 5 夜场), 缺省回退春节
+    return FESTIVAL_THEMES[festival || ''] || FESTIVAL_THEMES['chunjie'] || THEMES[0];
   }
   for (const t of THEMES) { if (t.id === id) { return t; } }
   return THEMES[0];
@@ -42,7 +46,7 @@ export function restoreTheme(): void {
 }
 
 export function applyThemeVars(s: ReadingSettings): void {
-  const t = themeOf(s.theme, s.province, s.term);
+  const t = themeOf(s.theme, s.province, s.term, s.festival);
   const root = document.documentElement;
   // 暴露主题 id 供 CSS 按主题分支(如 logo 放射线在浅色/黑夜用不同颜色)
   root.dataset.theme = t.id;
@@ -54,24 +58,32 @@ export function applyThemeVars(s: ReadingSettings): void {
   root.style.setProperty('--chrome-border', t.chromeBorder);
   root.style.setProperty('--accent', t.accent);
   root.style.setProperty('--accent-fg', t.accentFg);
-  root.style.setProperty('--btn-hover', t.accent);
   root.style.setProperty('--input-bg', t.bg);
   root.style.setProperty('--input-fg', t.fg);
-  root.style.setProperty('--input-border', t.chromeBorder);
+  root.style.setProperty('--input-border', t.borderStrong);
+  // 边框分两支: chromeBorder 只做装饰分割, borderStrong 负责"可识别控件边界"(≥3:1)
+  root.style.setProperty('--border-strong', t.borderStrong);
+  // 次要文字统一用实色令牌, 不再靠 opacity 叠色(透明度在不同底色上结果不可控, 也无法参与对比度校验)
+  root.style.setProperty('--fg-muted', t.muted);
+  root.style.setProperty('--danger', t.danger);
+  root.style.setProperty('--shadow-color', t.shadow);
   // 设置面板配色: 全部来自 THEMES 主题变量(调试时改 settings.ts 即可)
   root.style.setProperty('--sp-bg', t.chromeBg);
   root.style.setProperty('--sp-fg', t.fg);
   root.style.setProperty('--sp-border', t.chromeBorder);
+  root.style.setProperty('--sp-border-strong', t.borderStrong);
   root.style.setProperty('--sp-muted', t.muted);
   root.style.setProperty('--sp-hover', t.panelHover);
-  root.style.setProperty('--sp-accent', t.panelAccent);
+  // 强调色只有一支: 高亮文字 / 按钮底 / 进度条 / 焦点框共用, 不再有 panelAccent
+  root.style.setProperty('--sp-accent', t.accent);
+  root.style.setProperty('--sp-accent-fg', t.accentFg);
   root.style.setProperty('--sp-control-bg', t.bg);
-  // 悬浮球: 面板同色底 + 主题色图标/描边
-  root.style.setProperty('--fab-bg', t.chromeBg);
-  root.style.setProperty('--fab-fg', t.accent);
-  root.style.setProperty('--fab-border', t.chromeBorder);
+  // 章节导航按钮(原 --fab-*: 悬浮球已移除, 命名与用途脱节, 一并更正)
+  root.style.setProperty('--nav-btn-bg', t.chromeBg);
+  root.style.setProperty('--nav-btn-fg', t.accent);
+  root.style.setProperty('--nav-btn-border', t.borderStrong);
   // 滚动条: VS Code 注入的滚动条样式用的是 --vscode-scrollbarSlider-*, 需一并映射到主题色
-  root.style.setProperty('--vscode-scrollbarSlider-background', t.chromeBorder);
+  root.style.setProperty('--vscode-scrollbarSlider-background', t.borderStrong);
   root.style.setProperty('--vscode-scrollbarSlider-hoverBackground', t.accent);
   root.style.setProperty('--vscode-scrollbarSlider-activeBackground', t.accent);
   // 阅读排版

@@ -46,6 +46,24 @@ const TERM_THEMES = Object.fromEntries(
   solarTerms.SOLAR_TERMS.map((t) => [t.id, settings.termTheme(t.id)])
 );
 
+// 传统节日: 数据 + 23 套色板(18 日景 + 5 夜场)同样构建期算好
+const festivals = require2(path.join(__dirname, 'dist', 'festivals.js'));
+const FESTIVALS = festivals.FESTIVALS.map((f) => ({
+  id: f.id,
+  name: f.name,
+  date: f.date,
+  season: f.season,
+  wuxing: f.wuxing,
+  main: { name: f.main.name, hex: f.main.hex },
+  aux: { name: f.aux.name, hex: f.aux.hex },
+  dot: { name: f.dot.name, hex: f.dot.hex },
+  slogan: f.slogan,
+  night: !!f.night,
+}));
+const FESTIVAL_THEMES = Object.fromEntries(
+  festivals.FESTIVALS.map((f) => [f.id, settings.festivalTheme(f.id)])
+);
+
 /**
  * 虚拟模块 'virtual:novel-constants' — 把 settings.ts 的常量注入 webview。
  * 用虚拟模块而非 vite define: define 在 dev(esbuild 路径) 下不可靠, 虚拟模块 dev/build 行为一致。
@@ -67,6 +85,8 @@ const virtualConstants = {
       'export const PROVINCE_THEMES = ' + JSON.stringify(PROVINCE_THEMES) + ';',
       'export const SOLAR_TERMS = ' + JSON.stringify(SOLAR_TERMS) + ';',
       'export const TERM_THEMES = ' + JSON.stringify(TERM_THEMES) + ';',
+      'export const FESTIVALS = ' + JSON.stringify(FESTIVALS) + ';',
+      'export const FESTIVAL_THEMES = ' + JSON.stringify(FESTIVAL_THEMES) + ';',
     ].join('\n');
   },
 };

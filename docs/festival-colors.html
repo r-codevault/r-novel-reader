@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>中国节日色谱 · 十八节令</title>
+<style>
+  :root{
+    --ink:#1b1a17; --ink2:#4a463f; --ink3:#867f73; --line:#e3ded4;
+    --paper:#fbf9f4; --card:#ffffff; --tint:#f2efe8;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    font-size:14px;line-height:1.7;-webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:56px 34px 100px}
+  .eyebrow{font-size:11.5px;letter-spacing:.24em;color:var(--ink3);text-transform:uppercase}
+  h1{
+    font-family:"Songti SC","SimSun","Noto Serif SC",serif;
+    font-size:42px;line-height:1.2;margin:12px 0 8px;letter-spacing:.06em;font-weight:600;
+  }
+  .lede{font-size:15px;color:var(--ink2);max-width:72ch;margin:0}
+  .meta-line{margin-top:14px;font-size:12px;color:var(--ink3);display:flex;gap:18px;flex-wrap:wrap}
+  .meta-line b{color:var(--ink2);font-weight:600}
+
+  .ribbon{display:flex;height:76px;margin:38px 0 10px;border-radius:2px;overflow:hidden}
+  .rib{flex:1;display:flex;align-items:flex-end;justify-content:center;padding-bottom:7px;position:relative;transition:flex .2s}
+  .rib span{
+    font-size:10.5px;writing-mode:vertical-rl;
+    letter-spacing:.16em;
+  }
+  .rib:hover{flex:1.5}
+  .rib-cap{font-size:11.5px;color:var(--ink3);display:flex;justify-content:space-between}
+
+  h2{
+    font-family:"Songti SC","SimSun",serif;font-size:22px;font-weight:600;
+    letter-spacing:.05em;margin:0;display:flex;align-items:baseline;gap:12px;
+  }
+  h2 .se{
+    font-size:34px;line-height:1;color:var(--ink);
+    border-bottom:2px solid var(--ink);padding-bottom:2px;
+  }
+  .season{margin-top:62px}
+  .season-h{display:flex;align-items:flex-end;justify-content:space-between;
+    border-bottom:1px solid var(--ink);padding-bottom:10px;margin-bottom:6px}
+  .season-n{font-size:11.5px;color:var(--ink3);letter-spacing:.08em}
+
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0}
+  .card{padding:26px 22px 24px;border-bottom:1px solid var(--line);border-right:1px solid var(--line)}
+  .card:nth-child(3n){border-right:none}
+  .season-note{
+    padding:26px 24px;border-bottom:1px solid var(--line);
+    background:#faf7f0;display:flex;flex-direction:column;justify-content:center;gap:12px;
+  }
+  .season-note .s-n{font-size:10.5px;letter-spacing:.2em;color:var(--ink3)}
+  .season-note b{
+    display:block;font-family:"Songti SC","SimSun",serif;font-size:17px;
+    letter-spacing:.06em;margin-bottom:6px;
+  }
+  .season-note p{margin:0;font-size:12.5px;color:var(--ink2);line-height:1.85}
+  .card-h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:11px}
+  .card-h h3{font-family:"Songti SC","SimSun",serif;font-size:21px;margin:0;letter-spacing:.08em;font-weight:600}
+  .date{font-size:11px;color:var(--ink3);letter-spacing:.05em}
+
+  .hero{height:104px;border-radius:3px;padding:12px 14px;display:flex;flex-direction:column;
+    justify-content:flex-end;position:relative;overflow:hidden}
+  .hero-name{font-family:"Songti SC","SimSun",serif;font-size:19px;letter-spacing:.14em;line-height:1.2}
+  .hero-hex{font-family:ui-monospace,Consolas,monospace;font-size:11px;opacity:.78;letter-spacing:.06em}
+  .hero-wx{position:absolute;top:11px;right:13px;font-size:10.5px;opacity:.72;letter-spacing:.1em}
+
+  .duo{display:flex;gap:14px;margin:11px 0 0;font-size:11.5px;color:var(--ink2);flex-wrap:wrap}
+  .duo-i{display:inline-flex;align-items:center;gap:6px}
+  .duo-i b{font-weight:600;color:var(--ink)}
+  .chip{width:13px;height:13px;border-radius:2px;border:1px solid rgba(0,0,0,.16);display:inline-block;flex:none}
+  .mono{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;color:var(--ink3)}
+  .cname{font-weight:600;color:var(--ink);font-size:11.5px}
+  .note{font-size:12.5px;color:var(--ink2);margin:10px 0 0;line-height:1.75}
+
+  .preview{margin-top:14px;border-radius:3px;padding:13px 14px;display:flex;gap:10px;
+    border:1px solid rgba(0,0,0,.05)}
+  .preview.tall{padding:18px 16px;margin-top:12px}
+  .pv-rule{width:2px;border-radius:2px;flex:none}
+  .pv-body{flex:1;min-width:0}
+  .pv-t{font-family:"Songti SC","SimSun",serif;font-size:12.5px;letter-spacing:.1em;margin-bottom:6px}
+  .pv-l{height:3px;border-radius:2px;margin-bottom:5px;width:100%}
+  .pv-chip{width:16px;height:16px;border-radius:50%;flex:none;align-self:flex-start;margin-top:2px}
+  .meta{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+  .ratio{font-size:11px;color:var(--ink2);font-variant-numeric:tabular-nums;
+    border:1px solid var(--line);border-radius:3px;padding:0 5px}
+
+  table{width:100%;border-collapse:collapse;margin-top:16px;font-size:12.5px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{font-size:10.5px;letter-spacing:.1em;color:var(--ink3);font-weight:600;
+    text-transform:uppercase;border-bottom:1px solid #cfc9bd}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  tbody tr:hover td{background:#f7f4ed}
+  .sw{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+  .sub{display:block;font-size:10.5px;color:var(--ink3)}
+
+  .rules{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:22px}
+  .rule{border-top:2px solid var(--ink);padding-top:12px}
+  .rule b{display:block;font-size:13px;margin-bottom:4px}
+  .rule p{margin:0;font-size:12.5px;color:var(--ink2)}
+  .rule .k{font-family:"Songti SC",SimSun,serif;font-size:26px;color:var(--ink3);
+    display:block;line-height:1;margin-bottom:8px}
+
+  .callout{border-left:3px solid var(--ink);background:#fff;padding:16px 20px;margin:22px 0}
+  .callout p{margin:3px 0;font-size:13px;color:var(--ink2)}
+  .callout b{color:var(--ink)}
+
+  .night-h{display:flex;align-items:flex-end;justify-content:space-between;
+    border-bottom:1px solid var(--ink);padding-bottom:10px;margin:62px 0 6px}
+  .night-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:0}
+  .night-grid .card{padding:24px 18px 22px}
+  .night-grid .card:last-child{border-right:none}
+  .night .card-h h3{font-size:17px}
+
+  footer{margin-top:70px;border-top:1px solid var(--line);padding-top:16px;
+    font-size:11.5px;color:var(--ink3);line-height:1.9}
+  @media (max-width:1000px){
+    .grid{grid-template-columns:repeat(2,1fr)}
+    .card:nth-child(3n){border-right:1px solid var(--line)}
+    .card:nth-child(2n){border-right:none}
+    .night-grid{grid-template-columns:repeat(2,1fr)}
+    .rules{grid-template-columns:1fr}
+    .wrap{padding:34px 18px 70px}
+    h1{font-size:30px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">中国传统节日色谱 · Chinese Festival Palette</div>
+  <h1>十八节令，一岁一色</h1>
+  <p class="lede">从岁首到岁除，为中国 18 个传统节日各定一支主色。所有色值取自中国传统色库，主色只作"色相来源"——纸面按四季明度推成褪色版，强调色压深到可读，因此这套色谱既能当海报主视觉，也能直接落成阅读器的节日主题。</p>
+  <div class="meta-line">
+    <span><b>18</b> 节日 · <b>5</b> 夜场</span>
+    <span><b>54</b> 传统色</span>
+    <span><b>10</b> 令牌 / 套</span>
+    <span>对比度全部 ≥ 4.5 : 1</span>
+  </div>
+</header>
+
+<div class="ribbon"><div class="rib" style="background:#82111F"><span style="color:#ffffff;text-shadow:0 1px 2px rgba(0,0,0,.30)">除夕</span></div><div class="rib" style="background:#ED5126"><span style="color:#1a1713;text-shadow:none">春节</span></div><div class="rib" style="background:#F4A83A"><span style="color:#1a1713;text-shadow:none">元宵</span></div><div class="rib" style="background:#2C9678"><span style="color:#1a1713;text-shadow:none">龙抬头</span></div><div class="rib" style="background:#8076A3"><span style="color:#1a1713;text-shadow:none">花朝</span></div><div class="rib" style="background:#ADD5A2"><span style="color:#1a1713;text-shadow:none">上巳</span></div><div class="rib" style="background:#918072"><span style="color:#1a1713;text-shadow:none">寒食</span></div><div class="rib" style="background:#9ECCAB"><span style="color:#1a1713;text-shadow:none">清明</span></div><div class="rib" style="background:#1A6840"><span style="color:#ffffff;text-shadow:0 1px 2px rgba(0,0,0,.30)">端午</span></div><div class="rib" style="background:#1772B4"><span style="color:#ffffff;text-shadow:0 1px 2px rgba(0,0,0,.30)">七夕</span></div><div class="rib" style="background:#1E131D"><span style="color:#ffffff;text-shadow:0 1px 2px rgba(0,0,0,.30)">中元</span></div><div class="rib" style="background:#134857"><span style="color:#ffffff;text-shadow:0 1px 2px rgba(0,0,0,.30)">中秋</span></div><div class="rib" style="background:#FCC307"><span style="color:#1a1713;text-shadow:none">重阳</span></div><div class="rib" style="background:#695E45"><span style="color:#ffffff;text-shadow:0 1px 2px rgba(0,0,0,.30)">寒衣</span></div><div class="rib" style="background:#1661AB"><span style="color:#ffffff;text-shadow:0 1px 2px rgba(0,0,0,.30)">下元</span></div><div class="rib" style="background:#310F1B"><span style="color:#ffffff;text-shadow:0 1px 2px rgba(0,0,0,.30)">冬至</span></div><div class="rib" style="background:#FBB957"><span style="color:#1a1713;text-shadow:none">腊八</span></div><div class="rib" style="background:#F86B1D"><span style="color:#1a1713;text-shadow:none">小年</span></div></div>
+<div class="rib-cap"><span>岁除 · 除夕</span><span>一岁之色弧</span><span>灶日 · 小年</span></div>
+
+<section style="margin-top:54px">
+  <h2><span class="se">则</span>三条定色规则</h2>
+  <div class="rules">
+    <div class="rule"><span class="k">一</span><b>一节日一主色，不共享</b>
+      <p>18 个节日各有唯一主色，色相尽量拉开。相邻节令不撞色，全年排开是一条连续的色弧。</p></div>
+    <div class="rule"><span class="k">二</span><b>纸面是主色的"褪色版"</b>
+      <p>取主色色相，把饱和度压到 26%、明度按四季定档（春 .930 / 夏 .925 / 秋 .918 / 冬 .935）。保证长时间阅读不刺眼。</p></div>
+    <div class="rule"><span class="k">三</span><b>强调色只压深，不换色相</b>
+      <p>主色若在纸面上不足 4.5:1，沿同一色相逐步压暗到达标。用户看到的仍是"那个节日的颜色"，只是更沉。</p></div>
+  </div>
+</section>
+
+
+    <section class="season">
+      <div class="season-h">
+        <h2><span class="se">春</span>立春 — 谷雨</h2>
+        <span class="season-n">7 个节日</span>
+      </div>
+      <div class="grid">
+    <article class="card">
+      <header class="card-h">
+        <h3>春节</h3>
+        <span class="date">正月初一</span>
+      </header>
+      <div class="hero" style="background:#ED5126;color:#ffffff">
+        <span class="hero-name">朱红</span>
+        <span class="hero-hex">#ED5126</span>
+        <span class="hero-wx">火</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#FCD217"></i><b>金瓜黄</b><span class="mono">#FCD217</span></div>
+        <div class="duo-i"><i class="chip" style="background:#F8F4ED"></i><b>汉白玉</b><span class="mono">#F8F4ED</span></div>
+      </div>
+      <p class="note">拜年、压岁、舞龙。朱红是五色之尊，取"阳气初动"之意。</p>
+      <div class="preview" style="background:#f2ebe9">
+        <div class="pv-rule" style="background:#ae310e"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#36211c">春节</div>
+          <div class="pv-l" style="background:#36211c;opacity:.28"></div>
+          <div class="pv-l" style="background:#36211c;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#36211c;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#ae310e"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#F2EBE9 / #AE310E</span>
+        <span class="ratio">12.8 : 1</span>
+      </div>
+    </article>
+    <article class="card">
+      <header class="card-h">
+        <h3>元宵</h3>
+        <span class="date">正月十五</span>
+      </header>
+      <div class="hero" style="background:#F4A83A;color:#1a1713">
+        <span class="hero-name">金莺黄</span>
+        <span class="hero-hex">#F4A83A</span>
+        <span class="hero-wx">火</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#1772B4"></i><b>群青</b><span class="mono">#1772B4</span></div>
+        <div class="duo-i"><i class="chip" style="background:#F1939C"></i><b>春梅红</b><span class="mono">#F1939C</span></div>
+      </div>
+      <p class="note">上元燃灯，金瓦映夜。黄为灯，青为夜，粉为灯彩。</p>
+      <div class="preview" style="background:#f2eee9">
+        <div class="pv-rule" style="background:#885408"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#362b1c">元宵</div>
+          <div class="pv-l" style="background:#362b1c;opacity:.28"></div>
+          <div class="pv-l" style="background:#362b1c;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#362b1c;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#885408"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#F2EEE9 / #885408</span>
+        <span class="ratio">12.0 : 1</span>
+      </div>
+    </article>
+    <article class="card">
+      <header class="card-h">
+        <h3>龙抬头</h3>
+        <span class="date">二月初二</span>
+      </header>
+      <div class="hero" style="background:#2C9678;color:#ffffff">
+        <span class="hero-name">青矾绿</span>
+        <span class="hero-hex">#2C9678</span>
+        <span class="hero-wx">木</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#FF9900"></i><b>雄黄</b><span class="mono">#FF9900</span></div>
+        <div class="duo-i"><i class="chip" style="background:#EEF7F2"></i><b>月白</b><span class="mono">#EEF7F2</span></div>
+      </div>
+      <p class="note">引龙回、剃龙头、开犁。青为东方苍龙之色，黄为土。</p>
+      <div class="preview" style="background:#e9f2ef">
+        <div class="pv-rule" style="background:#206f58"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#1c362e">龙抬头</div>
+          <div class="pv-l" style="background:#1c362e;opacity:.28"></div>
+          <div class="pv-l" style="background:#1c362e;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#1c362e;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#206f58"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#E9F2EF / #206F58</span>
+        <span class="ratio">11.4 : 1</span>
+      </div>
+    </article>
+    <article class="card">
+      <header class="card-h">
+        <h3>花朝</h3>
+        <span class="date">二月十二</span>
+      </header>
+      <div class="hero" style="background:#8076A3;color:#ffffff">
+        <span class="hero-name">藤萝紫</span>
+        <span class="hero-hex">#8076A3</span>
+        <span class="hero-wx">木</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#F1939C"></i><b>春梅红</b><span class="mono">#F1939C</span></div>
+        <div class="duo-i"><i class="chip" style="background:#DFECD5"></i><b>艾背绿</b><span class="mono">#DFECD5</span></div>
+      </div>
+      <p class="note">花神诞，悬红赏红。紫藤垂烟，是春事最盛处。</p>
+      <div class="preview" style="background:#ebe9f2">
+        <div class="pv-rule" style="background:#5d547d"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#221c36">花朝</div>
+          <div class="pv-l" style="background:#221c36;opacity:.28"></div>
+          <div class="pv-l" style="background:#221c36;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#221c36;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#5d547d"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#EBE9F2 / #5D547D</span>
+        <span class="ratio">13.6 : 1</span>
+      </div>
+    </article>
+    <article class="card">
+      <header class="card-h">
+        <h3>上巳</h3>
+        <span class="date">三月初三</span>
+      </header>
+      <div class="hero" style="background:#ADD5A2;color:#1a1713">
+        <span class="hero-name">嘉陵水绿</span>
+        <span class="hero-hex">#ADD5A2</span>
+        <span class="hero-wx">水</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#5CB3CC"></i><b>碧青</b><span class="mono">#5CB3CC</span></div>
+        <div class="duo-i"><i class="chip" style="background:#EDC3AE"></i><b>藕荷</b><span class="mono">#EDC3AE</span></div>
+      </div>
+      <p class="note">临水宴饮、兰汤沐浴。水绿为春岸，碧青为溪流。</p>
+      <div class="preview" style="background:#ebf2e9">
+        <div class="pv-rule" style="background:#3f6f32"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#21361c">上巳</div>
+          <div class="pv-l" style="background:#21361c;opacity:.28"></div>
+          <div class="pv-l" style="background:#21361c;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#21361c;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#3f6f32"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#EBF2E9 / #3F6F32</span>
+        <span class="ratio">11.4 : 1</span>
+      </div>
+    </article>
+    <article class="card">
+      <header class="card-h">
+        <h3>寒食</h3>
+        <span class="date">清明前一二日</span>
+      </header>
+      <div class="hero" style="background:#918072;color:#ffffff">
+        <span class="hero-name">银灰</span>
+        <span class="hero-hex">#918072</span>
+        <span class="hero-wx">土</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#CAD3C3"></i><b>艾绿</b><span class="mono">#CAD3C3</span></div>
+        <div class="duo-i"><i class="chip" style="background:#862617"></i><b>赭石</b><span class="mono">#862617</span></div>
+      </div>
+      <p class="note">禁火、冷食、祭墓。灰为烬，赭为旧火，是全套里最"低音"的一支。</p>
+      <div class="preview" style="background:#f2ede9">
+        <div class="pv-rule" style="background:#695d52"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#36281c">寒食</div>
+          <div class="pv-l" style="background:#36281c;opacity:.28"></div>
+          <div class="pv-l" style="background:#36281c;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#36281c;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#695d52"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#F2EDE9 / #695D52</span>
+        <span class="ratio">12.2 : 1</span>
+      </div>
+    </article>
+    <article class="card">
+      <header class="card-h">
+        <h3>清明</h3>
+        <span class="date">四月初</span>
+      </header>
+      <div class="hero" style="background:#9ECCAB;color:#1a1713">
+        <span class="hero-name">明绿</span>
+        <span class="hero-hex">#9ECCAB</span>
+        <span class="hero-wx">木</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#EEF7F2"></i><b>月白</b><span class="mono">#EEF7F2</span></div>
+        <div class="duo-i"><i class="chip" style="background:#C1B2A3"></i><b>淡银灰</b><span class="mono">#C1B2A3</span></div>
+      </div>
+      <p class="note">扫墓、踏青、放纸鸢。新柳初齐，雨后天光。</p>
+      <div class="preview" style="background:#e9f2eb">
+        <div class="pv-rule" style="background:#3a6e49"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#1c3623">清明</div>
+          <div class="pv-l" style="background:#1c3623;opacity:.28"></div>
+          <div class="pv-l" style="background:#1c3623;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#1c3623;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#3a6e49"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#E9F2EB / #3A6E49</span>
+        <span class="ratio">11.5 : 1</span>
+      </div>
+    </article><div class="season-note" style="grid-column:span 2"><span class="s-n">春 · 季语</span><div><b>七节同春，色相最杂</b><p>红、黄、绿、紫、灰各一支。纸面统一压到明度 .930，让不同色相在同一张纸上读起来一样柔和；节日越多，越要靠强调色区分。</p></div></div></div>
+    </section>
+    <section class="season">
+      <div class="season-h">
+        <h2><span class="se">夏</span>立夏 — 大暑</h2>
+        <span class="season-n">2 个节日</span>
+      </div>
+      <div class="grid">
+    <article class="card">
+      <header class="card-h">
+        <h3>端午</h3>
+        <span class="date">五月初五</span>
+      </header>
+      <div class="hero" style="background:#1A6840;color:#ffffff">
+        <span class="hero-name">荷叶绿</span>
+        <span class="hero-hex">#1A6840</span>
+        <span class="hero-wx">木</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#FF9900"></i><b>雄黄</b><span class="mono">#FF9900</span></div>
+        <div class="duo-i"><i class="chip" style="background:#ED5126"></i><b>朱红</b><span class="mono">#ED5126</span></div>
+      </div>
+      <p class="note">悬艾、裹粽、饮雄黄、系五色丝。粽叶之绿为正色。</p>
+      <div class="preview" style="background:#e7f1ec">
+        <div class="pv-rule" style="background:#1A6840"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#1c3628">端午</div>
+          <div class="pv-l" style="background:#1c3628;opacity:.28"></div>
+          <div class="pv-l" style="background:#1c3628;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#1c3628;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#1A6840"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#E7F1EC / #1A6840</span>
+        <span class="ratio">11.3 : 1</span>
+      </div>
+    </article>
+    <article class="card">
+      <header class="card-h">
+        <h3>七夕</h3>
+        <span class="date">七月初七</span>
+      </header>
+      <div class="hero" style="background:#1772B4;color:#ffffff">
+        <span class="hero-name">群青</span>
+        <span class="hero-hex">#1772B4</span>
+        <span class="hero-wx">水</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#EDC3AE"></i><b>藕荷</b><span class="mono">#EDC3AE</span></div>
+        <div class="duo-i"><i class="chip" style="background:#F1F0ED"></i><b>银白</b><span class="mono">#F1F0ED</span></div>
+      </div>
+      <p class="note">乞巧、穿针、拜织女。群青写天河，藕荷作云霞，银白为星。</p>
+      <div class="preview" style="background:#e7edf1">
+        <div class="pv-rule" style="background:#146199"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#1c2b36">七夕</div>
+          <div class="pv-l" style="background:#1c2b36;opacity:.28"></div>
+          <div class="pv-l" style="background:#1c2b36;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#1c2b36;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#146199"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#E7EDF1 / #146199</span>
+        <span class="ratio">12.3 : 1</span>
+      </div>
+    </article><div class="season-note" style="grid-column:span 1"><span class="s-n">夏 · 季语</span><div><b>两节，一沉一亮</b><p>端午的粽叶绿压得住暑气，七夕的群青是夏夜的天河。昼与夜，正好两色。</p></div></div></div>
+    </section>
+    <section class="season">
+      <div class="season-h">
+        <h2><span class="se">秋</span>立秋 — 霜降</h2>
+        <span class="season-n">3 个节日</span>
+      </div>
+      <div class="grid">
+    <article class="card">
+      <header class="card-h">
+        <h3>中元</h3>
+        <span class="date">七月十五</span>
+      </header>
+      <div class="hero" style="background:#1E131D;color:#ffffff">
+        <span class="hero-name">乌梅紫</span>
+        <span class="hero-hex">#1E131D</span>
+        <span class="hero-wx">水</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#F4A83A"></i><b>金莺黄</b><span class="mono">#F4A83A</span></div>
+        <div class="duo-i"><i class="chip" style="background:#EEF7F2"></i><b>月白</b><span class="mono">#EEF7F2</span></div>
+      </div>
+      <p class="note">祭祖、放河灯、盂兰盆。紫黑为幽，灯火为引，白为水光。</p>
+      <div class="preview" style="background:#f0e5ef">
+        <div class="pv-rule" style="background:#1E131D"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#361c33">中元</div>
+          <div class="pv-l" style="background:#361c33;opacity:.28"></div>
+          <div class="pv-l" style="background:#361c33;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#361c33;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#1E131D"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#F0E5EF / #1E131D</span>
+        <span class="ratio">12.5 : 1</span>
+      </div>
+    </article>
+    <article class="card">
+      <header class="card-h">
+        <h3>中秋</h3>
+        <span class="date">八月十五</span>
+      </header>
+      <div class="hero" style="background:#134857;color:#ffffff">
+        <span class="hero-name">苍蓝</span>
+        <span class="hero-hex">#134857</span>
+        <span class="hero-wx">金</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#F8F4ED"></i><b>汉白玉</b><span class="mono">#F8F4ED</span></div>
+        <div class="duo-i"><i class="chip" style="background:#C09351"></i><b>桂皮淡棕</b><span class="mono">#C09351</span></div>
+      </div>
+      <p class="note">赏月、月饼、桂花。苍蓝写夜天，月白为轮，桂黄为香。</p>
+      <div class="preview" style="background:#e5edf0">
+        <div class="pv-rule" style="background:#134857"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#1c3036">中秋</div>
+          <div class="pv-l" style="background:#1c3036;opacity:.28"></div>
+          <div class="pv-l" style="background:#1c3036;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#1c3036;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#134857"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#E5EDF0 / #134857</span>
+        <span class="ratio">11.6 : 1</span>
+      </div>
+    </article>
+    <article class="card">
+      <header class="card-h">
+        <h3>重阳</h3>
+        <span class="date">九月初九</span>
+      </header>
+      <div class="hero" style="background:#FCC307;color:#1a1713">
+        <span class="hero-name">金盏黄</span>
+        <span class="hero-hex">#FCC307</span>
+        <span class="hero-wx">土</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#862617"></i><b>赭石</b><span class="mono">#862617</span></div>
+        <div class="duo-i"><i class="chip" style="background:#69A794"></i><b>梧枝绿</b><span class="mono">#69A794</span></div>
+      </div>
+      <p class="note">登高、插茱萸、饮菊酒。菊黄为节色，赭为山，绿为将尽的青色。</p>
+      <div class="preview" style="background:#f0ede5">
+        <div class="pv-rule" style="background:#785c01"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#36301c">重阳</div>
+          <div class="pv-l" style="background:#36301c;opacity:.28"></div>
+          <div class="pv-l" style="background:#36301c;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#36301c;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#785c01"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#F0EDE5 / #785C01</span>
+        <span class="ratio">11.2 : 1</span>
+      </div>
+    </article></div>
+    </section>
+    <section class="season">
+      <div class="season-h">
+        <h2><span class="se">冬</span>立冬 — 大寒</h2>
+        <span class="season-n">6 个节日</span>
+      </div>
+      <div class="grid">
+    <article class="card">
+      <header class="card-h">
+        <h3>除夕</h3>
+        <span class="date">腊月三十</span>
+      </header>
+      <div class="hero" style="background:#82111F;color:#ffffff">
+        <span class="hero-name">殷红</span>
+        <span class="hero-hex">#82111F</span>
+        <span class="hero-wx">火</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#ED5126"></i><b>朱红</b><span class="mono">#ED5126</span></div>
+        <div class="duo-i"><i class="chip" style="background:#FCC307"></i><b>金盏黄</b><span class="mono">#FCC307</span></div>
+      </div>
+      <p class="note">守岁、贴春联、爆竹驱祟。深红压住长夜，是"旧年最后一刻"的颜色。</p>
+      <div class="preview" style="background:#f3eaeb">
+        <div class="pv-rule" style="background:#82111F"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#361c1f">除夕</div>
+          <div class="pv-l" style="background:#361c1f;opacity:.28"></div>
+          <div class="pv-l" style="background:#361c1f;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#361c1f;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#82111F"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#F3EAEB / #82111F</span>
+        <span class="ratio">13.2 : 1</span>
+      </div>
+    </article>
+    <article class="card">
+      <header class="card-h">
+        <h3>寒衣</h3>
+        <span class="date">十月初一</span>
+      </header>
+      <div class="hero" style="background:#695E45;color:#ffffff">
+        <span class="hero-name">蟹壳灰</span>
+        <span class="hero-hex">#695E45</span>
+        <span class="hero-wx">土</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#C0C4C3"></i><b>月影白</b><span class="mono">#C0C4C3</span></div>
+        <div class="duo-i"><i class="chip" style="background:#82111F"></i><b>殷红</b><span class="mono">#82111F</span></div>
+      </div>
+      <p class="note">送寒衣、祭祖、添衣。蟹壳灰为旧棉与草纸，月影白为霜，殷红为衣里。</p>
+      <div class="preview" style="background:#f3f0ea">
+        <div class="pv-rule" style="background:#695E45"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#362e1c">寒衣</div>
+          <div class="pv-l" style="background:#362e1c;opacity:.28"></div>
+          <div class="pv-l" style="background:#362e1c;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#362e1c;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#695E45"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#F3F0EA / #695E45</span>
+        <span class="ratio">11.8 : 1</span>
+      </div>
+    </article>
+    <article class="card">
+      <header class="card-h">
+        <h3>下元</h3>
+        <span class="date">十月十五</span>
+      </header>
+      <div class="hero" style="background:#1661AB;color:#ffffff">
+        <span class="hero-name">靛青</span>
+        <span class="hero-hex">#1661AB</span>
+        <span class="hero-wx">水</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#F8F4ED"></i><b>汉白玉</b><span class="mono">#F8F4ED</span></div>
+        <div class="duo-i"><i class="chip" style="background:#F4A83A"></i><b>金莺黄</b><span class="mono">#F4A83A</span></div>
+      </div>
+      <p class="note">祭水官、放灯、斋醮。靛青为水德，灯黄为渡。</p>
+      <div class="preview" style="background:#eaeef3">
+        <div class="pv-rule" style="background:#155ea6"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#1c2936">下元</div>
+          <div class="pv-l" style="background:#1c2936;opacity:.28"></div>
+          <div class="pv-l" style="background:#1c2936;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#1c2936;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#155ea6"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#EAEEF3 / #155EA6</span>
+        <span class="ratio">12.7 : 1</span>
+      </div>
+    </article>
+    <article class="card">
+      <header class="card-h">
+        <h3>冬至</h3>
+        <span class="date">十一月</span>
+      </header>
+      <div class="hero" style="background:#310F1B;color:#ffffff">
+        <span class="hero-name">墨紫</span>
+        <span class="hero-hex">#310F1B</span>
+        <span class="hero-wx">水</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#ED5126"></i><b>朱红</b><span class="mono">#ED5126</span></div>
+        <div class="duo-i"><i class="chip" style="background:#FFFEF9"></i><b>雪白</b><span class="mono">#FFFEF9</span></div>
+      </div>
+      <p class="note">数九、祭天、吃饺子汤圆。长夜玄墨，赤豆与朱火点之。</p>
+      <div class="preview" style="background:#f3eaed">
+        <div class="pv-rule" style="background:#310F1B"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#361c25">冬至</div>
+          <div class="pv-l" style="background:#361c25;opacity:.28"></div>
+          <div class="pv-l" style="background:#361c25;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#361c25;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#310F1B"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#F3EAED / #310F1B</span>
+        <span class="ratio">13.2 : 1</span>
+      </div>
+    </article>
+    <article class="card">
+      <header class="card-h">
+        <h3>腊八</h3>
+        <span class="date">十二月初八</span>
+      </header>
+      <div class="hero" style="background:#FBB957;color:#1a1713">
+        <span class="hero-name">蜜黄</span>
+        <span class="hero-hex">#FBB957</span>
+        <span class="hero-wx">土</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#7C1823"></i><b>枣红</b><span class="mono">#7C1823</span></div>
+        <div class="duo-i"><i class="chip" style="background:#5C1E19"></i><b>栗棕</b><span class="mono">#5C1E19</span></div>
+      </div>
+      <p class="note">熬粥、腌蒜、祭祖。蜜黄为粥，枣红为枣，栗棕为豆。</p>
+      <div class="preview" style="background:#f3efea">
+        <div class="pv-rule" style="background:#8d5603"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#362b1c">腊八</div>
+          <div class="pv-l" style="background:#362b1c;opacity:.28"></div>
+          <div class="pv-l" style="background:#362b1c;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#362b1c;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#8d5603"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#F3EFEA / #8D5603</span>
+        <span class="ratio">12.1 : 1</span>
+      </div>
+    </article>
+    <article class="card">
+      <header class="card-h">
+        <h3>小年</h3>
+        <span class="date">腊月廿三</span>
+      </header>
+      <div class="hero" style="background:#F86B1D;color:#1a1713">
+        <span class="hero-name">金莲花橙</span>
+        <span class="hero-hex">#F86B1D</span>
+        <span class="hero-wx">火</span>
+      </div>
+      <div class="duo">
+        <div class="duo-i"><i class="chip" style="background:#F9D27D"></i><b>麦芽糖黄</b><span class="mono">#F9D27D</span></div>
+        <div class="duo-i"><i class="chip" style="background:#695E45"></i><b>蟹壳灰</b><span class="mono">#695E45</span></div>
+      </div>
+      <p class="note">祭灶、扫尘、吃糖瓜。灶火橙红，糖色麦黄，灶灰作底。</p>
+      <div class="preview" style="background:#f3edea">
+        <div class="pv-rule" style="background:#a53e05"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#36251c">小年</div>
+          <div class="pv-l" style="background:#36251c;opacity:.28"></div>
+          <div class="pv-l" style="background:#36251c;opacity:.28;width:72%"></div>
+          <div class="pv-l" style="background:#36251c;opacity:.16;width:86%"></div>
+        </div>
+        <div class="pv-chip" style="background:#a53e05"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#F3EDEA / #A53E05</span>
+        <span class="ratio">12.6 : 1</span>
+      </div>
+    </article></div>
+    </section>
+
+<div class="night-h">
+  <h2><span class="se">夜</span>五支夜场</h2>
+  <span class="season-n">以"夜"为核心的节日，另配深色版</span>
+</div>
+<div class="night-grid">
+    <article class="card night">
+      <header class="card-h">
+        <h3>除夕 · 夜</h3>
+        <span class="date">腊月三十</span>
+      </header>
+      <div class="preview tall" style="background:#281b1c;border-color:#513d40">
+        <div class="pv-rule" style="background:#ED5126"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#dddada">除夕</div>
+          <div class="pv-l" style="background:#dddada;opacity:.30"></div>
+          <div class="pv-l" style="background:#dddada;opacity:.30;width:74%"></div>
+          <div class="pv-l" style="background:#dddada;opacity:.16;width:88%"></div>
+          <div class="pv-l" style="background:#dddada;opacity:.16;width:60%"></div>
+        </div>
+        <div class="pv-chip" style="background:#ED5126"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#281B1C / #ED5126</span>
+        <span class="ratio">12.0 : 1</span>
+      </div>
+    </article>
+    <article class="card night">
+      <header class="card-h">
+        <h3>元宵 · 灯</h3>
+        <span class="date">正月十五</span>
+      </header>
+      <div class="preview tall" style="background:#28221b;border-color:#51493d">
+        <div class="pv-rule" style="background:#F4A83A"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#dddcda">元宵</div>
+          <div class="pv-l" style="background:#dddcda;opacity:.30"></div>
+          <div class="pv-l" style="background:#dddcda;opacity:.30;width:74%"></div>
+          <div class="pv-l" style="background:#dddcda;opacity:.16;width:88%"></div>
+          <div class="pv-l" style="background:#dddcda;opacity:.16;width:60%"></div>
+        </div>
+        <div class="pv-chip" style="background:#F4A83A"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#28221B / #F4A83A</span>
+        <span class="ratio">11.5 : 1</span>
+      </div>
+    </article>
+    <article class="card night">
+      <header class="card-h">
+        <h3>中元 · 河灯</h3>
+        <span class="date">七月十五</span>
+      </header>
+      <div class="preview tall" style="background:#281b27;border-color:#513d50">
+        <div class="pv-rule" style="background:#EEF7F2"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#dddadd">中元</div>
+          <div class="pv-l" style="background:#dddadd;opacity:.30"></div>
+          <div class="pv-l" style="background:#dddadd;opacity:.30;width:74%"></div>
+          <div class="pv-l" style="background:#dddadd;opacity:.16;width:88%"></div>
+          <div class="pv-l" style="background:#dddadd;opacity:.16;width:60%"></div>
+        </div>
+        <div class="pv-chip" style="background:#EEF7F2"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#281B27 / #EEF7F2</span>
+        <span class="ratio">11.9 : 1</span>
+      </div>
+    </article>
+    <article class="card night">
+      <header class="card-h">
+        <h3>中秋 · 月</h3>
+        <span class="date">八月十五</span>
+      </header>
+      <div class="preview tall" style="background:#1b2528;border-color:#3d4d51">
+        <div class="pv-rule" style="background:#FCC307"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#dadcdd">中秋</div>
+          <div class="pv-l" style="background:#dadcdd;opacity:.30"></div>
+          <div class="pv-l" style="background:#dadcdd;opacity:.30;width:74%"></div>
+          <div class="pv-l" style="background:#dadcdd;opacity:.16;width:88%"></div>
+          <div class="pv-l" style="background:#dadcdd;opacity:.16;width:60%"></div>
+        </div>
+        <div class="pv-chip" style="background:#FCC307"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#1B2528 / #FCC307</span>
+        <span class="ratio">11.4 : 1</span>
+      </div>
+    </article>
+    <article class="card night">
+      <header class="card-h">
+        <h3>冬至 · 长夜</h3>
+        <span class="date">十一月</span>
+      </header>
+      <div class="preview tall" style="background:#281b1f;border-color:#513d44">
+        <div class="pv-rule" style="background:#F86B1D"></div>
+        <div class="pv-body">
+          <div class="pv-t" style="color:#dddadb">冬至</div>
+          <div class="pv-l" style="background:#dddadb;opacity:.30"></div>
+          <div class="pv-l" style="background:#dddadb;opacity:.30;width:74%"></div>
+          <div class="pv-l" style="background:#dddadb;opacity:.16;width:88%"></div>
+          <div class="pv-l" style="background:#dddadb;opacity:.16;width:60%"></div>
+        </div>
+        <div class="pv-chip" style="background:#F86B1D"></div>
+      </div>
+      <div class="meta">
+        <span class="mono">#281B1F / #F86B1D</span>
+        <span class="ratio">11.9 : 1</span>
+      </div>
+    </article></div>
+
+<section style="margin-top:62px">
+  <h2><span class="se">谱</span>十八节令色谱总表</h2>
+  <p class="lede" style="margin-top:8px;font-size:13px">CMYK 为 RGB 直接换算的参考值，未做印刷特性补偿。纸张列＝阅读区纸面，强调列＝压深后的可读色（对比度对纸面 ≥ 4.5:1）。</p>
+  <table>
+    <thead><tr>
+      <th style="width:118px">节日</th><th style="width:150px">主色</th>
+      <th>RGB</th><th>CMYK 参考</th><th style="width:44px">五行</th>
+      <th style="width:132px">纸面</th><th style="width:150px">强调</th><th class="num" style="width:56px">正文比</th>
+    </tr></thead>
+    <tbody><tr>
+      <td><b>除夕</b><span class="sub">腊月三十</span></td>
+      <td><span class="sw"><i class="chip" style="background:#82111F"></i><span class="cname">殷红</span><span class="mono">#82111F</span></span></td>
+      <td class="mono">130, 17, 31</td>
+      <td class="mono">0 / 87 / 76 / 49</td>
+      <td>火</td>
+      <td><span class="sw"><i class="chip" style="background:#f3eaeb"></i><span class="mono">#F3EAEB</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#82111F"></i><span class="mono">#82111F</span></span></td>
+      <td class="num">13.2</td>
+    </tr><tr>
+      <td><b>春节</b><span class="sub">正月初一</span></td>
+      <td><span class="sw"><i class="chip" style="background:#ED5126"></i><span class="cname">朱红</span><span class="mono">#ED5126</span></span></td>
+      <td class="mono">237, 81, 38</td>
+      <td class="mono">0 / 66 / 84 / 7</td>
+      <td>火</td>
+      <td><span class="sw"><i class="chip" style="background:#f2ebe9"></i><span class="mono">#F2EBE9</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#ae310e"></i><span class="mono">#AE310E</span></span></td>
+      <td class="num">12.8</td>
+    </tr><tr>
+      <td><b>元宵</b><span class="sub">正月十五</span></td>
+      <td><span class="sw"><i class="chip" style="background:#F4A83A"></i><span class="cname">金莺黄</span><span class="mono">#F4A83A</span></span></td>
+      <td class="mono">244, 168, 58</td>
+      <td class="mono">0 / 31 / 76 / 4</td>
+      <td>火</td>
+      <td><span class="sw"><i class="chip" style="background:#f2eee9"></i><span class="mono">#F2EEE9</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#885408"></i><span class="mono">#885408</span></span></td>
+      <td class="num">12.0</td>
+    </tr><tr>
+      <td><b>龙抬头</b><span class="sub">二月初二</span></td>
+      <td><span class="sw"><i class="chip" style="background:#2C9678"></i><span class="cname">青矾绿</span><span class="mono">#2C9678</span></span></td>
+      <td class="mono">44, 150, 120</td>
+      <td class="mono">71 / 0 / 20 / 41</td>
+      <td>木</td>
+      <td><span class="sw"><i class="chip" style="background:#e9f2ef"></i><span class="mono">#E9F2EF</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#206f58"></i><span class="mono">#206F58</span></span></td>
+      <td class="num">11.4</td>
+    </tr><tr>
+      <td><b>花朝</b><span class="sub">二月十二</span></td>
+      <td><span class="sw"><i class="chip" style="background:#8076A3"></i><span class="cname">藤萝紫</span><span class="mono">#8076A3</span></span></td>
+      <td class="mono">128, 118, 163</td>
+      <td class="mono">21 / 28 / 0 / 36</td>
+      <td>木</td>
+      <td><span class="sw"><i class="chip" style="background:#ebe9f2"></i><span class="mono">#EBE9F2</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#5d547d"></i><span class="mono">#5D547D</span></span></td>
+      <td class="num">13.6</td>
+    </tr><tr>
+      <td><b>上巳</b><span class="sub">三月初三</span></td>
+      <td><span class="sw"><i class="chip" style="background:#ADD5A2"></i><span class="cname">嘉陵水绿</span><span class="mono">#ADD5A2</span></span></td>
+      <td class="mono">173, 213, 162</td>
+      <td class="mono">19 / 0 / 24 / 16</td>
+      <td>水</td>
+      <td><span class="sw"><i class="chip" style="background:#ebf2e9"></i><span class="mono">#EBF2E9</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#3f6f32"></i><span class="mono">#3F6F32</span></span></td>
+      <td class="num">11.4</td>
+    </tr><tr>
+      <td><b>寒食</b><span class="sub">清明前一二日</span></td>
+      <td><span class="sw"><i class="chip" style="background:#918072"></i><span class="cname">银灰</span><span class="mono">#918072</span></span></td>
+      <td class="mono">145, 128, 114</td>
+      <td class="mono">0 / 12 / 21 / 43</td>
+      <td>土</td>
+      <td><span class="sw"><i class="chip" style="background:#f2ede9"></i><span class="mono">#F2EDE9</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#695d52"></i><span class="mono">#695D52</span></span></td>
+      <td class="num">12.2</td>
+    </tr><tr>
+      <td><b>清明</b><span class="sub">四月初</span></td>
+      <td><span class="sw"><i class="chip" style="background:#9ECCAB"></i><span class="cname">明绿</span><span class="mono">#9ECCAB</span></span></td>
+      <td class="mono">158, 204, 171</td>
+      <td class="mono">23 / 0 / 16 / 20</td>
+      <td>木</td>
+      <td><span class="sw"><i class="chip" style="background:#e9f2eb"></i><span class="mono">#E9F2EB</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#3a6e49"></i><span class="mono">#3A6E49</span></span></td>
+      <td class="num">11.5</td>
+    </tr><tr>
+      <td><b>端午</b><span class="sub">五月初五</span></td>
+      <td><span class="sw"><i class="chip" style="background:#1A6840"></i><span class="cname">荷叶绿</span><span class="mono">#1A6840</span></span></td>
+      <td class="mono">26, 104, 64</td>
+      <td class="mono">75 / 0 / 38 / 59</td>
+      <td>木</td>
+      <td><span class="sw"><i class="chip" style="background:#e7f1ec"></i><span class="mono">#E7F1EC</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#1A6840"></i><span class="mono">#1A6840</span></span></td>
+      <td class="num">11.3</td>
+    </tr><tr>
+      <td><b>七夕</b><span class="sub">七月初七</span></td>
+      <td><span class="sw"><i class="chip" style="background:#1772B4"></i><span class="cname">群青</span><span class="mono">#1772B4</span></span></td>
+      <td class="mono">23, 114, 180</td>
+      <td class="mono">87 / 37 / 0 / 29</td>
+      <td>水</td>
+      <td><span class="sw"><i class="chip" style="background:#e7edf1"></i><span class="mono">#E7EDF1</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#146199"></i><span class="mono">#146199</span></span></td>
+      <td class="num">12.3</td>
+    </tr><tr>
+      <td><b>中元</b><span class="sub">七月十五</span></td>
+      <td><span class="sw"><i class="chip" style="background:#1E131D"></i><span class="cname">乌梅紫</span><span class="mono">#1E131D</span></span></td>
+      <td class="mono">30, 19, 29</td>
+      <td class="mono">0 / 37 / 3 / 88</td>
+      <td>水</td>
+      <td><span class="sw"><i class="chip" style="background:#f0e5ef"></i><span class="mono">#F0E5EF</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#1E131D"></i><span class="mono">#1E131D</span></span></td>
+      <td class="num">12.5</td>
+    </tr><tr>
+      <td><b>中秋</b><span class="sub">八月十五</span></td>
+      <td><span class="sw"><i class="chip" style="background:#134857"></i><span class="cname">苍蓝</span><span class="mono">#134857</span></span></td>
+      <td class="mono">19, 72, 87</td>
+      <td class="mono">78 / 17 / 0 / 66</td>
+      <td>金</td>
+      <td><span class="sw"><i class="chip" style="background:#e5edf0"></i><span class="mono">#E5EDF0</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#134857"></i><span class="mono">#134857</span></span></td>
+      <td class="num">11.6</td>
+    </tr><tr>
+      <td><b>重阳</b><span class="sub">九月初九</span></td>
+      <td><span class="sw"><i class="chip" style="background:#FCC307"></i><span class="cname">金盏黄</span><span class="mono">#FCC307</span></span></td>
+      <td class="mono">252, 195, 7</td>
+      <td class="mono">0 / 23 / 97 / 1</td>
+      <td>土</td>
+      <td><span class="sw"><i class="chip" style="background:#f0ede5"></i><span class="mono">#F0EDE5</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#785c01"></i><span class="mono">#785C01</span></span></td>
+      <td class="num">11.2</td>
+    </tr><tr>
+      <td><b>寒衣</b><span class="sub">十月初一</span></td>
+      <td><span class="sw"><i class="chip" style="background:#695E45"></i><span class="cname">蟹壳灰</span><span class="mono">#695E45</span></span></td>
+      <td class="mono">105, 94, 69</td>
+      <td class="mono">0 / 10 / 34 / 59</td>
+      <td>土</td>
+      <td><span class="sw"><i class="chip" style="background:#f3f0ea"></i><span class="mono">#F3F0EA</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#695E45"></i><span class="mono">#695E45</span></span></td>
+      <td class="num">11.8</td>
+    </tr><tr>
+      <td><b>下元</b><span class="sub">十月十五</span></td>
+      <td><span class="sw"><i class="chip" style="background:#1661AB"></i><span class="cname">靛青</span><span class="mono">#1661AB</span></span></td>
+      <td class="mono">22, 97, 171</td>
+      <td class="mono">87 / 43 / 0 / 33</td>
+      <td>水</td>
+      <td><span class="sw"><i class="chip" style="background:#eaeef3"></i><span class="mono">#EAEEF3</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#155ea6"></i><span class="mono">#155EA6</span></span></td>
+      <td class="num">12.7</td>
+    </tr><tr>
+      <td><b>冬至</b><span class="sub">十一月</span></td>
+      <td><span class="sw"><i class="chip" style="background:#310F1B"></i><span class="cname">墨紫</span><span class="mono">#310F1B</span></span></td>
+      <td class="mono">49, 15, 27</td>
+      <td class="mono">0 / 69 / 45 / 81</td>
+      <td>水</td>
+      <td><span class="sw"><i class="chip" style="background:#f3eaed"></i><span class="mono">#F3EAED</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#310F1B"></i><span class="mono">#310F1B</span></span></td>
+      <td class="num">13.2</td>
+    </tr><tr>
+      <td><b>腊八</b><span class="sub">十二月初八</span></td>
+      <td><span class="sw"><i class="chip" style="background:#FBB957"></i><span class="cname">蜜黄</span><span class="mono">#FBB957</span></span></td>
+      <td class="mono">251, 185, 87</td>
+      <td class="mono">0 / 26 / 65 / 2</td>
+      <td>土</td>
+      <td><span class="sw"><i class="chip" style="background:#f3efea"></i><span class="mono">#F3EFEA</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#8d5603"></i><span class="mono">#8D5603</span></span></td>
+      <td class="num">12.1</td>
+    </tr><tr>
+      <td><b>小年</b><span class="sub">腊月廿三</span></td>
+      <td><span class="sw"><i class="chip" style="background:#F86B1D"></i><span class="cname">金莲花橙</span><span class="mono">#F86B1D</span></span></td>
+      <td class="mono">248, 107, 29</td>
+      <td class="mono">0 / 57 / 88 / 3</td>
+      <td>火</td>
+      <td><span class="sw"><i class="chip" style="background:#f3edea"></i><span class="mono">#F3EDEA</span></span></td>
+      <td><span class="sw"><i class="chip" style="background:#a53e05"></i><span class="mono">#A53E05</span></span></td>
+      <td class="num">12.6</td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section style="margin-top:58px">
+  <h2><span class="se">用</span>落地建议</h2>
+  <div class="callout">
+    <p><b>占比 60 / 30 / 10：</b>纸面与留白占六成，框架与控件占三成，主色只占一成。节日色一旦超过 15%，阅读界面就会变成海报。</p>
+    <p><b>主色只出现在四处：</b>进度条填充、当前章标记、主按钮、悬浮球图标。其余位置一律用中性色，避免"处处是节"。</p>
+    <p><b>辅色与点缀色不进阅读界面：</b>它们属于封面、开屏、节日横幅。阅读界面只用主色推导出的那一套令牌，否则三色同屏会互相抢。</p>
+    <p><b>切换窗口：</b>节前 7 天自动启用、节后 3 天回落，默认回落到羊皮纸。夜场只在该节日的 20:00–06:00 生效，或由用户手动锁定。</p>
+    <p><b>相邻节日必须能区分：</b>春节（朱红）与小年（灶橙）同属暖色，纸面仅差 8° 色相，靠强调色（#b0361a vs #a63f0d）与四季明度台阶拉开；若仍难辨，在主题入口常驻显示节日名。</p>
+  </div>
+</section>
+
+<footer>
+  色值来源：中国传统色库（526 色）· 主色 / 辅色 / 点缀色均取自库中存在色名，未自造。<br>
+  纸面、强调色由 `paintTheme` 同款算法推导：色相继承主色，明度与对比度由算法锁定；表格"正文比"为正文色对纸面的 WCAG 对比度。<br>
+  节日日期按农历标注，清明、冬至为节气型节日，日期随年浮动。
+</footer>
+
+</div>
+</body>
+</html>

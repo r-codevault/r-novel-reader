@@ -35,6 +35,9 @@ export function activate(context: vscode.ExtensionContext): void {
     // 书架/目录/存储 已并入阅读面板左抽屉; 面板未打开时用状态栏按钮或命令面板进入
     ReaderPanel.getShelf = () => shelfItems();
     ReaderPanel.getLibrary = () => getLibraryPath();
+    // 章节位置记忆(书架 chapterRatios): 目录切走再切回时恢复原阅读位置
+    ReaderPanel.getChapterRatio = (filePath: string, chapterIndex: number) =>
+        shelf.getRatio(filePath, chapterIndex);
 
     // ---------------------------------------------------------------- 阅读页窗口恢复
     // VS Code 重开窗口会尝试恢复上次的 webview; 这里接管它:
@@ -626,14 +629,16 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('novelReader.prevChapter', () => {
             const panel = ReaderPanel.current;
             if (panel) {
-                ReaderPanel.showChapter(panel.chapterIndex - 1);
+                // 'prev' -> 停在上一章底部(接着往下读, 视觉连续)
+                ReaderPanel.showChapter(panel.chapterIndex - 1, 'prev');
             }
         }),
 
         vscode.commands.registerCommand('novelReader.nextChapter', () => {
             const panel = ReaderPanel.current;
             if (panel) {
-                ReaderPanel.showChapter(panel.chapterIndex + 1);
+                // 'next' -> 回到新章顶部
+                ReaderPanel.showChapter(panel.chapterIndex + 1, 'next');
             }
         })
     );

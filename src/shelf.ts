@@ -19,6 +19,8 @@ export interface ShelfBook {
     chapterIndex: number;
     /** 章内滚动位置 0~1 */
     scrollRatio: number;
+    /** 各章节内滚动位置记忆(章节序号 -> 0~1), 目录切走再切回时恢复原位置 */
+    chapterRatios?: Record<number, number>;
     addedAt: number;
     updatedAt: number;
 }
@@ -80,7 +82,7 @@ export class ShelfStore {
         return next;
     }
 
-    /** 保存阅读进度 */
+    /** 保存阅读进度(同时把章内比例记入 chapterRatios, 供切章后恢复原位置) */
     async updateProgress(filePath: string, chapterIndex: number, scrollRatio: number): Promise<void> {
         const books = this.state.get<ShelfBook[]>(SHELF_KEY, []);
         const idx = books.findIndex((b) => b.filePath === filePath);
@@ -88,14 +90,37 @@ export class ShelfStore {
             return;
         }
         const ratio = Math.min(1, Math.max(0, scrollRatio || 0));
+        const book = books[idx];
+        const ratios = { ...(book.chapterRatios || {}) };
+        // 只记忆"非顶部"(>0.5%)的位置: 切章瞬间 webview 会先上报 (新章节, 0),
+        // 若把 0 也记进去, 会在恢复滚动前就把该章的位置记忆清零
+        const ratioChanged = ratio > 0.005 && Math.abs((ratios[chapterIndex] ?? -1) - ratio) >= 0.01;
+        if (ratioChanged) {
+            // 记忆表只在比例真的变了时才更新, 避免高频滚动反复整表写盘
+            ratios[chapterIndex] = ratio;
+        }
         if (
-            books[idx].chapterIndex === chapterIndex &&
-            Math.abs(books[idx].scrollRatio - ratio) < 0.01
+            book.chapterIndex === chapterIndex &&
+            Math.abs(book.scrollRatio - ratio) < 0.01 &&
+            !ratioChanged
         ) {
             return;
         }
-        books[idx] = { ...books[idx], chapterIndex, scrollRatio: ratio, updatedAt: Date.now() };
+        books[idx] = {
+            ...book,
+            chapterIndex,
+            scrollRatio: ratio,
+            chapterRatios: ratioChanged ? ratios : book.chapterRatios,
+            updatedAt: Date.now(),
+        };
         await this.state.update(SHELF_KEY, books);
+    }
+
+    /** 查询某章的阅读位置记忆(无记录返回 undefined) */
+    getRatio(filePath: string, chapterIndex: number): number | undefined {
+        const book = this.get(filePath);
+        const r = book?.chapterRatios?.[chapterIndex];
+        return typeof r === 'number' && r > 0 ? Math.min(1, r) : undefined;
     }
 
     /** 从书架移除 */

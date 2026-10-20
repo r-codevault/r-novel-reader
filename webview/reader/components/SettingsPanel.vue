@@ -4,7 +4,7 @@
  * 面板定位(贴合悬浮球)由 App 协调, 本组件暴露根元素
  */
 import { computed, ref, watch } from 'vue';
-import { state, THEMES, PROVINCES, SOLAR_TERMS, CONTENT_WIDTH, persistSettings, previewTheme, restoreTheme, stepFontSize, stepSetting, resetSettings } from '../store';
+import { state, THEMES, PROVINCES, SOLAR_TERMS, FESTIVALS, CONTENT_WIDTH, persistSettings, previewTheme, restoreTheme, stepFontSize, stepSetting, resetSettings } from '../store';
 import { shortcutLabel } from '../composables/shortcut';
 
 const rootRef = ref<HTMLElement | null>(null);
@@ -16,9 +16,10 @@ const provinceCode = computed(function () {
   return s ? s.province : '110000';
 });
 
-/** 省份/节气列表展开状态(自绘下拉, 避免原生 select 的粗滚动条) */
+/** 省份/节气/节日列表展开状态(自绘下拉, 避免原生 select 的粗滚动条); 三者互斥 */
 const provinceOpen = ref(false);
 const termOpen = ref(false);
+const festivalOpen = ref(false);
 
 /** 按钮文案: 只有正在使用地域主题时才显示省份名, 否则显示占位「地域色彩」 */
 const provinceName = computed(function () {
@@ -81,6 +82,30 @@ function chooseTerm(id: string): void {
 /** 结束预览, 还原当前真实主题 */
 function endPreview(): void {
   restoreTheme();
+}
+
+/** 手动可选节日: 只渲染日景(18 项), 夜场不出现在列表里(仅供自动切换) */
+const FESTIVALS_DAYLIGHT = FESTIVALS.filter(function (f) { return !f.night; });
+
+/** 节日按钮文案: 仅在正在使用节日主题时显示节日名, 否则为占位「节日色彩」 */
+const festivalName = computed(function () {
+  if (!state.settings || state.settings.theme !== 'festival') { return '节日色彩'; }
+  const found = FESTIVALS.find(function (f) { return f.id === state.settings!.festival; });
+  return found ? found.name : '节日色彩';
+});
+
+/** 悬浮预览节日(不落盘, 只改 CSS 变量) */
+function previewFestival(id: string): void {
+  previewTheme({ theme: 'festival', festival: id });
+}
+
+/** 选择节日: 同时切到「传统节日」主题 */
+function chooseFestival(id: string): void {
+  festivalOpen.value = false;
+  // 先还原预览态, 再交给持久化后的正式设置接管, 避免预览变量残留
+  restoreTheme();
+  if (!id) { return; }
+  persistSettings({ festival: id, theme: 'festival' });
 }
 
 /** 选择省份: 同时切到「地域色彩」主题 */
@@ -162,17 +187,17 @@ const shortcutHintText = computed(function () {
       <div class="sp-themes" @mouseleave="endPreview()">
         <div class="sp-theme-dots">
           <span v-for="t in THEMES" :key="t.id" class="sp-dot" :data-theme="t.id" :title="t.name"
-            :style="{ background: t.id === 'dark' ? '#1c1c1c' : t.bg, color: t.fg, '--sp-check': t.fg }"
+            :style="{ background: t.bg, color: t.fg, '--sp-check': t.fg }"
             :class="{ active: settings && settings.theme === t.id }"
             @mouseenter="previewPreset(t.id)" @focus="previewPreset(t.id)"
             @click="choosePreset(t.id)"></span>
         </div>
-        <!-- 第二行: 地域色彩 / 廿四节气 两个选择器(仍归属于「阅读主题」行) -->
+        <!-- 第二行: 地域色彩 / 廿四节气 / 节日色彩 三个选择器(仍归属于「阅读主题」行) -->
         <div class="sp-theme-extra">
         <div class="sp-province-picker">
           <button class="sp-province-btn" :class="{ open: provinceOpen }"
             :title="settings && settings.theme === 'province' ? '当前使用地域色彩主题' : '选择省份后自动切换到地域色彩主题'"
-            @click.stop="provinceOpen = !provinceOpen; termOpen = false">
+            @click.stop="provinceOpen = !provinceOpen; termOpen = false; festivalOpen = false">
             <span>{{ provinceName }}</span>
             <svg class="sp-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -193,7 +218,7 @@ const shortcutHintText = computed(function () {
         <div class="sp-province-picker" data-kind="term">
           <button class="sp-province-btn" :class="{ open: termOpen }"
             :title="settings && settings.theme === 'term' ? '当前使用廿四节气主题' : '选择节气后自动切换到廿四节气主题'"
-            @click.stop="termOpen = !termOpen; provinceOpen = false">
+            @click.stop="termOpen = !termOpen; provinceOpen = false; festivalOpen = false">
             <span>{{ termName }}</span>
             <svg class="sp-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -206,6 +231,25 @@ const shortcutHintText = computed(function () {
               :style="{ borderLeftColor: t.hex }" :title="t.name + ' · ' + t.color"
               @mouseenter="previewTerm(t.id)" @focus="previewTerm(t.id)"
               @click="chooseTerm(t.id)">{{ t.name }}</button>
+          </div>
+        </div>
+        <!-- 传统节日: 列表只渲染日景 18 项(夜场仅供自动切换, 手动不可选) -->
+        <div class="sp-province-picker" data-kind="festival">
+          <button class="sp-province-btn" :class="{ open: festivalOpen }"
+            :title="settings && settings.theme === 'festival' ? '当前使用传统节日主题' : '选择节日后自动切换到传统节日主题'"
+            @click.stop="festivalOpen = !festivalOpen; provinceOpen = false; termOpen = false">
+            <span>{{ festivalName }}</span>
+            <svg class="sp-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+          <div v-if="festivalOpen" class="sp-province-menu sp-festival-menu" @mouseleave="endPreview()">
+            <button v-for="f in FESTIVALS_DAYLIGHT" :key="f.id" class="sp-province-item"
+              :class="{ active: settings && settings.theme === 'festival' && settings.festival === f.id }"
+              :style="{ borderLeftColor: f.main.hex }" :title="f.name + ' · ' + f.main.name"
+              @mouseenter="previewFestival(f.id)" @focus="previewFestival(f.id)"
+              @click="chooseFestival(f.id)">{{ f.name }}</button>
           </div>
         </div>
         </div>

@@ -23,17 +23,23 @@ export function chapterParts(title: string): { no: string; name: string } {
 }
 
 /**
+ * 卷/部/篇/集 类标题判定(供目录分组与章数统计共用)。
+ * 标记需出现在标题前部, 避免正文标题里偶尔提及"第X篇"被误判为分卷。
+ */
+export function isVolumeTitle(title: string): boolean {
+  return /^.{0,10}第[0-9０-９一二三四五六七八九十百千零两]+[卷部篇集]/.test(title);
+}
+
+/**
  * 按 卷/部/篇/集 类章节切分目录层级(无此类章节则整体归入"正文")。
- * 卷标题本身也是正文章节, 因此它既作组名, 也作为该组的可点击入口(entry),
+ * 卷标题行本身也是正文章节(承载卷首引子), 因此作组名 + 组入口(entry),
+ * 但**不作为目录条目渲染、不计入章数** —— 篇名不该被当成一章。
  */
 export function buildCatalogGroups(chapters: CatalogChapter[]): CatalogGroup[] {
-  // 卷/部/篇/集 标记需出现在标题前部, 避免正文标题里偶尔提及"第X篇"被误判为分卷
-  const isVolume = (title: string): boolean =>
-    /^.{0,10}第[0-9０-９一二三四五六七八九十百千零两]+[卷部篇集]/.test(title);
   const groups: CatalogGroup[] = [];
   let cur: CatalogGroup | null = null;
   for (const c of chapters) {
-    if (isVolume(c.title)) {
+    if (isVolumeTitle(c.title)) {
       if (cur) { groups.push(cur); }
       cur = { name: c.title, entry: c.index, items: [] };
     } else {

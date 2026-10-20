@@ -34,13 +34,21 @@ for (const t of SOLAR_TERMS) {
 
   const theme = termTheme(t.id);
   const body = contrastRatio(theme.fg, theme.bg);
-  const muted = contrastRatio(theme.muted, theme.bg);
-  const accent = contrastRatio(theme.accent, theme.bg);
+  // 次要文字最差底色是更暗的面板底(chromeBg)，不是纸面
+  const muted = contrastRatio(theme.muted, theme.chromeBg);
+  // 强调色最差底色是更暗的留白区(pageBg)：目录当前章就压在这个底色上
+  const accent = contrastRatio(theme.accent, theme.pageBg);
+  const accentFg = contrastRatio(theme.accentFg, theme.accent);
+  const borderStrong = contrastRatio(theme.borderStrong, theme.chromeBg);
+  const danger = contrastRatio(theme.danger, theme.bg);
   if (theme.id !== 'term') { failures.push(`${t.name} 主题 id 应为 term`); }
   if (theme.name !== t.name) { failures.push(`${t.name} 主题名不匹配`); }
   if (body < 7) { failures.push(`${t.name} 正文对比度 ${body.toFixed(2)} < 7`); }
   if (muted < 4.5) { failures.push(`${t.name} 次要文字对比度 ${muted.toFixed(2)} < 4.5`); }
-  if (accent < 4.5) { failures.push(`${t.name} 强调色对比度 ${accent.toFixed(2)} < 4.5`); }
+  if (accent < 4.5) { failures.push(`${t.name} 强调色(作文字) ${accent.toFixed(2)} < 4.5`); }
+  if (accentFg < 4.5) { failures.push(`${t.name} 强调色上的文字 ${accentFg.toFixed(2)} < 4.5`); }
+  if (borderStrong < 3) { failures.push(`${t.name} 控件边框 ${borderStrong.toFixed(2)} < 3`); }
+  if (danger < 4.5) { failures.push(`${t.name} 危险色 ${danger.toFixed(2)} < 4.5`); }
 }
 assert.deepStrictEqual(failures, [], '存在不达标的节气:\n  ' + failures.join('\n  '));
 

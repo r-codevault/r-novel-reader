@@ -51,7 +51,7 @@ interface ChapterPayload {
 
 type WebviewMessage =
     | { type: 'ready' }
-    | { type: 'getChapter'; index: number }
+    | { type: 'getChapter'; index: number; dir?: 'prev' | 'next' | 'jump'; /** 发消息时的章内滚动位置(用于记住当前章) */ curRatio?: number }
     | { type: 'updateSettings'; patch: Partial<ReadingSettings> }
     | { type: 'resetSettings' }
     | { type: 'saveProgress'; chapterIndex: number; scrollRatio: number }
@@ -105,6 +105,8 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
     public static getShelf?: () => ShelfItemView[];
     /** 书库目录提供者(插件入口注入) */
     public static getLibrary?: () => string;
+    /** 章节位置记忆查询(书架 chapterRatios): 返回 undefined = 该章没有记忆, 从顶部读 */
+    public static getChapterRatio?: (filePath: string, chapterIndex: number) => number | undefined;
     /** 视图就绪前的抽屉打开请求 */
     private static _pendingDrawer: DrawerTab | null = null;
 
@@ -114,6 +116,8 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
     private _chapterIndex: number;
     private _settings: ReadingSettings;
     private _scrollRatio = 0;
+    /** 本会话内的章节位置记忆(章节序号 -> 0~1), 切走再切回时恢复原位置 */
+    private readonly _ratios = new Map<number, number>();
     private _ready = false;
     private _openSettingsOnLoad = false;
     private readonly _disposables: vscode.Disposable[] = [];
@@ -274,8 +278,17 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
         }
     }
 
-    /** 侧边栏点击章节 / 上一章 / 下一章 */
-    static showChapter(index: number): void {
+/**
+ * 切换章节。
+ *
+ * 落点规则(与阅读习惯一致, 不是随意定的):
+ *  - **下一章 / 目录跳转 / 快捷键**: 回到新章**顶部** —— 换章后需要从头读起,
+ *    继承上一章的滚动距离会让人误以为漏读了内容。
+ *  - **上一章**: 停在**底部** —— 你原本就在当前章末尾, 回到上一章末尾等于
+ *    "接着往下读但少了一章", 视觉连续, 不需要再翻回顶部。
+ *  - **同章**(目录点当前章): 不动。
+ */
+static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void {
         const cur = ReaderPanel.current;
         if (!cur) {
             return;
@@ -291,7 +304,8 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
             return;
         }
         cur._chapterIndex = next;
-        cur._scrollRatio = 0;
+        // 上一章停在底部(1); 下一章/目录跳转恢复该章记忆位置(没有记忆则回顶部 0)
+        cur._scrollRatio = dir === 'prev' ? 1 : cur._rememberedRatio(next);
         cur._postChapter();
         ReaderPanel.onDidChangeChapter?.(next);
     }
@@ -389,8 +403,13 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
                 const max = Math.max(0, this._novel.chapters.length - 1);
                 const index = Math.min(Math.max(0, msg.index | 0), max);
                 if (index !== this._chapterIndex) {
+                    // 记住离开的这一章读到哪了(以消息携带的实时比例为准, 最可靠)
+                    if (typeof msg.curRatio === 'number') {
+                        this._ratios.set(this._chapterIndex, Math.min(1, Math.max(0, msg.curRatio)));
+                    }
                     this._chapterIndex = index;
-                    this._scrollRatio = 0;
+                    // 上一章停在底部; 其余(下一章/目录跳转)恢复该章记忆位置, 没有记忆则回顶部
+                    this._scrollRatio = msg.dir === 'prev' ? 1 : this._rememberedRatio(index);
                     this._postChapter();
                     ReaderPanel.onDidChangeChapter?.(index);
                 }
@@ -420,10 +439,15 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
                 // 进度交给插件入口写入书架(不再维护单独的 session);
                 // 连同 filePath 一起传, 窗口恢复出来的面板也能写到正确的书
                 if (this._novel) {
+                    const ratio = Math.min(1, Math.max(0, msg.scrollRatio || 0));
+                    // 阅读中持续刷新本章位置记忆(顶部不记, 避免切章瞬间的 0 覆盖记忆)
+                    if (ratio > 0.005) {
+                        this._ratios.set(msg.chapterIndex, ratio);
+                    }
                     ReaderPanel.onProgress?.(
                         this._novel.filePath,
                         msg.chapterIndex,
-                        Math.min(1, Math.max(0, msg.scrollRatio || 0))
+                        ratio
                     );
                 }
                 break;
@@ -464,6 +488,16 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
                     });
                 break;
         }
+    }
+
+    /** 某章的恢复位置: 优先本会话记忆, 其次书架 chapterRatios(跨会话), 都没有则回顶部 */
+    private _rememberedRatio(index: number): number {
+        const local = this._ratios.get(index);
+        if (typeof local === 'number' && local > 0.005) {
+            return Math.min(1, local);
+        }
+        const shelved = ReaderPanel.getChapterRatio?.(this._novel.filePath, index);
+        return typeof shelved === 'number' && shelved > 0.005 ? Math.min(1, shelved) : 0;
     }
 
     private _chapterPayload(): ChapterPayload {
@@ -524,6 +558,9 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
 
     private _getHtml(settings: ReadingSettings): string {
         const nonce = crypto.randomBytes(16).toString('hex');
+        // 首帧主题: 与 webview 侧 applyThemeVars 取同一套值(四参, 含节日),
+        // 否则切到节日/地域/节气主题后首次打开会闪一帧默认色。只算一次, 避免重复调用。
+        const t = themeById(settings.theme, settings.province, settings.term, settings.festival);
 
                 // webview 外壳: Vue 产物(dist-webview)内联 + 静态主题变量初值(防首帧闪白)
         // UI 全部由 webview/reader/ 的 Vue 3 源码构建而来(npm run build:webview)
@@ -536,22 +573,25 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
 <title>小说阅读</title>
 <style>
   :root {
-    --bg: ${themeById(settings.theme).bg};
-    --fg: ${themeById(settings.theme).fg};
-    --page-bg: ${themeById(settings.theme).pageBg};
-    --chrome-bg: ${themeById(settings.theme).chromeBg};
-    --chrome-fg: ${themeById(settings.theme).fg};
-    --chrome-border: ${themeById(settings.theme).chromeBorder};
-    --accent: ${themeById(settings.theme).accent};
-    --accent-fg: ${themeById(settings.theme).accentFg};
-    /* 悬浮球(起点风格): 面板同色底 + 主题色图标/描边(来自 THEMES 变量) */
-    --fab-bg: ${themeById(settings.theme).chromeBg};
-    --fab-fg: ${themeById(settings.theme).accent};
-    --fab-border: ${themeById(settings.theme).chromeBorder};
-    --btn-hover: ${themeById(settings.theme).accent};
-    --input-bg: ${themeById(settings.theme).bg};
-    --input-fg: ${themeById(settings.theme).fg};
-    --input-border: ${themeById(settings.theme).chromeBorder};
+    --bg: ${t.bg};
+    --fg: ${t.fg};
+    --page-bg: ${t.pageBg};
+    --chrome-bg: ${t.chromeBg};
+    --chrome-fg: ${t.fg};
+    --chrome-border: ${t.chromeBorder};
+    --border-strong: ${t.borderStrong};
+    --accent: ${t.accent};
+    --accent-fg: ${t.accentFg};
+    --fg-muted: ${t.muted};
+    --danger: ${t.danger};
+    --shadow-color: ${t.shadow};
+    /* 章节导航按钮(原悬浮球): 面板同色底 + 主题色图标/描边 */
+    --nav-btn-bg: ${t.chromeBg};
+    --nav-btn-fg: ${t.accent};
+    --nav-btn-border: ${t.borderStrong};
+    --input-bg: ${t.bg};
+    --input-fg: ${t.fg};
+    --input-border: ${t.borderStrong};
     /* 排版初值(实际值由 Vue store.applyThemeVars 按当前设置实时维护) */
     --font-size: ${settings.fontSize}px;
     --font-family: ${fontStackById(settings.fontFamily)};

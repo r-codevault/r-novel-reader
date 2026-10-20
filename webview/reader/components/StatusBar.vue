@@ -41,9 +41,14 @@ const progressPct = computed(function () {
     <div class="status-row">
       <span id="bookInfo">{{ bookInfoText }}</span>
       <span class="spacer"></span>
-      <span id="chapterTitle" class="status-title" :title="chapterTitleText">{{ chapterTitleText }}</span>
-      <span id="chapterWords">{{ chapterWordsText }}</span>
-      <span id="chapterInfo">{{ chapterInfoText }}</span>
+      <!-- 右侧三段用 · 分隔, 与左侧书信息保持一致的视觉语言(此前只靠 gap, 挤在一起读不出层次) -->
+      <span class="status-parts">
+        <span id="chapterTitle" class="status-title" :title="chapterTitleText">{{ chapterTitleText }}</span>
+        <span v-if="chapterWordsText" class="status-sep" aria-hidden="true">·</span>
+        <span v-if="chapterWordsText" id="chapterWords">{{ chapterWordsText }}</span>
+        <span v-if="chapterInfoText" class="status-sep" aria-hidden="true">·</span>
+        <span v-if="chapterInfoText" id="chapterInfo">{{ chapterInfoText }}</span>
+      </span>
     </div>
   </footer>
 </template>

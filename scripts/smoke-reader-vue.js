@@ -269,6 +269,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   );
   console.log('状态栏(书名/章/字数): 通过');
 
+  // 状态栏右侧分隔符: 用 · 分隔, 不是空格(跟左侧一致)
+  const sepDots = Array.from(document.querySelectorAll('.statusbar .status-sep'));
+  assert(sepDots.length === 2, '状态栏右侧应有2 个 · 分隔符(实际 ' + sepDots.length + ')');
+  assert(
+    sepDots.every((s) => s.textContent.trim() === '·'),
+    '状态栏分隔符应为 ·'
+  );
+  assert(
+    document.querySelector('.statusbar .status-title') &&
+      document.querySelector('.statusbar #chapterWords') &&
+      document.querySelector('.statusbar #chapterInfo'),
+    '状态栏右侧三段应同处 .status-parts 内'
+  );
+  console.log('状态栏 · 分隔符: 通过');
+
   // 设置面板: openSettings 消息
   dispatch('openSettings');
   await sleep(20);
@@ -283,8 +298,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const themeUpdate = posted.find((m) => m.type === 'updateSettings' && m.patch && m.patch.theme === 'dark');
   assert(themeUpdate, '切主题应立即发出 updateSettings(patch.theme=dark), 不等防抖');
   assert(
-    document.documentElement.style.getPropertyValue('--fab-bg') === '#1c1c1c',
-    '切黑夜后 --fab-bg 应变为深底'
+    document.documentElement.style.getPropertyValue('--nav-btn-bg') === '#1c1c1c',
+    '切黑夜后 --nav-btn-bg 应变为深底'
   );
   console.log('设置面板(打开/主题点/切主题变量): 通过');
 
@@ -652,14 +667,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '主题白名单必须放行 province 与 term(否则会静默丢弃)'
   );
   assert(/TERM_THEMES\[term/.test(storeSrc), 'webview themeOf 应从节气色板查表');
+  assert(/FESTIVAL_THEMES/.test(virtualSrc) && /festivalTheme/.test(virtualSrc), 'vite 应构建期生成节日色板');
+  assert(/FESTIVAL_THEMES\[festival/.test(storeSrc), 'webview themeOf 应从节日色板查表');
   assert(/ensureContrast\(/.test(settingsSrc), '色板推导必须做过对比度校正');
   assert(/\*::-webkit-scrollbar\s*\{[^}]*width:\s*8px/.test(capturedHtml), '全局滚动条应收细到 8px');
   // 廿四节气: 与地域色彩同一行(阅读主题的第二行), 24 项, 悬浮可预览
   {
     const row = document.querySelector('#settingsPanel .sp-row-theme');
     assert(row, '阅读主题行应存在');
-    assert(row.querySelectorAll('.sp-theme-extra .sp-province-btn').length === 2,
-      '阅读主题第二行应有 2 个选择器(地域色彩/廿四节气)');
+    assert(row.querySelectorAll('.sp-theme-extra .sp-province-btn').length === 3,
+      '阅读主题第二行应有 3 个选择器(地域色彩/廿四节气/节日色彩)');
     const termBtn = row.querySelector('.sp-province-picker[data-kind="term"] .sp-province-btn');
     assert(termBtn, '应有廿四节气选择器');
     assert((termBtn.textContent || '').trim() === '廿四节气', '未启用节气主题时应显示占位「廿四节气」');
@@ -687,6 +704,59 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
     await sleep(30);
     console.log('廿四节气主题(同行/24项/悬浮预览/落盘): 通过');
+  // 传统节日: 与地域色彩/廿四节气同一行, 手动列表只渲染日景 18 项, 悬浮可预览
+  {
+    const festRow = document.querySelector('#settingsPanel .sp-row-theme');
+    assert(festRow, '阅读主题行应存在');
+    const festBtn = festRow.querySelector('.sp-province-picker[data-kind="festival"] .sp-province-btn');
+    assert(festBtn, '应有传统节日选择器');
+    assert((festBtn.textContent || '').trim() === '节日色彩',
+      '未启用节日主题时应显示占位「节日色彩」, 实际: ' + (festBtn.textContent || '').trim());
+    festBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    const festItems = document.querySelectorAll('#settingsPanel .sp-festival-menu .sp-province-item');
+    assert(festItems.length === 18, '节日列表应有 18 项(仅日景, 实际 ' + festItems.length + ')');
+    const festLabels = Array.from(festItems).map((el) => (el.textContent || '').trim());
+    assert(festLabels.indexOf('除夕') >= 0 && festLabels.indexOf('春节') >= 0, '节日列表应包含「除夕」「春节」');
+    for (const nightName of ['除夕 · 夜', '元宵 · 灯', '中元 · 河灯', '中秋 · 月', '冬至 · 长夜']) {
+      assert(festLabels.indexOf(nightName) < 0, '夜场不应出现在手动列表: ' + nightName);
+    }
+    // 4 列 5 行(18 项)
+    assert(/\.sp-festival-menu\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*auto\)/.test(capturedHtml),
+      '节日列表应为 4 列排布');
+    const duanwuItem = Array.from(festItems).find((el) => (el.textContent || '').trim() === '端午');
+    assert(duanwuItem, '节日列表应包含「端午」');
+    assert(duanwuItem.style.borderLeftColor, '节日条目应带左侧主色条');
+    const festTitle = duanwuItem.getAttribute('title') || '';
+    assert(festTitle.indexOf('#') < 0, '节日悬浮提示不应包含色值, 实际: ' + festTitle);
+    assert(festTitle === '端午 · 荷叶绿', '节日悬浮提示应为「名称 · 色名」, 实际: ' + festTitle);
+
+    const root3 = document.documentElement;
+    const festBefore = root3.style.getPropertyValue('--bg').trim();
+    posted.length = 0;
+    duanwuItem.dispatchEvent(new win.MouseEvent('mouseenter', { bubbles: false }));
+    await sleep(30);
+    assert(root3.style.getPropertyValue('--bg').trim() !== festBefore, '悬浮节日应实时预览色板');
+    // 节日的 ThemeDef.id 即节日 id(与 test-festival-theme 的 t.id === f.id 契约一致)
+    assert(root3.dataset.theme === 'duanwu', '预览节日应把 data-theme 切到该节日 id, 实际: ' + root3.dataset.theme);
+    assert(posted.length === 0, '节日预览不应触发持久化');
+    const festMenuEl = document.querySelector('#settingsPanel .sp-festival-menu');
+    festMenuEl.dispatchEvent(new win.MouseEvent('mouseleave', { bubbles: false }));
+    await sleep(30);
+    assert(root3.style.getPropertyValue('--bg').trim() === festBefore, '移出节日列表应还原原主题色板');
+    assert(root3.dataset.theme === 'term', '移出后应还原到原主题(term)');
+
+    duanwuItem.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    assert(
+      posted.some((m) => m.type === 'updateSettings' && m.patch && m.patch.theme === 'festival' && m.patch.festival === 'duanwu'),
+      '选节日应保存 festival 并切到 festival 主题'
+    );
+    assert(!document.querySelector('#settingsPanel .sp-festival-menu'), '选中后节日列表应收起');
+    assert((festBtn.textContent || '').trim() === '端午',
+      '启用后按钮应显示节日名, 实际: ' + (festBtn.textContent || '').trim());
+    console.log('传统节日主题(同行/18项仅日景/悬浮预览/落盘): 通过');
+  }
   // 下拉定位与色条: 菜单锚定在第二行容器(而不是各自按钮), 否则会越界被裁
   {
     assert(/\.sp-theme-extra[^{]*\{[^}]*position:\s*relative/.test(capturedHtml), '第二行容器应作为菜单定位基准');
@@ -721,30 +791,33 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // 切换按钮: 双状态图标(展开=右侧条纹, 收起=左侧条纹) + 无「菜单」文字
   const toggleHtml = document.querySelector('.menu-toggle').innerHTML;
   assert(!toggleHtml.includes('菜单'), '切换按钮不应再显示「菜单」文字(仅保留 hover 提示)');
-  // 折叠按钮: 品牌 logo(原色保留, 不随主题变化)
+  // 折叠按钮: 品牌 logo —— 三色改用主题令牌(原先硬编码橙/深棕/米白, 在多数主题下与侧栏底几乎同色)
   const logoSvg = document.querySelector('.menu-toggle svg');
   assert(logoSvg, '折叠按钮应有 logo');
   assert(/M430.602/.test(logoSvg.innerHTML), 'logo 路径应为用户提供的图形');
-  assert(/#ED8F27/.test(logoSvg.innerHTML), 'logo 应保留原色(#ED8F27 橙)');
+  assert(
+    /fill="var\(--accent\)"/.test(logoSvg.innerHTML),
+    'logo 主色块应取 var(--accent)(原先硬编码 #ED8F27)'
+  );
   {
-    // 书上方的放射线条: 颜色由主题决定(浅色主题 #300604 / 黑夜 #FCE3C3), 不能再硬编码
+    // 书上方的放射线条: 颜色由 CSS 统一给 var(--accent), 不再按 data-theme 写两支
     const paths = Array.from(document.querySelectorAll('.menu-toggle svg path'));
     assert(paths.length === 9, `logo 应为 9 条路径(放射线已拆分), 实际 ${paths.length}`);
     const spark = paths[paths.length - 1];
     assert(spark.getAttribute('class') === 'logo-spark', '放射线应带 logo-spark 类(交给 CSS 控色)');
-    assert(spark.getAttribute('fill') === null, '放射线不应再硬编码 fill(需按主题切换)');
+    assert(spark.getAttribute('fill') === null, '放射线不应硬编码 fill');
     assert(
-      paths[paths.length - 2].getAttribute('fill') === '#300604',
-      '书页内文字线应保持深色(#300604)'
+      paths[paths.length - 2].getAttribute('fill') === 'var(--chrome-fg)',
+      '书页内文字线应取 var(--chrome-fg)(原先 #300604 在黑夜里 1.07:1 看不见)'
     );
   }
   assert(
-    /\.menu-toggle \.logo-spark[^{]*\{[^}]*fill:\s*#300604/i.test(capturedHtml),
-    '放射线在浅色主题下应为 #300604'
+    /\.menu-toggle \.logo-spark[^{]*\{[^}]*fill:\s*var\(--accent\)/i.test(capturedHtml),
+    '放射线应跟随强调色 var(--accent)'
   );
   assert(
-    /:root\[data-theme=["']?dark["']?\][^{]*\.logo-spark[^{]*\{[^}]*fill:\s*#fce3c3/i.test(capturedHtml),
-    '放射线在黑夜主题下应为 #FCE3C3'
+    !/:root\[data-theme=["']?dark["']?\]\s*\.logo-spark/.test(capturedHtml),
+    '不应再有按 data-theme 写死的 logo 分支(强调色本身已随主题变化)'
   );
   assert(
     /root\.dataset\.theme\s*=\s*t\.id/.test(
@@ -752,8 +825,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ),
     'store 应把当前主题 id 写到根元素 data-theme(供 CSS 分支)'
   );
-  assert(/#300604/.test(logoSvg.innerHTML) && /#FCE3C3/.test(logoSvg.innerHTML), 'logo 应保留其余原色');
-  assert(!/currentColor/.test(logoSvg.innerHTML), 'logo 不应被改成 currentColor(用户要求颜色不改)');
+  assert(!/currentColor/.test(logoSvg.innerHTML), 'logo 不应被改成 currentColor(需保留三色层次)');
+  assert(
+    !/#ED8F27|#300604|#FCE3C3/i.test(logoSvg.innerHTML),
+    'logo 不应残留任何硬编码品牌色'
+  );
   assert(
     /\.menu-toggle svg\s*\{[^}]*width:\s*46px/.test(capturedHtml),
     '展开态 logo 应为 46px'
@@ -1072,6 +1148,52 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       '启动时只应静默预载书架(openPanel: false)'
     );
     console.log('启动不自动弹出阅读页: 通过');
+  }
+
+  // 切章落点: 上一章停底部, 下一章/目录跳转恢复该章记忆位置(无记忆回顶部), 同章不动
+  {
+    const fs2 = fs;
+    const panelSrc = fs2.readFileSync(path.join(__dirname, '..', 'src', 'readerPanel.ts'), 'utf8');
+    const extSrc = fs2.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
+    // 1) showChapter 必须带方向参数, 且只有 prev 落底部
+    assert(
+      /showChapter\(index: number, dir: 'next' \| 'prev' \| 'jump'/.test(panelSrc),
+      'showChapter 应带方向参数 next/prev/jump'
+    );
+    assert(
+      /_scrollRatio = dir === 'prev' \? 1 : cur\._rememberedRatio\(next\)/.test(panelSrc),
+      '只有上一章落底部(1), 下一章/目录跳转恢复记忆位置'
+    );
+    // 2) 同章不动 —— 必须在改 index 之前 return
+    assert(
+      /if \(next === cur\._chapterIndex\) \{\s*return;/.test(panelSrc),
+      '目录点当前章时不应切章(也不应改滚动位置)'
+    );
+    // 3) 命令调用点必须传方向
+    assert(
+      /showChapter\(panel\.chapterIndex - 1, 'prev'\)/.test(extSrc),
+      '上一章命令应传 prev(停在底部)'
+    );
+    assert(
+      /showChapter\(panel\.chapterIndex \+ 1, 'next'\)/.test(extSrc),
+      '下一章命令应传 next(回到顶部)'
+    );
+    // 4) 目录跳转走getChapter: dir 可选, 目标比例用记忆位置(_rememberedRatio), prev 落底部
+    const gc = panelSrc.slice(panelSrc.indexOf("case 'getChapter'"));
+    assert(
+      /msg\.dir === 'prev' \? 1 : this\._rememberedRatio\(index\)/.test(gc.slice(0, 1200)),
+      '目录跳转章节应恢复记忆位置, 上一章落底部'
+    );
+    // 5) 切章后要等布局落定再滚, 否则会停在和上一章差不多的位置
+    const appSrc = fs2.readFileSync(
+      path.join(__dirname, '..', 'webview', 'reader', 'App.vue'),
+      'utf8'
+    );
+    assert(
+      /nextTick\(function \(\) \{[\s\S]{0,200}requestAnimationFrame/.test(appSrc),
+      '章节 watch 应在 nextTick + requestAnimationFrame 后再恢复滚动位置(等布局落定)'
+    );
+    console.log('切章落点(记忆位置恢复/上一章停底部/同章不动/等布局落定): 通过');
   }
   }
 
