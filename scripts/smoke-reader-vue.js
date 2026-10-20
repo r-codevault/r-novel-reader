@@ -1355,16 +1355,36 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   assert(!document.querySelector('.note-composer'), '编辑保存成功后卡片应关闭');
 
-  // 5c) 查看卡片「删除」→ 直接移除该条并关卡片
+  // 5c) 查看卡片「删除」→ 两步确认(取消可回退), 第二次点击才移除
   posted.length = 0;
   p1After.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
   p1After.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   const viewCard2 = document.querySelector('.note-composer');
   assert(viewCard2 && viewCard2.querySelector('.nc-view-text'), '再次点击段落应弹出查看卡片');
+  const cardDelBtn = Array.from(viewCard2.querySelectorAll('.nc-btn'))
+    .find((b) => b.textContent.trim() === '删除');
+  assert(cardDelBtn, '查看卡片应有「删除」按钮');
+  cardDelBtn.click();
+  await sleep(20);
+  const confirmBtn = Array.from(viewCard2.querySelectorAll('.nc-btn'))
+    .find((b) => b.textContent.trim() === '确认删除');
+  assert(confirmBtn, '第一次点删除应变「确认删除」');
+  assert(!posted.some((m) => m.type === 'removeNote'), '确认前不应发 removeNote');
+  const cardCancel = Array.from(viewCard2.querySelectorAll('.nc-btn'))
+    .find((b) => b.textContent.trim() === '取消');
+  assert(cardCancel, '查看卡片确认态旁应有「取消」按钮');
+  cardCancel.click();
+  await sleep(20);
+  assert(Array.from(viewCard2.querySelectorAll('.nc-btn')).some((b) => b.textContent.trim() === '删除'),
+    '点取消应回退到「删除」');
+  assert(!posted.some((m) => m.type === 'removeNote'), '取消不应发 removeNote');
+  // 再走完整两步删除
   Array.from(viewCard2.querySelectorAll('.nc-btn')).find((b) => b.textContent.trim() === '删除').click();
+  await sleep(20);
+  Array.from(viewCard2.querySelectorAll('.nc-btn')).find((b) => b.textContent.trim() === '确认删除').click();
   await sleep(30);
-  assert(posted.some((m) => m.type === 'removeNote' && m.id === 'note-1'), '查看卡片删除应发 removeNote');
+  assert(posted.some((m) => m.type === 'removeNote' && m.id === 'note-1'), '第二次点击应发 removeNote');
   assert(!document.querySelector('.note-composer'), '删除后卡片应关闭');
   sendMsg({ type: 'noteUpserted', item: { ...noteItem, text: '第一条笔记(改)', updatedAt: 3 } });
   await sleep(30);
@@ -1377,6 +1397,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#notesPopup .nt-act-danger').textContent.includes('确认删除'),
     '第一次点删除应变「确认删除」');
   assert(!posted.some((m) => m.type === 'removeNote'), '第一次点击不应发 removeNote');
+  // 确认态旁边应有「取消」按钮: 点击回退到普通态
+  const cancelBtn = Array.from(document.querySelectorAll('#notesPopup .nt-acts .nt-act'))
+    .find((b) => b.textContent.trim() === '取消');
+  assert(cancelBtn, '确认删除状态旁边应有「取消」按钮');
+  cancelBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(document.querySelector('#notesPopup .nt-act-danger').textContent.includes('删除')
+    && !document.querySelector('#notesPopup .nt-act-danger').textContent.includes('确认'),
+    '点取消应回退到「删除」');
+  assert(!posted.some((m) => m.type === 'removeNote'), '取消不应发 removeNote');
+  // 再走完整两步删除
+  document.querySelector('#notesPopup .nt-act-danger').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(document.querySelector('#notesPopup .nt-act-danger').textContent.includes('确认删除'),
+    '再点删除应变「确认删除」');
   document.querySelector('#notesPopup .nt-act-danger').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   assert(posted.some((m) => m.type === 'removeNote' && m.id === 'note-1'), '第二次点击应发 removeNote');

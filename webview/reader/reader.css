@@ -894,11 +894,12 @@
   .nc-btn-primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
   .nc-btn-primary:hover { color: var(--accent-fg); opacity: .92; }
   .nc-btn-primary:disabled { opacity: .6; cursor: default; }
+  .nc-btn-danger { color: var(--danger); border-color: var(--danger); }
 
-  /* 跳转后的段落高亮: 只用浅底(左侧色条已去掉), 3.6s 后淡出 */
+  /* 跳转后的段落高亮: 跟随主题强调色(淡金底), 3.6s 后淡出 */
   #content p { scroll-margin-top: 16px; scroll-margin-bottom: 90px; }
   #content p.note-focus {
-    background: var(--sp-hover);
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
     border-radius: 4px;
     transition: background .2s ease, box-shadow .2s ease;
   }

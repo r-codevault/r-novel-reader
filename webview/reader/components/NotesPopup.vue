@@ -117,6 +117,11 @@ function requestDelete(n: NoteItem): void {
 function clearDeleteTimer(): void {
   if (deleteTimer !== null) { window.clearTimeout(deleteTimer); deleteTimer = null; }
 }
+/** 两步删除的「取消」: 回到普通态, 不发 removeNote */
+function cancelDelete(): void {
+  clearDeleteTimer();
+  pendingDeleteId.value = '';
+}
 watch(function () { return state.notesOpen; }, function (open) {
   if (!open) { cancelEdit(); pendingDeleteId.value = ''; clearDeleteTimer(); hidePreview(); }
 });
@@ -258,6 +263,7 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
                 <button class="nt-act nt-go" @click.stop="jumpTo(n)">定位到原文</button>
                 <span class="spacer"></span>
                 <button class="nt-act" @click.stop="beginEdit(n)">编辑</button>
+                <button v-if="pendingDeleteId === n.id" class="nt-act" @click.stop="cancelDelete()">取消</button>
                 <button class="nt-act nt-act-danger" :class="{ confirming: pendingDeleteId === n.id }"
                   @click.stop="requestDelete(n)">{{ pendingDeleteId === n.id ? '确认删除' : '删除' }}</button>
               </div>
