@@ -94,13 +94,12 @@ function onEditKey(e: KeyboardEvent): void {
 }
 
 // ---------------------------------------------------------------- 两步删除
+// 确认态常驻: 直到点「确认删除」/「取消」/点浮层内其它地方才结束
 const pendingDeleteId = ref<string>('');
-let deleteTimer: number | null = null;
 
 function requestDelete(n: NoteItem): void {
   cancelEdit();
   if (pendingDeleteId.value === n.id) {
-    clearDeleteTimer();
     pendingDeleteId.value = '';
     // 该条目即将从列表移除: 元素被删除时 mouseleave 不会触发, 预览会一直悬在原地 → 主动收起
     hidePreview();
@@ -108,22 +107,20 @@ function requestDelete(n: NoteItem): void {
     return;
   }
   pendingDeleteId.value = n.id;
-  clearDeleteTimer();
-  deleteTimer = window.setTimeout(function () {
-    pendingDeleteId.value = '';
-    deleteTimer = null;
-  }, 3000);
-}
-function clearDeleteTimer(): void {
-  if (deleteTimer !== null) { window.clearTimeout(deleteTimer); deleteTimer = null; }
 }
 /** 两步删除的「取消」: 回到普通态, 不发 removeNote */
 function cancelDelete(): void {
-  clearDeleteTimer();
   pendingDeleteId.value = '';
 }
+/** 浮层内点击其它地方 → 结束确认态(确认/取消按钮自身的 click 先于冒泡处理, 不受影响) */
+function onPopupClick(e: MouseEvent): void {
+  if (!pendingDeleteId.value) { return; }
+  const el = e.target as HTMLElement;
+  if (el.closest && (el.closest('.nt-act-danger') || el.closest('.nt-act[data-cancel]'))) { return; }
+  cancelDelete();
+}
 watch(function () { return state.notesOpen; }, function (open) {
-  if (!open) { cancelEdit(); pendingDeleteId.value = ''; clearDeleteTimer(); hidePreview(); }
+  if (!open) { cancelEdit(); pendingDeleteId.value = ''; hidePreview(); }
 });
 
 // ---------------------------------------------------------------- 悬浮预览(浮层右侧浮窗: 笔记 + 完整原文; 悬浮「笔记正文」触发, 原文行不触发)
@@ -185,7 +182,7 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
 </script>
 
 <template>
-  <section id="notesPopup" ref="rootRef" class="popup" :class="{ open: state.notesOpen }">
+  <section id="notesPopup" ref="rootRef" class="popup" :class="{ open: state.notesOpen }" @click="onPopupClick">
     <div class="popup-head">
       <b class="popup-title">笔记</b>
       <span class="popup-sub" v-show="total > 0">共 {{ total }} 条 · {{ groups.length }} 本书</span>
@@ -263,7 +260,8 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
                 <button class="nt-act nt-go" @click.stop="jumpTo(n)">定位到原文</button>
                 <span class="spacer"></span>
                 <button class="nt-act" @click.stop="beginEdit(n)">编辑</button>
-                <button v-if="pendingDeleteId === n.id" class="nt-act" @click.stop="cancelDelete()">取消</button>
+                <button v-if="pendingDeleteId === n.id" class="nt-act" data-cancel
+                  @click.stop="cancelDelete()">取消</button>
                 <button class="nt-act nt-act-danger" :class="{ confirming: pendingDeleteId === n.id }"
                   @click.stop="requestDelete(n)">{{ pendingDeleteId === n.id ? '确认删除' : '删除' }}</button>
               </div>

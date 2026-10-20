@@ -50,33 +50,25 @@ function startEdit(): void {
   focusInput();
 }
 
-/** 查看卡片 → 删除: 两步确认, 第二次点击才真正移除; 「取消」或 3 秒无操作回退 */
+/** 查看卡片 → 删除: 两步确认, 确认态常驻(点「确认删除」才移除; 「取消」或点卡片外回退) */
 const pendingDelete = ref(false);
-let pdTimer: number | null = null;
-function clearPdTimer(): void {
-  if (pdTimer !== null) { window.clearTimeout(pdTimer); pdTimer = null; }
-}
 function requestDelete(): void {
   const c = state.noteComposer;
   if (!c || !c.editId) { return; }
   if (pendingDelete.value) {
-    clearPdTimer();
     pendingDelete.value = false;
     send({ type: 'removeNote', id: c.editId });
     state.noteComposer = null;
     return;
   }
   pendingDelete.value = true;
-  pdTimer = window.setTimeout(function () { pdTimer = null; pendingDelete.value = false; }, 3000);
 }
 function cancelDelete(): void {
-  clearPdTimer();
   pendingDelete.value = false;
 }
 // 卡片关闭/换笔记时回退删除确认态
 watch(function () { return state.noteComposer; }, function (c) {
-  clearPdTimer();
-  pendingDelete.value = false;
+  if (!c) { pendingDelete.value = false; }
 });
 
 function save(): void {
@@ -129,7 +121,7 @@ function onKeydown(e: KeyboardEvent): void {
         <button class="nc-btn nc-btn-primary" @click="startEdit()">编辑</button>
         <button class="nc-btn" :class="{ 'nc-btn-danger': pendingDelete }" @click="requestDelete()">
           {{ pendingDelete ? '确认删除' : '删除' }}</button>
-        <button v-if="pendingDelete" class="nc-btn" @click="cancelDelete()">取消</button>
+        <button v-if="pendingDelete" class="nc-btn" data-cancel @click="cancelDelete()">取消</button>
       </div>
     </template>
     <template v-else>

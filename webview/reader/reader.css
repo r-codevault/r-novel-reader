@@ -797,7 +797,7 @@
   .nt-act-primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
   .nt-act-primary:hover { color: var(--accent-fg); opacity: .9; }
   .nt-act-danger:hover, .nt-act-danger.confirming {
-    color: var(--danger); border-color: var(--danger);
+    color: var(--accent); border-color: var(--accent);
   }
   .nt-act-danger.confirming { background: transparent; }
 
@@ -894,7 +894,7 @@
   .nc-btn-primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
   .nc-btn-primary:hover { color: var(--accent-fg); opacity: .92; }
   .nc-btn-primary:disabled { opacity: .6; cursor: default; }
-  .nc-btn-danger { color: var(--danger); border-color: var(--danger); }
+  .nc-btn-danger { color: var(--accent); border-color: var(--accent); }
 
   /* 跳转后的段落高亮: 跟随主题强调色(淡金底), 3.6s 后淡出 */
   #content p { scroll-margin-top: 16px; scroll-margin-bottom: 90px; }
