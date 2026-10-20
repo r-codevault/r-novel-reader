@@ -139,7 +139,7 @@ function scrollToParagraph(target: { paragraphIndex: number; quote: string }): {
   // 重复跳转先清掉旧高亮, 避免多处同时闪
   document.querySelectorAll('#content p.note-focus').forEach(function (n) { n.classList.remove('note-focus'); });
   el.classList.add('note-focus');
-  window.setTimeout(function () { el.classList.remove('note-focus'); }, 1600);
+  window.setTimeout(function () { el.classList.remove('note-focus'); }, 3600);
   return found;
 }
 

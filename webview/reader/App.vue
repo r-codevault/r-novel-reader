@@ -289,6 +289,27 @@ function backToReadingPos(): void {
   gotoChapter(pos.chapterIndex, 'jump', pos.scrollRatio);
 }
 
+/** 关闭返回提示条(× 按钮): 结束本次返回交互 */
+function dismissNoteReturn(): void {
+  state.noteReturn = null;
+}
+
+// 返回提示条: 点 × 主动关闭, 或 15s 无操作自动消失 —— 都会结束本次返回交互
+const RETURN_TIP_MS = 15000;
+let returnTipTimer: number | null = null;
+function clearReturnTipTimer(): void {
+  if (returnTipTimer !== null) { window.clearTimeout(returnTipTimer); returnTipTimer = null; }
+}
+watch(function () { return state.noteReturn; }, function (pos) {
+  clearReturnTipTimer();
+  if (pos) {
+    returnTipTimer = window.setTimeout(function () {
+      returnTipTimer = null;
+      state.noteReturn = null;
+    }, RETURN_TIP_MS);
+  }
+});
+
 function onDocMouseDown(e: MouseEvent): void {
   const target = e.target as Node;
   const el = e.target as HTMLElement;
@@ -404,8 +425,11 @@ onMounted(function () {
       <NoteComposer />
       <ReaderArea ref="readerRef" />
       <StatusBar v-show="statusBarVisible()" />
-      <button v-if="state.noteReturn" class="note-return" :title="'返回：' + state.noteReturn.chapterTitle"
-        @click="backToReadingPos">↩ 返回阅读位置</button>
+      <div v-if="state.noteReturn" class="note-return"
+        :title="'返回：' + state.noteReturn.chapterTitle">
+        <button class="nr-main" @click="backToReadingPos">↩ 返回上次阅读位置</button>
+        <button class="nr-close" title="关闭（不操作 15 秒后也会自动消失）" @click="dismissNoteReturn">×</button>
+      </div>
     </div>
   </div>
 </template>

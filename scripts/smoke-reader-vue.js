@@ -1280,16 +1280,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(20);
   assert(!document.querySelector('.para-note-tip'), '移出段落后预览应收起');
 
-  // 5) 悬浮预览: 展示引用的整段原文 + 章节
+  // 5) 条目内联「定位到原文」; 右侧悬浮预览窗已移除
   const nt1 = document.querySelector('#notesPopup .nt-item');
   nt1.dispatchEvent(new win.MouseEvent('mouseenter'));
   await sleep(320);
-  const pv = document.querySelector('.note-preview');
-  assert(pv, '悬浮条目应出现原文预览');
-  assert(pv.textContent.includes('乙段原文。'), '预览应包含整段引用原文');
-  assert(pv.textContent.includes(novel.chapters[2].title), '预览应包含章节标题');
-  nt1.dispatchEvent(new win.MouseEvent('mouseleave'));
-  await sleep(20);
+  assert(!document.querySelector('.note-preview'), '悬浮条目不应再弹出右侧预览窗');
+  const goBtn = nt1.querySelector('.nt-go');
+  assert(goBtn && goBtn.textContent.includes('定位到原文'), '条目内应有「定位到原文」按钮');
+  assert(nt1.querySelector('.nt-quote').textContent.includes('乙段原文。'), '条目 meta 应显示原文引用');
 
   // 6) 两步删除: 第一次只变文案, 第二次才发 removeNote
   posted.length = 0;
@@ -1299,34 +1297,39 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#notesPopup .nt-act-danger').textContent.includes('确认删除'),
     '第一次点删除应变「确认删除」');
   assert(!posted.some((m) => m.type === 'removeNote'), '第一次点击不应发 removeNote');
-  // 悬浮预览打开时确认删除 → 预览应收起(条目移除后 mouseleave 不触发, 需主动收)
-  nt1.dispatchEvent(new win.MouseEvent('mouseenter'));
-  await sleep(320);
-  assert(document.querySelector('.note-preview'), '删除前悬浮预览应存在');
   document.querySelector('#notesPopup .nt-act-danger').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   assert(posted.some((m) => m.type === 'removeNote' && m.id === 'note-1'), '第二次点击应发 removeNote');
-  assert(!document.querySelector('.note-preview'), '确认删除后悬浮预览应收起');
   // 恢复该条, 供跳转测试
   sendMsg({ type: 'noteUpserted', item: noteItem });
   await sleep(30);
 
-  // 7) 点击条目跳回原文: 段落高亮 + 返回按钮
+  // 7) 点击条目跳回原文: 段落高亮 + 返回提示条
   posted.length = 0;
   document.querySelector('#notesPopup .nt-item').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(60);
   assert(!$('#notesPopup').classList.contains('open'), '跳转后笔记浮层应收起');
   assert(document.querySelector('#content p[data-p="1"]').classList.contains('note-focus'),
     '目标段落应加 .note-focus 高亮');
-  assert(document.querySelector('.note-return'), '跳转后应出现「返回阅读位置」按钮');
+  assert(document.querySelector('.note-return'), '跳转后应出现返回提示条');
+  assert(document.querySelector('.note-return .nr-main').textContent.includes('返回上次阅读位置'),
+    '返回提示条文案应为「返回上次阅读位置」');
   assert(!posted.some((m) => m.type === 'saveProgress'), '跳转落位期间不应上报进度(避免污染书架位置)');
 
-  // 8) 返回上一次阅读位置
-  document.querySelector('.note-return').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  // 8) 返回提示条: × 关闭 → 重新跳转 → 主按钮返回
+  document.querySelector('.note-return .nr-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(!document.querySelector('.note-return'), '点 × 应立即关闭返回提示条(结束本次返回交互)');
+  menuItem('notes').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
-  assert(!document.querySelector('.note-return'), '返回后按钮应消失');
+  document.querySelector('#notesPopup .nt-item').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(60);
+  assert(document.querySelector('.note-return'), '重新跳转后应再次出现返回提示条');
+  document.querySelector('.note-return .nr-main').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(!document.querySelector('.note-return'), '点「返回上次阅读位置」后提示条应消失');
 
-  console.log('笔记(空态/段落建卡/下划线标记/保存/分组/悬浮原文/两步删除+预览收起/跳转高亮/返回位置): 通过');
+  console.log('笔记(空态/段落建卡/下划线标记/保存/分组/内联定位/两步删除/跳转高亮/返回提示条): 通过');
 
 
   // ---------------- 笔记: 空内容保存 + 分组默认折叠 ----------------
@@ -1356,13 +1359,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!document.querySelector('.note-composer'), '空内容保存成功后卡片应关闭');
   menuItem('notes').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
-  const emptyRow = document.querySelector('#notesPopup [data-note-id="note-empty"] .nt-text');
-  assert(emptyRow && emptyRow.textContent.trim() === '（未填写内容）', '空笔记应显示占位文案');
-  assert(emptyRow.classList.contains('nt-text-empty'), '空笔记占位应带 .nt-text-empty 样式类');
+  const emptyRow = document.querySelector('#notesPopup [data-note-id="note-empty"]');
+  assert(emptyRow, '空笔记条目仍应渲染(保留原文锚点)');
+  assert(!emptyRow.querySelector('.nt-text'), '空笔记不应显示正文行(占位文案已去掉)');
+  assert(emptyRow.querySelector('.nt-quote').textContent.includes('丙段。'), '空笔记 meta 应显示原文引用');
 
   // 9c 行内编辑清空正文也能保存
   const firstRow = document.querySelector('#notesPopup [data-note-id="note-1"]');
-  firstRow.querySelector('.nt-act').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  firstRow.querySelector('.nt-acts .nt-act:not(.nt-go)').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   const editArea = document.querySelector('#notesPopup .nt-edit-area');
   assert(editArea, '点编辑应进入行内编辑态');
@@ -1438,7 +1442,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(20);
   assert(!bookByTitle(novel.bookTitle).classList.contains('collapsed'), '再点应恢复展开');
 
-  console.log('笔记补充(空内容保存/占位/编辑清空/分组默认态/会话保留): 通过');
+  console.log('笔记补充(空内容保存/空笔记不显示正文/编辑清空/分组默认态/会话保留): 通过');
 
   console.log('\n阅读面板 Vue 冒烟测试全部通过 ✔');
   process.exit(0);

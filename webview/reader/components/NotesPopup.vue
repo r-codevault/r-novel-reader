@@ -2,8 +2,8 @@
 /**
  * NotesPopup.vue — 阅读笔记浮层
  *
- * 结构: 头部(条数) → 按书分组(可折叠) → 条目(正文预览/章节/时间)
- * 交互: 点击条目跳回原文; hover 浮层预览整段引文; 行内编辑; 两步确认删除
+ * 结构: 头部(条数) → 书分组(可折叠) → 章分组(可折叠) → 条目(正文/原文/时间)
+ * 交互: 点条目或「定位到原文」跳回原文; 行内编辑; 两步确认删除
  */
 import { computed, nextTick, ref, watch } from 'vue';
 import { state, send, type NoteItem } from '../composables/vscode';
@@ -33,10 +33,9 @@ function isCollapsed(g: NoteBookGroup): boolean {
   return !isGroupOpen(state.noteGroupOpen, g);
 }
 function toggleGroup(g: NoteBookGroup): void {
-  // 即将收起: 先收掉正在编辑的草稿与悬浮预览, 避免它们悬在已收起的分组上
+  // 即将收起: 先收掉正在编辑的草稿, 避免它悬在已收起的分组上
   if (!isCollapsed(g)) {
     cancelEdit();
-    hidePreview();
   }
   toggleGroupOpen(state.noteGroupOpen, g);
 }
@@ -46,18 +45,13 @@ function isChapCollapsed(bookPath: string, c: NoteChapterGroup): boolean {
 function toggleChapter(bookPath: string, c: NoteChapterGroup): void {
   if (!isChapCollapsed(bookPath, c)) {
     cancelEdit();
-    hidePreview();
   }
   toggleChapterOpen(state.noteChapterOpen, bookPath, c);
 }
 
-/** 空笔记占位: 允许只记原文锚点、不写正文 */
-const EMPTY_NOTE_TEXT = '（未填写内容）';
+/** 空笔记不渲染正文行: 只记原文锚点时, 列表里只留原文/时间/操作 */
 function noteHasText(n: NoteItem): boolean {
   return !!(n.text && n.text.trim());
-}
-function notePreviewText(n: NoteItem): string {
-  return noteHasText(n) ? n.text : EMPTY_NOTE_TEXT;
 }
 
 // ---------------------------------------------------------------- 编辑态
@@ -103,8 +97,6 @@ function requestDelete(n: NoteItem): void {
   if (pendingDeleteId.value === n.id) {
     clearDeleteTimer();
     pendingDeleteId.value = '';
-    // 该条目即将从列表移除: 元素被删除时 mouseleave 不会触发, 悬浮预览会一直悬在原地 → 主动收起
-    hidePreview();
     send({ type: 'removeNote', id: n.id });
     return;
   }
@@ -119,61 +111,12 @@ function clearDeleteTimer(): void {
   if (deleteTimer !== null) { window.clearTimeout(deleteTimer); deleteTimer = null; }
 }
 watch(function () { return state.notesOpen; }, function (open) {
-  if (!open) { cancelEdit(); pendingDeleteId.value = ''; clearDeleteTimer(); hidePreview(); }
+  if (!open) { cancelEdit(); pendingDeleteId.value = ''; clearDeleteTimer(); }
 });
-
-// ---------------------------------------------------------------- 悬浮预览
-const previewNote = ref<NoteItem | null>(null);
-const previewPos = ref({ left: 0, top: 0 });
-let hoverTimer: number | null = null;
-let hideTimer: number | null = null;
-
-function showPreview(n: NoteItem, e: MouseEvent): void {
-  hidePreview();
-  const item = e.currentTarget as HTMLElement;
-  hoverTimer = window.setTimeout(function () {
-    const rect = item.getBoundingClientRect();
-    const popup = rootRef.value?.getBoundingClientRect();
-    const w = Math.min(340, window.innerWidth - 32);
-    const estimated = 220;
-    let left = (popup ? popup.right : rect.right) + 10;
-    if (left + w > window.innerWidth - 8) {
-      left = (popup ? popup.left : rect.left) - w - 10;
-    }
-    left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
-    const top = Math.max(8, Math.min(rect.top, window.innerHeight - estimated - 8));
-    previewPos.value = { left, top };
-    previewNote.value = n;
-    hoverTimer = null;
-  }, 240);
-}
-function hidePreview(): void {
-  if (hoverTimer !== null) { window.clearTimeout(hoverTimer); hoverTimer = null; }
-  if (hideTimer !== null) { window.clearTimeout(hideTimer); hideTimer = null; }
-  previewNote.value = null;
-}
-/** 鼠标移出条目时留一点缓冲, 便于把指针移到浮层上点「定位到本章原文」 */
-function hideSoon(): void {
-  if (hoverTimer !== null) { window.clearTimeout(hoverTimer); hoverTimer = null; }
-  if (hideTimer !== null) { window.clearTimeout(hideTimer); }
-  hideTimer = window.setTimeout(function () { hideTimer = null; hidePreview(); }, 180);
-}
-function cancelHide(): void {
-  if (hideTimer !== null) { window.clearTimeout(hideTimer); hideTimer = null; }
-}
-// 兜底: 预览中的笔记被移除(无论走哪条路径)时收起悬浮预览。
-// 注意: 预览为 null 必须映射为 true —— 否则 showPreview 内部先 hidePreview 的
-// 正常流程(null→false)会误触发本 watch, 把刚排下的 hover 定时器清掉。
-// (必须放在 previewNote 声明之后: watch 立即求值, 提前引用会踩 TDZ)
-watch(function () {
-  const id = previewNote.value?.id;
-  return id ? state.notes.some(function (n) { return n.id === id; }) : true;
-}, function (exists) { if (!exists) { hidePreview(); } });
 
 // ---------------------------------------------------------------- 跳转
 function jumpTo(n: NoteItem): void {
   if (n.bookPath !== (state.novel as { filePath?: string } | null)?.filePath) { return; }
-  hidePreview();
   emit('jump', n);
 }
 
@@ -227,8 +170,7 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
             <div v-if="!isChapCollapsed(g.bookPath, c)" class="nt-items">
           <div v-for="n in c.items" :key="n.id" class="nt-item" :data-note-id="n.id"
             :class="{ editing: editingId === n.id }"
-            @click="editingId === n.id ? null : jumpTo(n)"
-            @mouseenter="showPreview(n, $event)" @mouseleave="hideSoon()" @focusin="showPreview(n, $event)">
+            @click="editingId === n.id ? null : jumpTo(n)">
             <template v-if="editingId === n.id">
               <textarea class="nt-edit-area" v-model="editingText" rows="3"
                 @keydown="onEditKey" @click.stop></textarea>
@@ -240,12 +182,14 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
               <div class="nt-quote-hint" :title="n.quote">原文：{{ n.quote }}</div>
             </template>
             <template v-else>
-              <p class="nt-text" :class="{ 'nt-text-empty': !noteHasText(n) }">{{ notePreviewText(n) }}</p>
+              <p v-if="noteHasText(n)" class="nt-text">{{ n.text }}</p>
               <div class="nt-meta">
-                <span class="nt-chap" :title="n.chapterTitle">{{ n.chapterTitle }}</span>
+                <span class="nt-quote" :title="n.quote">{{ n.quote }}</span>
                 <span class="nt-time">{{ relativeTime(n.updatedAt) }}</span>
               </div>
               <div class="nt-acts">
+                <button class="nt-act nt-go" @click.stop="jumpTo(n)">定位到原文 →</button>
+                <span class="spacer"></span>
                 <button class="nt-act" @click.stop="beginEdit(n)">编辑</button>
                 <button class="nt-act nt-act-danger" :class="{ confirming: pendingDeleteId === n.id }"
                   @click.stop="requestDelete(n)">{{ pendingDeleteId === n.id ? '确认删除' : '删除' }}</button>
@@ -260,17 +204,6 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
 
     <div class="popup-foot nt-foot">
       <span class="nt-foot-tip">在正文中单击任意段落即可记笔记</span>
-    </div>
-
-    <!-- 悬浮预览: 引用原文(整段) + 章节 -->
-    <div v-if="previewNote" class="note-preview" :style="{ left: previewPos.left + 'px', top: previewPos.top + 'px' }"
-      @mouseenter="cancelHide()" @mouseleave="hidePreview()">
-      <div class="np-head">
-        <span class="np-book">{{ previewNote.bookTitle }}</span>
-        <span class="np-chap">{{ previewNote.chapterTitle }}</span>
-      </div>
-      <div class="np-quote">{{ previewNote.quote }}</div>
-      <button class="np-go" @click.stop="jumpTo(previewNote)">定位到本章原文 →</button>
     </div>
   </section>
 </template>
