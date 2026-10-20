@@ -863,6 +863,23 @@
     transition: background .2s ease, box-shadow .2s ease;
   }
 
+  /* 笔记锚定的段落: 持久虚线下划线(不随选中态消失) */
+  #content p.rd-para-noted {
+    text-decoration-line: underline;
+    text-decoration-style: dashed;
+    text-decoration-color: var(--accent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 5px;
+  }
+  /* 正在新建笔记的段落: 选中态虚线下划线(稍粗, 压过持久标记) */
+  #content p.rd-para-active {
+    text-decoration-line: underline;
+    text-decoration-style: dashed;
+    text-decoration-color: var(--accent);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 5px;
+  }
+
   /* 返回上一次阅读位置 */
   .note-return {
     position: fixed; z-index: 44;

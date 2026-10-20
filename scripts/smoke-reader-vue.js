@@ -1221,6 +1221,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   let composer = document.querySelector('.note-composer');
   assert(composer, '单击段落应弹出新建笔记卡片');
   assert(composer.querySelector('.nc-quote').textContent.trim() === '乙段原文。', '卡片应默认引用整段原文');
+  assert(para1.classList.contains('rd-para-active'), '选中段落应加虚线下划线(选中态)');
+  assert(!para1.classList.contains('rd-para-noted'), '尚无笔记时不应有持久下划线');
 
   // 3) Ctrl+Enter 保存 → addNote(不带 bookPath)
   const ta = composer.querySelector('.nc-text');
@@ -1252,6 +1254,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#notesPopup .nt-book-title').textContent.includes(novel.bookTitle),
     '应按书分组显示书名');
   assert(document.querySelector('.menu-item[data-menu="notes"] .menu-badge'), '侧栏入口应显示笔记角标');
+  const p1After = document.querySelector('#content p[data-p="1"]');
+  assert(p1After.classList.contains('rd-para-noted'), '有笔记锚定的段落应保持持久虚线下划线');
+  assert(!p1After.classList.contains('rd-para-active'), '卡片关闭后选中态下划线应消失');
 
   // 5) 悬浮预览: 展示引用的整段原文 + 章节
   const nt1 = document.querySelector('#notesPopup .nt-item');
@@ -1272,9 +1277,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#notesPopup .nt-act-danger').textContent.includes('确认删除'),
     '第一次点删除应变「确认删除」');
   assert(!posted.some((m) => m.type === 'removeNote'), '第一次点击不应发 removeNote');
+  // 悬浮预览打开时确认删除 → 预览应收起(条目移除后 mouseleave 不触发, 需主动收)
+  nt1.dispatchEvent(new win.MouseEvent('mouseenter'));
+  await sleep(320);
+  assert(document.querySelector('.note-preview'), '删除前悬浮预览应存在');
   document.querySelector('#notesPopup .nt-act-danger').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   assert(posted.some((m) => m.type === 'removeNote' && m.id === 'note-1'), '第二次点击应发 removeNote');
+  assert(!document.querySelector('.note-preview'), '确认删除后悬浮预览应收起');
   // 恢复该条, 供跳转测试
   sendMsg({ type: 'noteUpserted', item: noteItem });
   await sleep(30);
@@ -1294,7 +1304,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   assert(!document.querySelector('.note-return'), '返回后按钮应消失');
 
-  console.log('笔记(空态/段落建卡/保存/分组/悬浮原文/两步删除/跳转高亮/返回位置): 通过');
+  console.log('笔记(空态/段落建卡/下划线标记/保存/分组/悬浮原文/两步删除+预览收起/跳转高亮/返回位置): 通过');
 
 
   // ---------------- 笔记: 空内容保存 + 分组默认折叠 ----------------

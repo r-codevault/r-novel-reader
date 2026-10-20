@@ -87,6 +87,8 @@ function requestDelete(n: NoteItem): void {
   if (pendingDeleteId.value === n.id) {
     clearDeleteTimer();
     pendingDeleteId.value = '';
+    // 该条目即将从列表移除: 元素被删除时 mouseleave 不会触发, 悬浮预览会一直悬在原地 → 主动收起
+    hidePreview();
     send({ type: 'removeNote', id: n.id });
     return;
   }
@@ -143,6 +145,14 @@ function hideSoon(): void {
 function cancelHide(): void {
   if (hideTimer !== null) { window.clearTimeout(hideTimer); hideTimer = null; }
 }
+// 兜底: 预览中的笔记被移除(无论走哪条路径)时收起悬浮预览。
+// 注意: 预览为 null 必须映射为 true —— 否则 showPreview 内部先 hidePreview 的
+// 正常流程(null→false)会误触发本 watch, 把刚排下的 hover 定时器清掉。
+// (必须放在 previewNote 声明之后: watch 立即求值, 提前引用会踩 TDZ)
+watch(function () {
+  const id = previewNote.value?.id;
+  return id ? state.notes.some(function (n) { return n.id === id; }) : true;
+}, function (exists) { if (!exists) { hidePreview(); } });
 
 // ---------------------------------------------------------------- 跳转
 function jumpTo(n: NoteItem): void {
@@ -160,7 +170,7 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
       <b class="popup-title">笔记</b>
       <span class="popup-sub" v-show="total > 0">共 {{ total }} 条 · {{ groups.length }} 本书</span>
       <span class="spacer"></span>
-      <button class="popup-close" @click="toggleGroup(g)">关闭</button>
+      <button class="popup-close" @click="state.notesOpen = false">关闭</button>
     </div>
 
     <div class="popup-body">

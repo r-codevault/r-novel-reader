@@ -28,7 +28,32 @@ const isLast = computed(() =>
   !state.chapter || !state.novel || state.chapter.index >= state.novel.totalChapters - 1
 );
 
-// ---------------------------------------------------------------- 笔记: 段落单击新建
+// ---------------------------------------------------------------- 笔记: 段落下划线标记
+/**
+ * 当前章节里被笔记锚定的段落集合 → 持久虚线下划线。
+ * 用章节标题匹配(与笔记锚定策略一致), 引文必须精确命中才标记, 避免错标。
+ */
+const notedParas = computed<Set<number>>(function () {
+  const ch = state.chapter;
+  if (!ch) { return new Set(); }
+  const filePath = (state.novel as { filePath?: string } | null)?.filePath || '';
+  const out = new Set<number>();
+  for (const n of state.notes) {
+    if (n.bookPath !== filePath || n.chapterTitle !== ch.title) { continue; }
+    const found = findParagraph(ch.paragraphs, n.paragraphIndex, n.quote);
+    if (found.exact) { out.add(found.index); }
+  }
+  return out;
+});
+
+/** 正在新建笔记(卡片打开)的段落 → 高亮虚线下划线 */
+const composerPara = computed<number>(function () {
+  const c = state.noteComposer;
+  const ch = state.chapter;
+  if (!c || !ch || c.chapterTitle !== ch.title) { return -1; }
+  return c.paragraphIndex;
+});
+
 /** mousedown 时是否已有文本选区(拖选复制/查词时不应弹卡片) */
 let hadSelection = false;
 
@@ -168,6 +193,7 @@ defineExpose({ positionHandles, scrollToParagraph });
       <h2 class="chapter-title">{{ chapter ? chapter.title : '' }}</h2>
       <p v-if="paras.length === 0" class="empty-tip">(本章无内容)</p>
       <p v-for="(p, i) in paras" :key="i" class="rd-para" :data-p="i"
+        :class="{ 'rd-para-noted': notedParas.has(i), 'rd-para-active': composerPara === i }"
         @mousedown="onParaMouseDown" @click="onParaClick(i, $event)">{{ p }}</p>
     </article>
 
