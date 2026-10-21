@@ -895,10 +895,20 @@
     font-size: var(--ui-font); line-height: 1.6; font-family: inherit;
   }
   .nc-text:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  .nc-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-  .nc-err { color: var(--danger); font-size: var(--ui-font-sub); }
-  .nc-hint { color: var(--fg-muted); font-size: var(--ui-font-sub); }
+  /* 底部行: 按钮永不换行/不收缩; 空间不足时优先压缩提示文字, 避免按钮被挤成竖排 */
+  .nc-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: nowrap; }
+  .nc-err {
+    flex: 0 1 auto; min-width: 0;
+    color: var(--danger); font-size: var(--ui-font-sub);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .nc-hint {
+    flex: 1 1 auto; min-width: 0; text-align: right;
+    color: var(--fg-muted); font-size: var(--ui-font-sub);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .nc-btn {
+    flex: none; white-space: nowrap;
     padding: 3px 12px;
     background: var(--input-bg); color: var(--fg);
     border: 1px solid var(--input-border); border-radius: 4px;
