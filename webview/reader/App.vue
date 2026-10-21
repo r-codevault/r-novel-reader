@@ -166,6 +166,9 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
     case 'library':
       state.libraryPath = ((msg as { path?: string }).path) || '';
       break;
+    case 'slackerActive':
+      state.slackerActive = !!(msg as { payload?: boolean }).payload;
+      break;
     case 'openDrawer':
       openTab((msg as { tab?: DrawerTab }).tab);
       break;

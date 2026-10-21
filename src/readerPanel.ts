@@ -356,6 +356,14 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
         void ReaderPanel.current?._panel.webview.postMessage({ type: 'library', path });
     }
 
+    /** 推送摸鱼会话状态(侧边栏「摸鱼模式」高亮) */
+    static setSlackerActive(active: boolean): void {
+        void ReaderPanel.current?._panel.webview.postMessage({
+            type: 'slackerActive',
+            payload: active,
+        });
+    }
+
     /**
      * 打开左抽屉并切到指定页签。
      * 面板未打开(或 webview 未就绪)时先记下, 等 ready/init 后补发。

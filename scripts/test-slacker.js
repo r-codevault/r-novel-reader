@@ -230,11 +230,13 @@ function makeController(novel, tabState) {
   statusBarItems.length = 0;
   activeEditorWatchers = [];
   const shelfState = { progressIndex: 0 };
+  const stateChanges = [];
   const ctrl = new SlackerController({
     getNovel: async () => novel,
     getLanguage: () => langCfg.value,
     setLanguage: (id) => { langCfg.value = id; return Promise.resolve(); },
     onProgress: (fp, idx) => progress.push([fp, idx]),
+    onStateChange: (active) => stateChanges.push(active),
     listBooks: () => [
       { filePath: novel.filePath, title: novel.bookTitle, author: novel.author || '',
         chapterIndex: shelfState.progressIndex, totalChapters: novel.chapters.length, current: true },
@@ -245,7 +247,7 @@ function makeController(novel, tabState) {
     getProgress: () => shelfState.progressIndex,
   });
   ctrl.register();
-  return { ctrl, progress, langCfg, setShelfProgress: (v) => { shelfState.progressIndex = v; } };
+  return { ctrl, progress, langCfg, setShelfProgress: (v) => { shelfState.progressIndex = v; }, stateChanges };
 }
 
 (async () => {
@@ -287,9 +289,13 @@ function makeController(novel, tabState) {
       all: [{ tabs: [fishTab, fileTab] }, { tabs: [fishTab] }],
       close: async (tabs) => { closed.push(...tabs); },
     };
-    const { ctrl } = makeController(NOVEL);
+    const { ctrl, stateChanges } = makeController(NOVEL);
     await ctrl.open(NOVEL, 0);
+    assert.strictEqual(ctrl.isActive, true, '会话中 isActive 应为 true');
+    assert.strictEqual(stateChanges.at(-1), true, '开启应回调 true');
     await ctrl.boss();
+    assert.strictEqual(ctrl.isActive, false, '老板键后 isActive 应为 false');
+    assert.strictEqual(stateChanges.at(-1), false, '关闭应回调 false');
     assert.strictEqual(closed.length, 2, `应关闭 2 个摸鱼标签, 实际 ${closed.length}`);
     assert.ok(closed.every((t) => t.input.uri.scheme === SLACKER_SCHEME));
     vscodeStub.window.tabGroups = { all: [], close: async () => {} };

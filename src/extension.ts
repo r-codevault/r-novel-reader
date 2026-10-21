@@ -110,6 +110,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     function refreshShelfView(): void {
         ReaderPanel.setShelf(shelfItems());
+        // 顺带同步摸鱼会话状态(面板重载后恢复「摸鱼模式」高亮)
+        ReaderPanel.setSlackerActive(slacker.isActive);
     }
 
     /** 书库目录(空 = 未设置, 直接读取原路径); 由 SettingsStore 统一读写 */
@@ -716,6 +718,7 @@ export function activate(context: vscode.ExtensionContext): void {
         switchBook: (filePath: string) =>
             loadNovel(filePath, { openPanel: false, silent: true }).then((n) => n ?? null),
         getProgress: (filePath: string) => shelf.get(filePath)?.chapterIndex ?? -1,
+        onStateChange: (active: boolean) => ReaderPanel.setSlackerActive(active),
     });
     context.subscriptions.push(slacker.register());
 

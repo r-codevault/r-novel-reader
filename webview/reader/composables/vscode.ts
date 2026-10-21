@@ -135,6 +135,8 @@ export const state = reactive({
   noteReturn: null as NoteReturnPos | null,
   /** 待落位跳转 */
   noteJump: null as NoteJumpTarget | null,
+  /** 摸鱼会话开启中(侧边栏「摸鱼模式」高亮) */
+  slackerActive: false,
   /** 跨书跳转: 待目标书 init 落地后再按笔记定位 */
   pendingNoteJump: null as NoteItem | null,
 });

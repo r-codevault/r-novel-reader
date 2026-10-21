@@ -796,6 +796,8 @@ export interface SlackerDeps {
     switchBook?: (filePath: string) => Promise<Novel | null>;
     /** 读某本书当前的书架进度章(摸鱼文档激活时用于双向同步) */
     getProgress?: (filePath: string) => number;
+    /** 摸鱼会话开启/结束回调(用于阅读页侧边栏「摸鱼模式」高亮) */
+    onStateChange?: (active: boolean) => void;
 }
 
 /** 状态栏「书架」选择用的书架条目(与 ShelfItemView 字段一致, 解耦类型) */
@@ -819,6 +821,11 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
     private barItems: vscode.StatusBarItem[] = [];
 
     constructor(private readonly deps: SlackerDeps) {}
+
+    /** 摸鱼会话是否开启中(供阅读页初始化时恢复高亮) */
+    get isActive(): boolean {
+        return !!this.cur;
+    }
 
     register(): vscode.Disposable {
         const provider = vscode.workspace.registerTextDocumentContentProvider(SLACKER_SCHEME, this);
@@ -920,6 +927,7 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
         this.lastColumn = editor.viewColumn;
         this.cur = { novel, index: idx };
         this.deps.onProgress(novel.filePath, idx);
+        this.deps.onStateChange?.(true);
     }
 
     /** 上/下一章 */
@@ -1063,6 +1071,7 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
             await vscode.window.tabGroups.close(tabs, true);
         }
         this.cur = undefined;
+        this.deps.onStateChange?.(false);
         this.refreshBar();
     }
 }
