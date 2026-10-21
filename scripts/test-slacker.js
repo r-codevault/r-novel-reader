@@ -61,10 +61,21 @@ const vscodeStub = {
     showInputBox: async () => undefined,
     setStatusBarMessage: (msg) => { statusMsgs.push(msg); return { dispose() {} }; },
     tabGroups: { all: [], close: async () => {} },
+    onDidChangeActiveTextEditor: (fn) => { activeEditorWatchers.push(fn); return { dispose() {} }; },
+    createStatusBarItem: (alignment, priority) => {
+      const item = { alignment, priority, text: '', tooltip: '', command: '', shown: false };
+      item.show = () => { item.shown = true; };
+      item.hide = () => { item.shown = false; };
+      item.dispose = () => {};
+      statusBarItems.push(item);
+      return item;
+    },
   },
   workspace: {
     openTextDocument: async () => ({}),
     registerTextDocumentContentProvider: () => ({ dispose() {} }),
+    closeWatchers: [],
+    onDidCloseTextDocument(fn) { this.closeWatchers.push(fn); return { dispose() {} }; },
   },
   Disposable: { from: (...ds) => ({ dispose() { ds.forEach((d) => d.dispose && d.dispose()); } }) },
 };
@@ -343,6 +354,26 @@ function makeController(novel, tabState) {
     activeEditor = undefined;
     activeEditorWatchers.forEach((fn) => fn());
     assert.ok(statusBarItems.every((i) => !i.shown));
+  });
+  await ok('手动关闭摸鱼标签: 会话结束并回调 false(高亮熄灭)', async () => {
+    const { ctrl, stateChanges } = makeController(NOVEL);
+    await ctrl.open(NOVEL, 0);
+    assert.strictEqual(stateChanges.at(-1), true);
+    // 模拟用户点 X 关掉唯一的摸鱼标签(tabGroups 里已无 novelfish)
+    vscodeStub.window.tabGroups = { all: [], close: async () => {} };
+    const closedDoc = { uri: slackerUri(NOVEL, 0, getLang('javascript')) };
+    vscodeStub.workspace.closeWatchers.forEach((fn) => fn(closedDoc));
+    assert.strictEqual(ctrl.isActive, false, '关闭后会话应结束');
+    assert.strictEqual(stateChanges.at(-1), false, '应回调 false 熄灭高亮');
+    // 翻章替换文档: 仍有摸鱼标签在, 不应误判结束
+    await ctrl.open(NOVEL, 1);
+    assert.strictEqual(stateChanges.at(-1), true);
+    const newFish = { input: { uri: slackerUri(NOVEL, 1, getLang('javascript')) } };
+    vscodeStub.window.tabGroups = { all: [{ tabs: [newFish] }], close: async () => {} };
+    vscodeStub.workspace.closeWatchers.forEach((fn) => fn({ uri: slackerUri(NOVEL, 0, getLang('javascript')) }));
+    assert.strictEqual(ctrl.isActive, true, '翻章关旧文档不应误判结束');
+    assert.strictEqual(stateChanges.at(-1), true);
+    vscodeStub.window.tabGroups = { all: [], close: async () => {} };
   });
   await ok('双向同步: 阅读页切章后(书架进度变), 切回摸鱼文档自动跟随', async () => {
     const { ctrl, progress, setShelfProgress } = makeController(NOVEL);

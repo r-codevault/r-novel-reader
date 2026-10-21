@@ -19,6 +19,12 @@ declare module 'virtual:novel-constants' {
   export const TERM_THEMES: Record<string, import('../../src/settings').ThemeDef>;
 }
 
+/** vite ?raw 引入的资源原文(如摸鱼猫图标 svg) */
+declare module '*.svg?raw' {
+  const content: string;
+  export default content;
+}
+
 /** VS Code webview 注入的 API */
 declare function acquireVsCodeApi(): {
   postMessage(msg: unknown): void;

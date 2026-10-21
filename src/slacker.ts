@@ -854,7 +854,25 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
             mk('$(library)', '摸鱼模式: 书架(切换书籍)', 'novelReader.slackerShelf', 95),
         ];
         const watcher = vscode.window.onDidChangeActiveTextEditor(() => this.refreshBar());
-        return vscode.Disposable.from(provider, watcher, ...this.barItems);
+        // 手动关掉摸鱼文档标签(非老板键)也要结束会话/熄灭高亮:
+        // 翻章或切语言时 preview 替换会先开后关, 此时仍有摸鱼标签在, 不会误判
+        const closeWatcher = vscode.workspace.onDidCloseTextDocument((doc) => {
+            if (doc.uri.scheme !== SLACKER_SCHEME || !this.cur) {
+                return;
+            }
+            const stillOpen = vscode.window.tabGroups.all.some((g) =>
+                g.tabs.some((t) => {
+                    const uri = (t.input as { uri?: vscode.Uri } | undefined)?.uri;
+                    return uri instanceof vscode.Uri && uri.scheme === SLACKER_SCHEME;
+                })
+            );
+            if (!stillOpen) {
+                this.cur = undefined;
+                this.deps.onStateChange?.(false);
+                this.refreshBar();
+            }
+        });
+        return vscode.Disposable.from(provider, watcher, closeWatcher, ...this.barItems);
     }
 
     /** 摸鱼文档激活时显示状态栏控制条, 切走/老板键隐藏; 激活时同步书架进度 */
