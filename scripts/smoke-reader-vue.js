@@ -824,9 +824,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(notesIco && /var\(--sp-accent\)/.test(notesIco.innerHTML), '笔记图标笔杆应绑定 var(--sp-accent) 跟随主题');
   assert(notesIco && /viewBox="0 0 707 704"/.test(notesIco.innerHTML), '笔记图标应为设计稿矢量版(707×704)');
   const menuSrc = fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'components', 'SideMenu.vue'), 'utf8');
-  assert(/SVG_SHELF/.test(menuSrc) && /1024 1024/.test(menuSrc), '书架图标应换成 1024 viewBox 的新图标');
-  assert(/SVG_CATALOG/.test(menuSrc) && /863\.113/.test(menuSrc), '目录图标应换成用户提供的新图标');
-  assert(!/fill="#231815"/.test(menuSrc), '新图标应去掉硬编码 fill(改用 currentColor 跟随主题)');
+  // 6 个图标统一为设计稿矢量版(707×704), 强调色部件绑定 var(--sp-accent)
+  assert(/SVG_SHELF/.test(menuSrc) && /viewBox="0 0 707 704"/.test(menuSrc), '图标应为设计稿矢量版(707×704)');
+  ['SVG_SHELF', 'SVG_CATALOG', 'SVG_NOTES', 'SVG_SETTINGS', 'SVG_STORAGE'].forEach(function (name) {
+    const start = menuSrc.indexOf('const ' + name);
+    const block = menuSrc.slice(start, start + 2200);
+    assert(block.indexOf('var(--sp-accent)') >= 0, name + ' 应包含跟随主题的强调色部件');
+  });
+  assert(/data-menu="'statusbar'"/.test(menuSrc) || /statusbar/.test(menuSrc), '状态栏开关图标应存在');
+  assert(!/fill="#231815"/.test(menuSrc), '新图标不应硬编码品牌色(改用 currentColor 跟随主题)');
 
   // 书架弹窗
   menuItem('shelf').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));

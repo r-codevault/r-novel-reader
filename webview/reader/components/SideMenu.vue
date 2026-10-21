@@ -27,20 +27,24 @@ interface MenuItem {
   svg: string;
 }
 
-/** 书架: 书柜(用户提供) */
+/** 书架: 书柜 + 三本书(中间一本用主题强调色) —— 设计稿矢量版 707×704 */
 const SVG_SHELF =
-  '<svg viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true">' +
-  '<path d="M894.2 960.2h-767c-17.6 0-32-14.4-32-32v-834c0-17.6 14.4-32 32-32h767c17.6 0 32 14.4 32 32v834c0 17.7-14.4 32-32 32z m-759-40h751v-818h-751v818z"/>' +
-  '<path d="M130.7 331.7h760v40h-760zM130.7 650.7h760v40h-760z"/>' +
-  '<path d="M510.7 944c-11 0-20-9-20-20V86c0-11 9-20 20-20s20 9 20 20v838c0 11-9 20-20 20zM265.4 659.8c-9 0-17.1-6.1-19.4-15.2L218.6 535c-2.7-10.7 3.8-21.6 14.6-24.3 10.7-2.7 21.6 3.8 24.3 14.6l27.4 109.6c2.7 10.7-3.8 21.6-14.6 24.3-1.7 0.4-3.3 0.6-4.9 0.6zM195.4 660.8c-9 0-17.1-6.1-19.4-15.2L148.6 536c-2.7-10.7 3.8-21.6 14.6-24.3 10.7-2.7 21.6 3.8 24.3 14.6l27.4 109.6c2.7 10.7-3.8 21.6-14.6 24.3-1.7 0.4-3.3 0.6-4.9 0.6zM665.4 364.8c-9 0-17.1-6.1-19.4-15.2L618.6 240c-2.7-10.7 3.8-21.6 14.6-24.3 10.7-2.7 21.6 3.8 24.3 14.6l27.4 109.6c2.7 10.7-3.8 21.6-14.6 24.3-1.7 0.4-3.3 0.6-4.9 0.6zM595.4 365.8c-9 0-17.1-6.1-19.4-15.2L548.6 241c-2.7-10.7 3.8-21.6 14.6-24.3 10.7-2.7 21.6 3.8 24.3 14.6l27.4 109.6c2.7 10.7-3.8 21.6-14.6 24.3-1.7 0.4-3.3 0.6-4.9 0.6z"/>' +
-  '<path d="M676.4 942.8c-9 0-17.1-6.1-19.4-15.2L629.6 818c-2.7-10.7 3.8-21.6 14.6-24.3 10.7-2.7 21.6 3.8 24.3 14.6l27.4 109.6c2.7 10.7-3.8 21.6-14.6 24.3-1.7 0.4-3.3 0.6-4.9 0.6zM606.4 943.8c-9 0-17.1-6.1-19.4-15.2L559.6 819c-2.7-10.7 3.8-21.6 14.6-24.3 10.7-2.7 21.6 3.8 24.3 14.6l27.4 109.6c2.7 10.7-3.8 21.6-14.6 24.3-1.7 0.4-3.3 0.6-4.9 0.6z"/>' +
+  '<svg viewBox="0 0 707 704" aria-hidden="true">' +
+  '<rect x="23" y="23" width="660" height="658" rx="96" fill="none" stroke="currentColor" stroke-width="46"/>' +
+  '<rect x="110" y="120" width="90" height="380" rx="12" fill="currentColor"/>' +
+  '<rect x="260" y="80" width="90" height="420" rx="12" fill="var(--sp-accent)"/>' +
+  '<rect x="410" y="140" width="90" height="360" rx="12" fill="currentColor"/>' +
+  '<path d="M70 560 H640 M150 583 V660 M560 583 V660" fill="none" stroke="currentColor" stroke-width="46" stroke-linecap="round"/>' +
   '</svg>';
 
-/** 目录: 列表方框(用户提供, 去掉硬编码 fill 以跟随主题) */
+/** 目录: 列表方框 + 三个圆点(首点强调色) + 三条线 —— 设计稿矢量版 */
 const SVG_CATALOG =
-  '<svg viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true">' +
-  '<path d="M 863.113 0 H 160.887 A 161.064 161.064 0 0 0 0 160.887 v 702.225 a 161.064 161.064 0 0 0 160.887 160.887 h 702.225 a 161.064 161.064 0 0 0 160.887 -160.887 V 160.887 a 161.064 161.064 0 0 0 -160.887 -160.887 Z m 96.5324 863.113 a 96.6451 96.6451 0 0 1 -96.5324 96.5324 H 160.887 a 96.6451 96.6451 0 0 1 -96.5324 -96.5324 V 160.887 a 96.6451 96.6451 0 0 1 96.5324 -96.5324 h 702.225 a 96.6451 96.6451 0 0 1 96.5324 96.5324 Z"/>' +
-  '<path d="M 776.941 484.062 H 416.087 a 24.1331 24.1331 0 0 0 0 48.2662 h 360.854 a 24.1331 24.1331 0 0 0 0 -48.2662 Z M 776.941 284.771 H 416.087 a 24.1331 24.1331 0 0 0 0 48.2662 h 360.854 a 24.1331 24.1331 0 0 0 0 -48.2662 Z M 776.941 677.642 H 416.087 a 24.1331 24.1331 0 0 0 0 48.2662 h 360.854 a 24.1331 24.1331 0 0 0 0 -48.2662 Z M 242.94 484.062 h -6.06545 a 24.1331 24.1331 0 0 0 0 48.2662 H 242.94 a 24.1331 24.1331 0 0 0 0 -48.2662 Z M 242.94 284.771 h -6.06545 a 24.1331 24.1331 0 0 0 0 48.2662 H 242.94 a 24.1331 24.1331 0 0 0 0 -48.2662 Z M 242.94 677.642 h -6.06545 a 24.1331 24.1331 0 0 0 0 48.2662 H 242.94 a 24.1331 24.1331 0 0 0 0 -48.2662 Z"/>' +
+  '<svg viewBox="0 0 707 704" aria-hidden="true">' +
+  '<rect x="23" y="23" width="660" height="658" rx="96" fill="none" stroke="currentColor" stroke-width="46"/>' +
+  '<circle cx="145" cy="185" r="34" fill="var(--sp-accent)"/>' +
+  '<circle cx="145" cy="352" r="34" fill="currentColor"/>' +
+  '<circle cx="145" cy="519" r="34" fill="currentColor"/>' +
+  '<path d="M255 185 H560 M255 352 H500 M255 519 H440" fill="none" stroke="currentColor" stroke-width="46" stroke-linecap="round"/>' +
   '</svg>';
 
 /** 笔记: 纸+笔(来自设计稿的矢量化版本, 707×704)
@@ -55,15 +59,30 @@ const SVG_NOTES =
   '<path d="M 132 -46 H 438 A 18 18 0 0 1 438 46 H 132 Z" fill="var(--sp-accent)"/>' +
   '</g></svg>';
 
-/** 阅读设置: 字号图标(线性) */
+/** 阅读设置: 齿轮 + 中心强调色圆 —— 设计稿矢量版 */
 const SVG_SETTINGS =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">' +
-  '<path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>';
+  '<svg viewBox="0 0 707 704" aria-hidden="true">' +
+  '<g fill="currentColor">' +
+  '<rect x="322" y="4" width="63" height="126" rx="20"/>' +
+  '<rect x="322" y="4" width="63" height="126" rx="20" transform="rotate(45 353.5 352)"/>' +
+  '<rect x="322" y="4" width="63" height="126" rx="20" transform="rotate(90 353.5 352)"/>' +
+  '<rect x="322" y="4" width="63" height="126" rx="20" transform="rotate(135 353.5 352)"/>' +
+  '<rect x="322" y="4" width="63" height="126" rx="20" transform="rotate(180 353.5 352)"/>' +
+  '<rect x="322" y="4" width="63" height="126" rx="20" transform="rotate(225 353.5 352)"/>' +
+  '<rect x="322" y="4" width="63" height="126" rx="20" transform="rotate(270 353.5 352)"/>' +
+  '<rect x="322" y="4" width="63" height="126" rx="20" transform="rotate(315 353.5 352)"/>' +
+  '</g>' +
+  '<circle cx="353.5" cy="352" r="205" fill="none" stroke="currentColor" stroke-width="46"/>' +
+  '<circle cx="353.5" cy="352" r="86" fill="var(--sp-accent)"/>' +
+  '</svg>';
 
-/** 存储位置: 立方体(线性) */
+/** 存储位置: 立方体 + 内部强调色块 —— 设计稿矢量版 */
 const SVG_STORAGE =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">' +
-  '<path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 21V11"/></svg>';
+  '<svg viewBox="0 0 707 704" aria-hidden="true">' +
+  '<path d="M353 40 L660 210 V500 L353 670 L46 500 V210 Z" fill="none" stroke="currentColor" stroke-width="46" stroke-linejoin="round"/>' +
+  '<path d="M46 210 L353 380 L660 210 M353 380 V670" fill="none" stroke="currentColor" stroke-width="46" stroke-linejoin="round"/>' +
+  '<rect x="160" y="430" width="120" height="78" rx="16" fill="var(--sp-accent)"/>' +
+  '</svg>';
 
 const items: MenuItem[] = [
   { id: 'shelf', name: '书架', key: 'shelfOpen', svg: SVG_SHELF },
@@ -119,15 +138,18 @@ function toggle(item: MenuItem): void {
       :data-menu="'statusbar'" :title="statusBarVisible() ? '隐藏状态栏' : '显示状态栏'"
       @click="toggleStatusBar">
       <span class="menu-ico">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="3" y="4" width="18" height="16" rx="2.5" />
-          <!-- 底部条: 显示中为实心块, 隐藏时为空心细线 -->
-          <rect v-if="statusBarVisible()" x="6.5" y="15" width="11" height="2.4" rx="1"
-            fill="currentColor" stroke="none" />
-          <path v-else d="M6.5 16.2h11" />
-          <!-- 隐藏时加斜线, 与"已关闭"语义一致 -->
-          <path v-if="!statusBarVisible()" d="M4 20L20 4" />
+        <svg viewBox="0 0 707 704" aria-hidden="true">
+          <rect x="23" y="242" width="660" height="220" rx="110" fill="none" stroke="currentColor" stroke-width="46"/>
+          <template v-if="statusBarVisible()">
+            <!-- 显示中: 胶囊内强调色进度条 -->
+            <rect x="100" y="300" width="230" height="104" rx="52" fill="var(--sp-accent)" />
+            <path d="M380 352 H560" fill="none" stroke="currentColor" stroke-width="46" stroke-linecap="round" />
+          </template>
+          <template v-else>
+            <!-- 隐藏: 空心细线 + 斜线 -->
+            <path d="M300 352 H540" fill="none" stroke="currentColor" stroke-width="46" stroke-linecap="round" />
+            <path d="M150 610 L570 110" fill="none" stroke="currentColor" stroke-width="46" stroke-linecap="round" />
+          </template>
         </svg>
       </span>
       <span class="menu-label">状态栏</span>
