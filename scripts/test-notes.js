@@ -110,6 +110,19 @@ const DRAFT = {
   assert.strictEqual(removed, 22, '应删除该书全部笔记(1 + 20 并发 + 1 超长)');
   assert.strictEqual(notes.list().length, 0);
 
+  // --- 按章清空(只删该书该章, 不动同书其它章/其它书) ---
+  await notes.add({ ...DRAFT, chapterTitle: '第一章', text: 'a' }, BOOK);
+  await notes.add({ ...DRAFT, chapterTitle: '第一章', text: 'b' }, BOOK);
+  await notes.add({ ...DRAFT, chapterTitle: '第二章', text: 'c' }, BOOK);
+  await notes.add({ ...DRAFT, chapterTitle: '第一章', text: 'd' }, { ...BOOK, bookPath: 'D:/other.txt' });
+  const removedChap = await notes.removeByChapter(BOOK.bookPath, '第一章');
+  assert.strictEqual(removedChap, 2, '应只删该书第一章的 2 条');
+  assert.strictEqual(notes.list().length, 2, '应剩 第二章(本书) + 第一章(它书)');
+  assert(notes.list().every((n) => !(n.bookPath === BOOK.bookPath && n.chapterTitle === '第一章')),
+    '本书第一章应无残留');
+  const removedNone = await notes.removeByChapter(BOOK.bookPath, '不存在的章');
+  assert.strictEqual(removedNone, 0, '无匹配应返回 0');
+
   // --- 路径迁移 ---
   const n1 = await notes.add(DRAFT, { bookPath: 'D:/src/x.txt', bookTitle: 'X' });
   await notes.add(DRAFT, { bookPath: 'D:/dst/x.txt', bookTitle: 'X' });

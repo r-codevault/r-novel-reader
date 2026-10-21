@@ -38,6 +38,7 @@ function toggleGroup(g: NoteBookGroup): void {
     cancelEdit();
     hidePreview();
   }
+  pendingGroupKey.value = '';
   toggleGroupOpen(state.noteGroupOpen, g);
 }
 function isChapCollapsed(bookPath: string, c: NoteChapterGroup): boolean {
@@ -48,7 +49,25 @@ function toggleChapter(bookPath: string, c: NoteChapterGroup): void {
     cancelEdit();
     hidePreview();
   }
+  pendingGroupKey.value = '';
   toggleChapterOpen(state.noteChapterOpen, bookPath, c);
+}
+
+// ---------------------------------------------------------------- 书/章分组批量删除(组头 hover 按钮, 两步确认)
+const pendingGroupKey = ref('');
+function bookDelKey(g: NoteBookGroup): string { return 'b:' + g.bookPath; }
+function chapDelKey(bookPath: string, c: NoteChapterGroup): string { return 'c:' + bookPath + '\u0000' + c.chapterTitle; }
+function groupDeleteConfirming(key: string): boolean { return pendingGroupKey.value === key; }
+function requestGroupDelete(key: string, bookPath: string, chapterTitle?: string): void {
+  if (pendingGroupKey.value === key) {
+    pendingGroupKey.value = '';
+    send({ type: 'removeNoteGroup', bookPath, chapterTitle });
+    return;
+  }
+  pendingGroupKey.value = key;
+}
+function cancelGroupDelete(): void {
+  pendingGroupKey.value = '';
 }
 
 /** 空笔记不渲染正文行: 只记原文锚点时, 列表里只留原文/时间/操作 */
@@ -112,15 +131,15 @@ function requestDelete(n: NoteItem): void {
 function cancelDelete(): void {
   pendingDeleteId.value = '';
 }
-/** 浮层内点击其它地方 → 结束确认态(确认/取消按钮自身的 click 先于冒泡处理, 不受影响) */
+/** 浮层内点击其它地方 → 结束条目/分组删除确认态(确认/取消按钮自身的 click 先于冒泡处理, 不受影响) */
 function onPopupClick(e: MouseEvent): void {
-  if (!pendingDeleteId.value) { return; }
   const el = e.target as HTMLElement;
-  if (el.closest && (el.closest('.nt-act-danger') || el.closest('.nt-act[data-cancel]'))) { return; }
-  cancelDelete();
+  if (el.closest && (el.closest('.nt-act-danger') || el.closest('.nt-act[data-cancel]') || el.closest('.ng-del'))) { return; }
+  if (pendingDeleteId.value) { cancelDelete(); }
+  if (pendingGroupKey.value) { cancelGroupDelete(); }
 }
 watch(function () { return state.notesOpen; }, function (open) {
-  if (!open) { cancelEdit(); pendingDeleteId.value = ''; hidePreview(); }
+  if (!open) { cancelEdit(); pendingDeleteId.value = ''; pendingGroupKey.value = ''; hidePreview(); }
 });
 
 // ---------------------------------------------------------------- 悬浮预览(浮层右侧浮窗: 笔记 + 完整原文; 悬浮「笔记正文」触发, 原文行不触发)
@@ -217,6 +236,12 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
           <span v-else-if="g.orphan" class="nt-tag nt-tag-off">已移出书架</span>
           <span class="spacer"></span>
           <span class="nt-book-count">{{ g.items.length }}</span>
+          <span class="ng-del" role="button" tabindex="0"
+            :class="{ confirming: groupDeleteConfirming(bookDelKey(g)) }"
+            :title="groupDeleteConfirming(bookDelKey(g)) ? '再次点击删除本书全部笔记' : '删除本书全部笔记'"
+            @click.stop="requestGroupDelete(bookDelKey(g), g.bookPath)"
+            @keydown.enter.stop.prevent="requestGroupDelete(bookDelKey(g), g.bookPath)">
+            {{ groupDeleteConfirming(bookDelKey(g)) ? '确认删除' : '删除' }}</span>
         </button>
 
         <div v-if="!isCollapsed(g)" class="nt-items">
@@ -234,6 +259,12 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
               <span v-if="c.current" class="nt-tag">在读</span>
               <span class="spacer"></span>
               <span class="nt-book-count">{{ c.items.length }}</span>
+              <span class="ng-del" role="button" tabindex="0"
+                :class="{ confirming: groupDeleteConfirming(chapDelKey(g.bookPath, c)) }"
+                :title="groupDeleteConfirming(chapDelKey(g.bookPath, c)) ? '再次点击删除本章全部笔记' : '删除本章全部笔记'"
+                @click.stop="requestGroupDelete(chapDelKey(g.bookPath, c), g.bookPath, c.chapterTitle)"
+                @keydown.enter.stop.prevent="requestGroupDelete(chapDelKey(g.bookPath, c), g.bookPath, c.chapterTitle)">
+                {{ groupDeleteConfirming(chapDelKey(g.bookPath, c)) ? '确认删除' : '删除' }}</span>
             </button>
             <div v-if="!isChapCollapsed(g.bookPath, c)" class="nt-items">
           <div v-for="n in c.items" :key="n.id" class="nt-item" :data-note-id="n.id"

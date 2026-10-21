@@ -70,6 +70,7 @@ type WebviewMessage =
     | { type: 'addNote'; chapterTitle: string; chapterIndex: number; paragraphIndex: number; quote: string; text: string }
     | { type: 'updateNote'; id: string; text: string }
     | { type: 'removeNote'; id: string }
+    | { type: 'removeNoteGroup'; bookPath: string; chapterTitle?: string }
     | { type: 'requestNotes' };
 
 /** 窗口重开时的恢复信息(VS Code 持久化 webview 状态用) */
@@ -101,6 +102,8 @@ export interface NotesApi {
     add(draft: NoteDraft, book: { bookPath: string; bookTitle: string }): Promise<NoteItem>;
     update(id: string, text: string): Promise<NoteItem | undefined>;
     remove(id: string): Promise<boolean>;
+    removeByBook(bookPath: string): Promise<number>;
+    removeByChapter(bookPath: string, chapterTitle: string): Promise<number>;
 }
 
 export class ReaderPanel {
@@ -551,6 +554,16 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                     if (ok) {
                         void this._panel.webview.postMessage({ type: 'noteRemoved', id: msg.id });
                     }
+                });
+                break;
+            case 'removeNoteGroup':
+                // 批量删除: 按书(整本)或按书+章; 完成后回发全量笔记刷新列表
+                if (!ReaderPanel.notes) { break; }
+                void (msg.chapterTitle !== undefined
+                    ? ReaderPanel.notes.removeByChapter(msg.bookPath, msg.chapterTitle)
+                    : ReaderPanel.notes.removeByBook(msg.bookPath)
+                ).then((removed) => {
+                    if (removed > 0) { this.postNotes(); }
                 });
                 break;
             case 'requestNotes':

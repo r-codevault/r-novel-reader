@@ -171,11 +171,22 @@ export class NotesStore {
         });
     }
 
-    /** 清空某本书的笔记(本期不主动调用, 预留给"清空本书笔记") */
+    /** 清空某本书的笔记 */
     async removeByBook(bookPath: string): Promise<number> {
         return this._enqueue(async () => {
             const items = this._read();
             const next = items.filter((n) => n.bookPath !== bookPath);
+            const removed = items.length - next.length;
+            if (removed > 0) { await this._write(next); }
+            return removed;
+        });
+    }
+
+    /** 清空某本书某一章的笔记(笔记列表按章分组的「删除章笔记」用) */
+    async removeByChapter(bookPath: string, chapterTitle: string): Promise<number> {
+        return this._enqueue(async () => {
+            const items = this._read();
+            const next = items.filter((n) => !(n.bookPath === bookPath && n.chapterTitle === chapterTitle));
             const removed = items.length - next.length;
             if (removed > 0) { await this._write(next); }
             return removed;

@@ -1620,6 +1620,59 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(jumpMsg.index === 0, '跳转章节应指向笔记所在章');
   console.log('跨书跳转(换书/落地定位): 通过');
 
+  // 9h 书/章分组批量删除(组头按钮, 两步确认)
+  // 回到原来的书(避免影响后续状态断言语境)
+  posted.length = 0;
+  sendMsg({ type: 'init', payload: {
+    filePath: novel.filePath, bookTitle: novel.bookTitle, author: novel.author,
+    chapters: novel.chapters.map((c) => ({ index: c.index, title: c.title })),
+    chapterIndex: 2, chapterTitle: novel.chapters[2].title,
+    paragraphs: ['第一段。', '第二段。'], totalChapters: 5, totalWords: 123456,
+    scrollRatio: 0, chapterWords: 9, settings: { ...defaults },
+    shelf: [], libraryPath: '',
+    notes: [noteItem, { ...noteItem, id: 'note-c1' }, { ...noteItem, id: 'note-c2', bookPath: 'D:/b.txt' }],
+  } });
+  await sleep(40);
+  menuItem('notes').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  // 章组头删除按钮: 两步确认后只删该书该章
+  // (分组按最近编辑排序, 每次断言前都重新查询, 避免 v-for 重渲染后旧元素引用失效)
+  let bookGroupEl = Array.from(document.querySelectorAll('#notesPopup .nt-book'))
+    .find((b) => (b.querySelector('.nt-book-title') || {}).textContent === novel.bookTitle);
+  assert(bookGroupEl, '应渲染当前书分组');
+  let chapDel = bookGroupEl.querySelector('.nt-chap-head .ng-del');
+  assert(chapDel && chapDel.textContent.trim() === '删除', '章组头应有「删除」按钮');
+  chapDel.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(chapDel.textContent.trim() === '确认删除', '第一次点应变「确认删除」');
+  assert(!posted.some((m) => m.type === 'removeNoteGroup'), '确认前不应发 removeNoteGroup');
+  chapDel.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(40);
+  const chapDelMsg = posted.find((m) => m.type === 'removeNoteGroup');
+  assert(chapDelMsg && chapDelMsg.bookPath === novel.filePath && chapDelMsg.chapterTitle === novel.chapters[2].title,
+    '确认后应发 removeNoteGroup(书+章)');
+  // 模拟扩展回发全量笔记(该书该章已清空, 只剩它书条目)
+  sendMsg({ type: 'notes', items: [{ ...noteItem, id: 'note-c2', bookPath: 'D:/b.txt' }] });
+  await sleep(30);
+  assert(!document.querySelector('#notesPopup [data-note-id="note-1"]'), '该书该章条目应从列表消失');
+  // 恢复本书一条后: 书组头删除本书全部(重新查询书分组元素)
+  posted.length = 0;
+  sendMsg({ type: 'notes', items: [noteItem] });
+  await sleep(30);
+  bookGroupEl = Array.from(document.querySelectorAll('#notesPopup .nt-book'))
+    .find((b) => (b.querySelector('.nt-book-title') || {}).textContent === novel.bookTitle);
+  const bookDel = bookGroupEl.querySelector('.nt-book-head .ng-del');
+  assert(bookDel && bookDel.textContent.trim() === '删除', '书组头应有「删除」按钮');
+  bookDel.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(bookDel.textContent.trim() === '确认删除', '书组删除也应两步确认');
+  bookDel.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(40);
+  const bookDelMsg = posted.find((m) => m.type === 'removeNoteGroup');
+  assert(bookDelMsg && bookDelMsg.bookPath === novel.filePath && bookDelMsg.chapterTitle === undefined,
+    '书组确认后应发 removeNoteGroup(仅书路径)');
+  console.log('书/章分组批量删除(两步确认/removeNoteGroup): 通过');
+
   console.log('笔记补充(空内容保存/空笔记不显示正文/编辑清空/分组默认态/会话保留): 通过');
 
   console.log('\n阅读面板 Vue 冒烟测试全部通过 ✔');
