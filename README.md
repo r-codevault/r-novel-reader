@@ -150,7 +150,7 @@ code --install-extension r-novel-reader-1.42.6.vsix
 
 ### 方式二：打包好的 vsix 直接安装
 
-- **命令行**：`code --install-extension novel-reader-x.y.z.vsix`
+- **命令行**：`code --install-extension r-novel-reader-<版本号>.vsix`
 - **图形界面**：VS Code 扩展面板右上角 `···` → 「从 VSIX 安装…」→ 选择文件
 
 ### 方式三：开发调试（F5 免安装）
