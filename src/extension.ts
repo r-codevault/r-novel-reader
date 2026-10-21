@@ -687,6 +687,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('novelReader.slackerLanguage', () => slacker.pickLanguage()),
         vscode.commands.registerCommand('novelReader.slackerCatalog', () => slacker.catalog()),
         vscode.commands.registerCommand('novelReader.slackerShelf', () => slacker.shelf()),
+        vscode.commands.registerCommand('novelReader.slackerJump', () => slacker.jump()),
         vscode.commands.registerCommand('novelReader.slackerBoss', () => slacker.boss())
     );
 

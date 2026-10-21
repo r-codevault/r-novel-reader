@@ -498,7 +498,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // 摸鱼图标应跟随主题(currentColor), 不允许写死颜色
     const slackerSvg = document.querySelector('.menu-item[data-menu="slacker"] .menu-ico svg');
     assert(slackerSvg, '摸鱼入口应有内联 SVG 图标');
-    assert(slackerSvg.getAttribute('viewBox') === '0 0 2228 1024', '摸鱼图标 viewBox 应保持原始比例');
+    assert(slackerSvg.getAttribute('viewBox') === '0 0 1000 1000', '摸鱼图标 viewBox 应为摸鱼猪的 1000×1000');
   }
   assert(/\.menu-divider\s*\{[^}]*margin:\s*0\s+12px/.test(capturedHtml), '分隔线应无上下外边距(仅左右缩进)');
   // CSS 完整性: 源文件注释必须成对闭合(未闭合的 /* 会吞掉后续声明, 曾导致分隔线背景丢失)

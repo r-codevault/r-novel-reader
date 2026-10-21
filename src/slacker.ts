@@ -820,7 +820,7 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
 
     register(): vscode.Disposable {
         const provider = vscode.workspace.registerTextDocumentContentProvider(SLACKER_SCHEME, this);
-        // 状态栏控制条: $(chevron-left) $(chevron-right) 目录 书架 —— 图标式, 低调
+        // 状态栏控制条: 归纳到左下角「小说阅读」入口旁边, 图标式低调
         const mk = (
             text: string,
             tooltip: string,
@@ -828,7 +828,7 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
             priority: number
         ): vscode.StatusBarItem => {
             const item = vscode.window.createStatusBarItem(
-                vscode.StatusBarAlignment.Right,
+                vscode.StatusBarAlignment.Left,
                 priority
             );
             item.text = text;
@@ -836,11 +836,13 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
             item.command = command;
             return item;
         };
+        // 「小说阅读」入口 priority=100, 摸鱼控制条紧随其右(99~95)
         this.barItems = [
-            mk('$(chevron-left)', '摸鱼模式: 上一章 (Ctrl+Alt+←)', 'novelReader.slackerPrev', 44),
-            mk('$(chevron-right)', '摸鱼模式: 下一章 (Ctrl+Alt+→)', 'novelReader.slackerNext', 43),
-            mk('$(list-unordered)', '摸鱼模式: 目录(选择章节)', 'novelReader.slackerCatalog', 42),
-            mk('$(library)', '摸鱼模式: 书架(切换书籍)', 'novelReader.slackerShelf', 41),
+            mk('$(chevron-left)', '摸鱼模式: 上一章 (Ctrl+Alt+←)', 'novelReader.slackerPrev', 99),
+            mk('$(chevron-right)', '摸鱼模式: 下一章 (Ctrl+Alt+→)', 'novelReader.slackerNext', 98),
+            mk('$(debug-step-over)', '摸鱼模式: 跳章(输入跳过章数)', 'novelReader.slackerJump', 97),
+            mk('$(list-unordered)', '摸鱼模式: 目录(选择章节)', 'novelReader.slackerCatalog', 96),
+            mk('$(library)', '摸鱼模式: 书架(切换书籍)', 'novelReader.slackerShelf', 95),
         ];
         const watcher = vscode.window.onDidChangeActiveTextEditor(() => this.refreshBar());
         return vscode.Disposable.from(provider, watcher, ...this.barItems);
@@ -942,6 +944,40 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
         } else {
             vscode.window.setStatusBarMessage(`伪装语言已切换为 ${picked.lang.label}`, 3000);
         }
+    }
+
+    /** 跳章: 输入相对章数(正=向后跳过 N 章, 负=向前), 越界停留原地并提示 */
+    async jump(): Promise<void> {
+        if (!this.cur) {
+            vscode.window.setStatusBarMessage('摸鱼模式: 请先开始摸鱼阅读', 3000);
+            return;
+        }
+        const { novel, index } = this.cur;
+        const input = await vscode.window.showInputBox({
+            title: '摸鱼模式 · 跳章',
+            value: '+10',
+            placeHolder: `当前第 ${index + 1} / ${novel.chapters.length} 章`,
+            prompt: '输入要跳过的章数: 正数向后(如 5 = 跳到第 6 章), 负数向前(如 -3); 支持直接回车使用默认值',
+            validateInput: (v) => (/^[+-]?\d+$/.test(v.trim()) ? null : '请输入整数(如 5 或 -3)'),
+        });
+        if (input === undefined) {
+            return; // 取消
+        }
+        const delta = parseInt(input.trim(), 10);
+        if (!delta) {
+            vscode.window.setStatusBarMessage('摸鱼模式: 章数为 0, 未跳转', 3000);
+            return;
+        }
+        const target = index + delta;
+        if (target < 0 || target >= novel.chapters.length) {
+            const edge = target < 0 ? '第一章之前' : '最后一章之后';
+            vscode.window.setStatusBarMessage(
+                `摸鱼模式: ${edge}, 已停在 第 ${index + 1} 章`,
+                3500
+            );
+            return;
+        }
+        await this.open(novel, target);
     }
 
     /** 目录: QuickPick 选择当前书的章节跳转 */

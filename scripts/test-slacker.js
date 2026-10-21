@@ -58,6 +58,7 @@ const vscodeStub = {
     showTextDocument: async () => ({ viewColumn: 1 }),
     showInformationMessage: async () => undefined,
     showQuickPick: async () => undefined,
+    showInputBox: async () => undefined,
     setStatusBarMessage: (msg) => { statusMsgs.push(msg); return { dispose() {} }; },
     tabGroups: { all: [], close: async () => {} },
   },
@@ -300,15 +301,17 @@ function makeController(novel, tabState) {
   // ---------------------------------------------------------------- 状态栏控制条
 
   console.log('[摸鱼模式 · 状态栏控制条]');
-  await ok('register: 创建 上一章/下一章/目录/书架 四个右对齐状态栏项', () => {
+  await ok('register: 创建 上一章/下一章/跳章/目录/书架 五个左对齐状态栏项(紧邻「小说阅读」)', () => {
     const { ctrl } = makeController(NOVEL);
     void ctrl;
-    assert.strictEqual(statusBarItems.length, 4, `实际 ${statusBarItems.length}`);
+    assert.strictEqual(statusBarItems.length, 5, `实际 ${statusBarItems.length}`);
     const cmds = statusBarItems.map((i) => i.command);
-    for (const c of ['slackerPrev', 'slackerNext', 'slackerCatalog', 'slackerShelf']) {
+    for (const c of ['slackerPrev', 'slackerNext', 'slackerJump', 'slackerCatalog', 'slackerShelf']) {
       assert.ok(cmds.some((x) => x === `novelReader.${c}`), `缺少 ${c}`);
     }
-    assert.ok(statusBarItems.every((i) => i.alignment === 2 /* Right */));
+    // 左下角: 与「小说阅读」入口(prio 100)同侧, priority 99~95 紧随其右
+    assert.ok(statusBarItems.every((i) => i.alignment === 1 /* Left */), '应左对齐');
+    assert.deepStrictEqual(statusBarItems.map((i) => i.priority), [99, 98, 97, 96, 95]);
   });
   await ok('refreshBar: 摸鱼文档激活显示, 切走/关闭隐藏', async () => {
     const { ctrl } = makeController(NOVEL);
@@ -348,6 +351,32 @@ function makeController(novel, tabState) {
     await ctrl.catalog();
     assert.strictEqual(progress.length, 2, '取消应不动作');
     vscodeStub.window.showQuickPick = origQP;
+  });
+  await ok('jump: 正数向后/负数向前/越界停原地/取消/非法输入', async () => {
+    // mock 书 10 章
+    const big = { ...NOVEL, chapters: Array.from({ length: 10 }, (_, i) => ({ index: i, title: `第${i + 1}章`, content: 'x', wordCount: 1 })) };
+    const origIB = vscodeStub.window.showInputBox;
+    const { ctrl, progress } = makeController(big);
+    await ctrl.open(big, 0);
+    vscodeStub.window.showInputBox = async () => '+5';
+    await ctrl.jump();
+    assert.strictEqual(progress.at(-1)[1], 5, '+5 应跳到第 6 章');
+    vscodeStub.window.showInputBox = async () => '-2';
+    await ctrl.jump();
+    assert.strictEqual(progress.at(-1)[1], 3, '-2 应向前跳到第 4 章');
+    statusMsgs.length = 0;
+    vscodeStub.window.showInputBox = async () => '99';
+    await ctrl.jump();
+    assert.strictEqual(progress.at(-1)[1], 3, '越界应停原地');
+    assert.ok(statusMsgs.some((m) => m.includes('最后一章之后')), '越界应提示');
+    vscodeStub.window.showInputBox = async () => undefined;
+    await ctrl.jump();
+    assert.strictEqual(progress.at(-1)[1], 3, '取消不动作');
+    statusMsgs.length = 0;
+    vscodeStub.window.showInputBox = async () => 'abc';
+    await ctrl.jump();
+    assert.strictEqual(progress.at(-1)[1], 3, '非法输入应被拦截');
+    vscodeStub.window.showInputBox = origIB;
   });
   await   ok('shelf: QuickPick 切书后从该书进度章节打开', async () => {
     // mock 书需要 >= 5 章, 否则进度章节 4 会被 open() clamp
@@ -395,8 +424,8 @@ function makeController(novel, tabState) {
   const path = require('path');
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
   const cmds = new Set(pkg.contributes.commands.map((c) => c.command));
-  await ok('commands: 7 个摸鱼命令齐备', () => {
-    for (const c of ['slackerStart', 'slackerNext', 'slackerPrev', 'slackerLanguage', 'slackerCatalog', 'slackerShelf', 'slackerBoss']) {
+  await ok('commands: 8 个摸鱼命令齐备', () => {
+    for (const c of ['slackerStart', 'slackerNext', 'slackerPrev', 'slackerLanguage', 'slackerCatalog', 'slackerShelf', 'slackerJump', 'slackerBoss']) {
       assert.ok(cmds.has(`novelReader.${c}`), `缺少命令 novelReader.${c}`);
     }
   });
@@ -430,7 +459,7 @@ function makeController(novel, tabState) {
   });
   await ok('extension.ts: 摸鱼命令全部接线', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
-    for (const c of ['slackerStart', 'slackerNext', 'slackerPrev', 'slackerLanguage', 'slackerCatalog', 'slackerShelf', 'slackerBoss']) {
+    for (const c of ['slackerStart', 'slackerNext', 'slackerPrev', 'slackerLanguage', 'slackerCatalog', 'slackerShelf', 'slackerJump', 'slackerBoss']) {
       assert.ok(src.includes(`'novelReader.${c}'`), `extension.ts 未注册 ${c}`);
     }
     assert.ok(src.includes('new SlackerController'), '缺少控制器实例化');
