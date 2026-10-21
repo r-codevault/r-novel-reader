@@ -8,9 +8,10 @@
 | --- | --- |
 | 插件 ID | `local.r-novel-reader` |
 | 显示名称 | 小说阅读器 |
-| 当前版本 | 1.8.3 |
+| 当前版本 | 1.42.6 |
 | 要求 | VS Code 1.85.0+（实测 1.128.0），Node.js 18+（仅打包时需要） |
 | 开源协议 | MIT |
+| 代码仓库 | [Gitee](https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader)（主仓） · [GitHub](https://github.com/r-codevault/r-novel-reader)（同步镜像） |
 
 ---
 
@@ -127,8 +128,10 @@
 ### 方式一：源码打包安装（推荐）
 
 ```bash
-# 1. 克隆仓库
+# 1. 克隆仓库（两个仓库内容一致，任选一个）
 git clone https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader.git
+# 或
+git clone https://github.com/r-codevault/r-novel-reader.git
 cd r-novel-reader
 
 # 2. 安装依赖并编译
@@ -137,10 +140,10 @@ npm run compile
 
 # 3. 打包成 vsix
 npm run package
-# 生成 novel-reader-1.8.3.vsix
+# 生成 r-novel-reader-1.42.6.vsix
 
 # 4. 安装到 VS Code
-code --install-extension novel-reader-1.8.3.vsix
+code --install-extension r-novel-reader-1.42.6.vsix
 ```
 
 安装后**重启 VS Code**（或 `Ctrl+Shift+P` → `Developer: Reload Window`）。
@@ -190,7 +193,6 @@ npm run compile
 | `小说阅读器: 回到当前阅读章节` | 打开/回到当前正在读的章节 |
 | `小说阅读器: 上一章` / `下一章` | 章节切换 |
 | `小说阅读器: 刷新目录` | 重新解析当前文件（文件内容更新后使用） |
-| `小说阅读器: 阅读设置` | 打开阅读页并展开设置面板（字号/字体/主题） |
 
 ### 快捷键
 
@@ -263,7 +265,26 @@ node scripts/smoke-webview.js             # 界面视图的 HTML/脚本冒烟测
 npm run package      # 打包 vsix（脚本内已固化 Gitee 相对链接所需的 baseUrl 参数）
 ```
 
-> `npm run package` 而不是裸 `vsce package`：vsce 只能自动识别 GitHub/GitLab 仓库，本项目托管在 Gitee，README 的相对链接会让打包报错，因此脚本里固化了 `--baseContentUrl` / `--baseImagesUrl`。
+> `npm run package` 而不是裸 `vsce package`：本项目主仓在 Gitee（并同步到 GitHub），README 的相对链接会让 vsce 自动推断的仓库地址出错，因此脚本里固化了 `--baseContentUrl` / `--baseImagesUrl`。
+
+### 仓库与同步
+
+代码同时托管在两处，内容保持一致：
+
+| 仓库 | 地址 | 角色 |
+| --- | --- | --- |
+| Gitee | https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader | 主仓（`origin` 的拉取地址） |
+| GitHub | https://github.com/r-codevault/r-novel-reader | 同步镜像 |
+
+本地 `origin` 远端配置了**两个推送地址**，因此一次 push 即可同时更新两边：
+
+```bash
+git remote -v                 # 查看：origin 有 2 条 push 地址（gitee + github）
+git push origin master        # 一次性推送到 Gitee 与 GitHub
+
+# 只想推其中一个时，用独立的 github 远端：
+git push github master
+```
 
 ---
 
