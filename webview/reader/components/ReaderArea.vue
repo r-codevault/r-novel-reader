@@ -6,7 +6,7 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { state, gotoChapter, type NoteItem } from '../composables/vscode';
 import { findParagraph } from '../../../src/noteAnchor';
-import { persistSettings, CONTENT_WIDTH, syncXScrollbar } from '../store';
+import { persistSettings, CONTENT_WIDTH, syncXScrollbar, peekSuppressParaClick, setSuppressParaClick } from '../store';
 
 // 与 settings.ts 的 CONTENT_WIDTH 一致: 上限放宽到 4000, 允许拖出窗口宽度(横向滚动)
 const WIDTH_MIN = CONTENT_WIDTH.min;
@@ -75,6 +75,12 @@ function onParaMouseDown(): void {
 }
 
 function onParaClick(index: number, e: MouseEvent): void {
+  // 卡片开着时点其他段落的第一次点击只负责"关卡片"(App 在 mousedown 已关),
+  // 这里吞掉该 click; 再点一次才选中新段落
+  if (peekSuppressParaClick()) {
+    setSuppressParaClick(false);
+    return;
+  }
   if (hadSelection) { hadSelection = false; return; }
   if (selectionActive()) { return; }
   const ch = state.chapter;

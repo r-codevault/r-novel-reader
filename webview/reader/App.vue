@@ -6,7 +6,7 @@
  */
 import { onMounted, nextTick, ref, watch } from 'vue';
 import { state, vscode, gotoChapter, saveRestoreState, currentScrollRatio, type ChapterPayload, type DrawerTab, type NoteItem, type ShelfItemView } from './composables/vscode';
-import { applyThemeVars, DEFAULT_SETTINGS, persistSettings, sendProgress, setProgressSuppressed, type ReadingSettings } from './store';
+import { applyThemeVars, DEFAULT_SETTINGS, persistSettings, sendProgress, setProgressSuppressed, setSuppressParaClick, type ReadingSettings } from './store';
 import { resolveChapterIndex } from '../../src/noteAnchor';
 import { parseShortcut, matchShortcut } from './composables/shortcut';
 import CatalogPanel from './components/CatalogPanel.vue';
@@ -242,6 +242,8 @@ watch(function () { return state.chapter; }, function (ch) {
 /** 滚动上报(节流 600ms, 内部已有debounce); 只在已载入章节时上报 */
 function onScroll(): void {
   if (!state.chapter) { return; }
+  // 笔记卡片锚定段落, 滚动后位置失效 -> 自动关闭
+  if (state.noteComposer) { state.noteComposer = null; }
   sendProgress(false);
 }
 
@@ -324,9 +326,10 @@ function onDocMouseDown(e: MouseEvent): void {
   const target = e.target as Node;
   const el = e.target as HTMLElement;
   // 新建笔记卡片: 点卡片外任意处即关闭。
-  // 若点的是另一个段落, 随后的 click 会为该段落重开新卡片, 不受影响
+  // 关闭后吞掉紧随的一次段落 click —— 本次点击只"关而不选", 再点一次才选中新段落
   if (state.noteComposer && !(el.closest && el.closest('.note-composer'))) {
     state.noteComposer = null;
+    setSuppressParaClick(true);
   }
   if (!anyPopupOpen()) { return; }
   const inside =
@@ -406,6 +409,8 @@ onMounted(function () {
   });
   document.addEventListener('mousedown', onDocMouseDown);
   document.addEventListener('keydown', onKeyDown);
+  // 任何 click 冒泡到 document 都清掉"吞点击"标志(段落 click handler 先于它执行)
+  document.addEventListener('click', function () { setSuppressParaClick(false); });
   document.addEventListener('wheel', onWheel, { passive: false, capture: true });
   window.addEventListener('resize', function () {
     readerRef.value?.positionHandles();

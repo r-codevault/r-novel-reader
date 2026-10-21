@@ -203,6 +203,17 @@ function progressSuppressed(): boolean {
   return suppressedUntil > 0 && Date.now() < suppressedUntil;
 }
 
+// ---------------------------------------------------------------- 笔记卡片: 关闭后吞掉紧随的一次段落点击
+// 卡片开着时点其他段落 -> mousedown 先关卡片, 这一次 click 只应"关而不选";
+// 用模块级标志让段落 click 忽略一次, document 冒泡 click 里清零(任何点击都会清)
+let suppressParaClick = false;
+export function setSuppressParaClick(v: boolean): void {
+  suppressParaClick = v;
+}
+export function peekSuppressParaClick(): boolean {
+  return suppressParaClick;
+}
+
 /** 进度上报(600ms 节流 / immediate 立即) */
 let progressTimer: ReturnType<typeof setTimeout> | null = null;
 export function sendProgress(immediate: boolean): void {

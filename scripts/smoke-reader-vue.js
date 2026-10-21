@@ -1248,8 +1248,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!composer.querySelector('.nc-quote'), '新建卡片不应再显示引用行(引用在预览里看)');
   assert(para1.classList.contains('rd-para-active'), '选中段落应加虚线下划线(选中态)');
   assert(!para1.classList.contains('rd-para-noted'), '尚无笔记时不应有持久下划线');
-  // 点卡片外任意处 → 自动关闭; 再点段落 → 重新弹出
+  // 点卡片外任意处 → 自动关闭(该次点击的 click 也一并派发, 清"吞点击"标志); 再点段落 → 重新弹出
   document.querySelector('.chapter-title').dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+  document.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   assert(!document.querySelector('.note-composer'), '点击卡片外任意处应自动关闭新建卡片');
   para1.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
@@ -1400,6 +1401,26 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!document.querySelector('.note-composer'), '删除后卡片应关闭');
   sendMsg({ type: 'noteUpserted', item: { ...noteItem, text: '第一条笔记(改)', updatedAt: 3 } });
   await sleep(30);
+
+  // 5e) 卡片开着时点其他段落: 第一次只关卡片, 再点才选中新段落; 滚动自动关卡片
+  p1After.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+  p1After.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(document.querySelector('.note-composer'), '前置: 点击笔记段落应弹出查看卡片');
+  const paraB = document.querySelector('#content p[data-p="2"]');
+  paraB.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+  paraB.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(!document.querySelector('.note-composer'), '点击其他段落应先只关闭卡片');
+  assert(!paraB.classList.contains('rd-para-active'), '第一次点击不应选中新段落');
+  paraB.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+  paraB.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(document.querySelector('.note-composer'), '第二次点击才选中新段落');
+  assert(paraB.classList.contains('rd-para-active'), '第二次点击段落应带选中态');
+  win.dispatchEvent(new win.Event('scroll'));
+  await sleep(30);
+  assert(!document.querySelector('.note-composer'), '滚动页面应自动关闭笔记卡片');
 
   // 6) 两步删除: 第一次只变文案, 第二次才发 removeNote
   posted.length = 0;
