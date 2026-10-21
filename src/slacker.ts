@@ -794,6 +794,8 @@ export interface SlackerDeps {
     listBooks?: () => ShelfBookInfo[];
     /** 切换摸鱼的书(extension 侧解析文件并登记书架) */
     switchBook?: (filePath: string) => Promise<Novel | null>;
+    /** 读某本书当前的书架进度章(摸鱼文档激活时用于双向同步) */
+    getProgress?: (filePath: string) => number;
 }
 
 /** 状态栏「书架」选择用的书架条目(与 ShelfItemView 字段一致, 解耦类型) */
@@ -848,7 +850,7 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
         return vscode.Disposable.from(provider, watcher, ...this.barItems);
     }
 
-    /** 摸鱼文档激活时显示状态栏控制条, 切走/老板键隐藏 */
+    /** 摸鱼文档激活时显示状态栏控制条, 切走/老板键隐藏; 激活时同步书架进度 */
     refreshBar(): void {
         const active = vscode.window.activeTextEditor;
         const show = !!active && active.document.uri.scheme === SLACKER_SCHEME;
@@ -858,6 +860,26 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
             } else {
                 item.hide();
             }
+        }
+        // 双向同步: 在阅读页切过章后(书架进度已变), 切回摸鱼文档时跟随书架进度
+        if (show && this.cur) {
+            this.syncWithShelf();
+        }
+    }
+
+    /** 书架进度与摸鱼当前章不一致时, 重开为书架进度所在章(阅读页 -> 书架 -> 摸鱼) */
+    private syncWithShelf(): void {
+        if (!this.cur) {
+            return;
+        }
+        const p = this.deps.getProgress?.(this.cur.novel.filePath);
+        if (
+            typeof p === 'number' &&
+            p >= 0 &&
+            p !== this.cur.index &&
+            p < this.cur.novel.chapters.length
+        ) {
+            void this.open(this.cur.novel, p);
         }
     }
 

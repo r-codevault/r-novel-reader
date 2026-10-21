@@ -715,6 +715,7 @@ export function activate(context: vscode.ExtensionContext): void {
         listBooks: () => shelfItems(),
         switchBook: (filePath: string) =>
             loadNovel(filePath, { openPanel: false, silent: true }).then((n) => n ?? null),
+        getProgress: (filePath: string) => shelf.get(filePath)?.chapterIndex ?? -1,
     });
     context.subscriptions.push(slacker.register());
 

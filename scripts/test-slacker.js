@@ -229,6 +229,7 @@ function makeController(novel, tabState) {
   const langCfg = { value: 'javascript' };
   statusBarItems.length = 0;
   activeEditorWatchers = [];
+  const shelfState = { progressIndex: 0 };
   const ctrl = new SlackerController({
     getNovel: async () => novel,
     getLanguage: () => langCfg.value,
@@ -236,14 +237,15 @@ function makeController(novel, tabState) {
     onProgress: (fp, idx) => progress.push([fp, idx]),
     listBooks: () => [
       { filePath: novel.filePath, title: novel.bookTitle, author: novel.author || '',
-        chapterIndex: 0, totalChapters: novel.chapters.length, current: true },
+        chapterIndex: shelfState.progressIndex, totalChapters: novel.chapters.length, current: true },
       { filePath: 'D:/books/另一本.txt', title: '另一本书', author: '作者乙',
         chapterIndex: 4, totalChapters: 30, current: false },
     ],
     switchBook: async () => null, // 默认不切书, 具体 case 覆盖
+    getProgress: () => shelfState.progressIndex,
   });
   ctrl.register();
-  return { ctrl, progress, langCfg };
+  return { ctrl, progress, langCfg, setShelfProgress: (v) => { shelfState.progressIndex = v; } };
 }
 
 (async () => {
@@ -335,6 +337,26 @@ function makeController(novel, tabState) {
     activeEditor = undefined;
     activeEditorWatchers.forEach((fn) => fn());
     assert.ok(statusBarItems.every((i) => !i.shown));
+  });
+  await ok('双向同步: 阅读页切章后(书架进度变), 切回摸鱼文档自动跟随', async () => {
+    const { ctrl, progress, setShelfProgress } = makeController(NOVEL);
+    await ctrl.open(NOVEL, 0); // 摸鱼在第 1 章
+    setShelfProgress(1); // 用户在阅读页切到第 2 章(书架进度=1)
+    activeEditor = { document: { uri: slackerUri(NOVEL, 0, getLang('javascript')) } };
+    ctrl.refreshBar(); // 切回摸鱼文档 -> 应跟随书架进度
+    await new Promise((r) => setTimeout(r, 0));
+    assert.strictEqual(progress.at(-1)[1], 1, '摸鱼应跟随书架进度到第 2 章');
+    // 进度一致: 不动作
+    const before = progress.length;
+    ctrl.refreshBar();
+    await new Promise((r) => setTimeout(r, 0));
+    assert.strictEqual(progress.length, before, '进度一致不动作');
+    // 无有效进度(-1): 不动作
+    setShelfProgress(-1);
+    ctrl.refreshBar();
+    await new Promise((r) => setTimeout(r, 0));
+    assert.strictEqual(progress.length, before, '无有效进度不动作');
+    activeEditor = undefined;
   });
   await ok('catalog: QuickPick 选择章节后跳转(同章/取消不动作)', async () => {
     const picks = [];
