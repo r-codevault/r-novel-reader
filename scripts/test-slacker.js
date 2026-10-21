@@ -352,30 +352,38 @@ function makeController(novel, tabState) {
     assert.strictEqual(progress.length, 2, '取消应不动作');
     vscodeStub.window.showQuickPick = origQP;
   });
-  await ok('jump: 正数向后/负数向前/越界停原地/取消/非法输入', async () => {
+  await ok('jump: 输入目标章号直接跳转, 越界 clamp 到边界, 取消/非法不动作', async () => {
     // mock 书 10 章
     const big = { ...NOVEL, chapters: Array.from({ length: 10 }, (_, i) => ({ index: i, title: `第${i + 1}章`, content: 'x', wordCount: 1 })) };
     const origIB = vscodeStub.window.showInputBox;
     const { ctrl, progress } = makeController(big);
     await ctrl.open(big, 0);
-    vscodeStub.window.showInputBox = async () => '+5';
+    vscodeStub.window.showInputBox = async () => '8';
     await ctrl.jump();
-    assert.strictEqual(progress.at(-1)[1], 5, '+5 应跳到第 6 章');
-    vscodeStub.window.showInputBox = async () => '-2';
+    assert.strictEqual(progress.at(-1)[1], 7, '输入 8 应跳到第 8 章(index 7)');
+    vscodeStub.window.showInputBox = async () => '3';
     await ctrl.jump();
-    assert.strictEqual(progress.at(-1)[1], 3, '-2 应向前跳到第 4 章');
+    assert.strictEqual(progress.at(-1)[1], 2, '输入 3 应跳到第 3 章');
     statusMsgs.length = 0;
-    vscodeStub.window.showInputBox = async () => '99';
+    vscodeStub.window.showInputBox = async () => '999';
     await ctrl.jump();
-    assert.strictEqual(progress.at(-1)[1], 3, '越界应停原地');
-    assert.ok(statusMsgs.some((m) => m.includes('最后一章之后')), '越界应提示');
+    assert.strictEqual(progress.at(-1)[1], 9, '超出总数应按最后一章处理');
+    vscodeStub.window.showInputBox = async () => '0';
+    await ctrl.jump();
+    assert.strictEqual(progress.at(-1)[1], 0, '小于 1 应按第 1 章处理');
+    // 已在目标章: 提示且不重复跳转
+    statusMsgs.length = 0;
+    const beforeLen = progress.length;
+    vscodeStub.window.showInputBox = async () => '1';
+    await ctrl.jump();
+    assert.strictEqual(progress.length, beforeLen, '同章不重复跳转');
+    assert.ok(statusMsgs.some((m) => m.includes('已在第 1 章')), '同章应提示');
     vscodeStub.window.showInputBox = async () => undefined;
     await ctrl.jump();
-    assert.strictEqual(progress.at(-1)[1], 3, '取消不动作');
-    statusMsgs.length = 0;
+    assert.strictEqual(progress.at(-1)[1], 0, '取消不动作');
     vscodeStub.window.showInputBox = async () => 'abc';
     await ctrl.jump();
-    assert.strictEqual(progress.at(-1)[1], 3, '非法输入应被拦截');
+    assert.strictEqual(progress.at(-1)[1], 0, '非法输入应被拦截');
     vscodeStub.window.showInputBox = origIB;
   });
   await   ok('shelf: QuickPick 切书后从该书进度章节打开', async () => {

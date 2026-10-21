@@ -946,7 +946,7 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
         }
     }
 
-    /** 跳章: 输入相对章数(正=向后跳过 N 章, 负=向前), 越界停留原地并提示 */
+    /** 跳章: 输入目标章号直接跳转; 超出边界按最近边界(第1章/最后一章)处理 */
     async jump(): Promise<void> {
         if (!this.cur) {
             vscode.window.setStatusBarMessage('摸鱼模式: 请先开始摸鱼阅读', 3000);
@@ -955,29 +955,26 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
         const { novel, index } = this.cur;
         const input = await vscode.window.showInputBox({
             title: '摸鱼模式 · 跳章',
-            value: '+10',
-            placeHolder: `当前第 ${index + 1} / ${novel.chapters.length} 章`,
-            prompt: '输入要跳过的章数: 正数向后(如 5 = 跳到第 6 章), 负数向前(如 -3); 支持直接回车使用默认值',
-            validateInput: (v) => (/^[+-]?\d+$/.test(v.trim()) ? null : '请输入整数(如 5 或 -3)'),
+            placeHolder: `当前第 ${index + 1} / ${novel.chapters.length} 章, 如输入 200`,
+            prompt: `输入要跳转到的章号 (1 ~ ${novel.chapters.length}), 超出范围自动按第 1 / 最后一章处理`,
+            validateInput: (v) => (/^\d+$/.test(v.trim()) ? null : `请输入 1 ~ ${novel.chapters.length} 的章号`),
         });
         if (input === undefined) {
             return; // 取消
         }
-        const delta = parseInt(input.trim(), 10);
-        if (!delta) {
-            vscode.window.setStatusBarMessage('摸鱼模式: 章数为 0, 未跳转', 3000);
+        const parsed = parseInt(input.trim(), 10);
+        // 真实环境 validateInput 已拦截非法输入, 这里兜底防御(只拒绝非数字)
+        if (Number.isNaN(parsed)) {
+            vscode.window.setStatusBarMessage('摸鱼模式: 无效章号, 未跳转', 3000);
             return;
         }
-        const target = index + delta;
-        if (target < 0 || target >= novel.chapters.length) {
-            const edge = target < 0 ? '第一章之前' : '最后一章之后';
-            vscode.window.setStatusBarMessage(
-                `摸鱼模式: ${edge}, 已停在 第 ${index + 1} 章`,
-                3500
-            );
+        // 超出范围按最近边界处理(小于 1 按第 1 章, 大于总数按最后一章)
+        const target = Math.min(Math.max(parsed, 1), novel.chapters.length);
+        if (target - 1 === index) {
+            vscode.window.setStatusBarMessage(`摸鱼模式: 已在第 ${target} 章`, 3000);
             return;
         }
-        await this.open(novel, target);
+        await this.open(novel, target - 1);
     }
 
     /** 目录: QuickPick 选择当前书的章节跳转 */
