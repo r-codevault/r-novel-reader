@@ -463,10 +463,9 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                 // 连同 filePath 一起传, 窗口恢复出来的面板也能写到正确的书
                 if (this._novel) {
                     const ratio = Math.min(1, Math.max(0, msg.scrollRatio || 0));
-                    // 阅读中持续刷新本章位置记忆(顶部不记, 避免切章瞬间的 0 覆盖记忆)
-                    if (ratio > 0.005) {
-                        this._ratios.set(msg.chapterIndex, ratio);
-                    }
+                    // 如实记录当前位置(含顶部 0): 滚回顶部后离开也应回到顶部;
+                    // 切章瞬间的旧位置上报已由 webview 侧抑制, 不会污染新章
+                    this._ratios.set(msg.chapterIndex, ratio);
                     ReaderPanel.onProgress?.(
                         this._novel.filePath,
                         msg.chapterIndex,
@@ -581,12 +580,13 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
 
     /** 某章的恢复位置: 优先本会话记忆, 其次书架 chapterRatios(跨会话), 都没有则回顶部 */
     private _rememberedRatio(index: number): number {
+        // 本会话记录优先(含 0=顶部, 滚回顶部后离开应回到顶部)
         const local = this._ratios.get(index);
-        if (typeof local === 'number' && local > 0.005) {
-            return Math.min(1, local);
+        if (typeof local === 'number') {
+            return Math.min(1, Math.max(0, local));
         }
         const shelved = ReaderPanel.getChapterRatio?.(this._novel.filePath, index);
-        return typeof shelved === 'number' && shelved > 0.005 ? Math.min(1, shelved) : 0;
+        return typeof shelved === 'number' ? Math.min(1, Math.max(0, shelved)) : 0;
     }
 
     private _chapterPayload(): ChapterPayload {

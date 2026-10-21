@@ -230,11 +230,12 @@ watch(function () { return state.chapter; }, function (ch) {
     requestAnimationFrame(function () {
       const max = Math.max(0, document.body.scrollHeight - window.innerHeight);
       window.scrollTo(0, max > 0 ? ratio * max : 0);
+      // 恢复落位期间不上报: 此刻若上报会把"旧位置"当成新章位置写进记录(位置错乱)
+      setProgressSuppressed(true, 600);
       // 手柄位置按最终滚动结果对齐
       requestAnimationFrame(function () { readerRef.value?.positionHandles(); });
     });
   });
-  sendProgress(true);
 });
 
 // ---------------------------------------------------------------- 全局事件

@@ -92,9 +92,9 @@ export class ShelfStore {
         const ratio = Math.min(1, Math.max(0, scrollRatio || 0));
         const book = books[idx];
         const ratios = { ...(book.chapterRatios || {}) };
-        // 只记忆"非顶部"(>0.5%)的位置: 切章瞬间 webview 会先上报 (新章节, 0),
-        // 若把 0 也记进去, 会在恢复滚动前就把该章的位置记忆清零
-        const ratioChanged = ratio > 0.005 && Math.abs((ratios[chapterIndex] ?? -1) - ratio) >= 0.01;
+        // 如实记忆每章位置(含顶部 0): 滚回顶部后离开, 下次回来也在顶部;
+        // 切章瞬间的旧位置上报已由 webview 侧抑制, 不会把旧位置记到新章
+        const ratioChanged = Math.abs((ratios[chapterIndex] ?? -1) - ratio) >= 0.01;
         if (ratioChanged) {
             // 记忆表只在比例真的变了时才更新, 避免高频滚动反复整表写盘
             ratios[chapterIndex] = ratio;
@@ -116,11 +116,11 @@ export class ShelfStore {
         await this.state.update(SHELF_KEY, books);
     }
 
-    /** 查询某章的阅读位置记忆(无记录返回 undefined) */
+    /** 查询某章的阅读位置记忆(无记录返回 undefined; 0=顶部也算有效记录) */
     getRatio(filePath: string, chapterIndex: number): number | undefined {
         const book = this.get(filePath);
         const r = book?.chapterRatios?.[chapterIndex];
-        return typeof r === 'number' && r > 0 ? Math.min(1, r) : undefined;
+        return typeof r === 'number' ? Math.min(1, Math.max(0, r)) : undefined;
     }
 
     /** 从书架移除 */

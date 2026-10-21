@@ -449,11 +449,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(posted.filter((m) => m.type === 'getChapter').length > nextCountBefore, 'Alt+→ 应发出 getChapter');
   console.log('快捷键(Alt+→): 通过');
 
-  // 进度上报
+  // 进度上报: 切章后不立即上报(否则旧滚动位置会被写成新章位置), 恢复抑制期后再按滚动节流上报
   dispatch('chapter', { index: 3, title: '第4章 标题4', paragraphs: ['x'], totalChapters: 5, chapterWords: 1, scrollRatio: 0.3 });
-  await sleep(20);
+  await sleep(30);
+  assert(!posted.some((m) => m.type === 'saveProgress' && m.chapterIndex === 3),
+    '切章渲染后不应立即上报进度(避免旧位置污染新章)');
+  posted.length = 0;
+  await sleep(700); // 等恢复期(600ms)抑制结束
+  win.dispatchEvent(new win.Event('scroll'));
+  await sleep(700);
   const progress = posted.find((m) => m.type === 'saveProgress' && m.chapterIndex === 3);
-  assert(progress, '章节渲染后应立即上报进度');
+  assert(progress, '滚动后应节流上报进度');
   console.log('进度上报(saveProgress): 通过');
 
   // ---------------- 侧边菜单(占位式布局 + 折叠) ----------------
@@ -1211,6 +1217,27 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const gc = panelSrc.slice(panelSrc.indexOf("case 'getChapter'")).slice(0, 1200);
     assert(gc.indexOf('this._rememberedRatio(index)') >= 0, 'getChapter 应恢复该章记忆位置');
     assert(gc.indexOf("msg.dir === 'prev' ? 1") < 0, 'getChapter 不应再有 prev 落底部分支');
+    // 4b) 位置记录如实含顶部(滚回顶部后离开应回顶部), 且不再有"顶部不记"分支
+    assert(
+      panelSrc.indexOf('this._ratios.set(msg.chapterIndex, ratio)') >= 0
+        && panelSrc.indexOf('if (ratio > 0.005)') < 0,
+      'saveProgress 应如实记录位置(含顶部 0), 不再过滤小比例'
+    );
+    assert(
+      panelSrc.indexOf("typeof local === 'number' && local > 0.005") < 0,
+      '_rememberedRatio 不应再用 0.005 阈值过滤顶部记录'
+    );
+    // 4c) 切章瞬间不得立即上报进度(旧滚动位置会写成新章位置), 恢复期用抑制窗口
+    const appSrc2 = fs2.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'App.vue'), 'utf8');
+    const watchStart = appSrc2.indexOf('watch(function () { return state.chapter; }');
+    assert(watchStart >= 0, '应存在章节 watch');
+    const watchBlock = appSrc2.slice(watchStart, watchStart + 1400);
+    assert(watchBlock.indexOf('sendProgress(true)') < 0,
+      '章节 watch 不应在切章渲染时立即 sendProgress(true)');
+    assert(
+      /scrollTo\(0, max > 0 \? ratio \* max : 0\);[\s\S]{0,220}setProgressSuppressed\(true, 600\)/.test(watchBlock),
+      '切章恢复滚动后应开启进度抑制窗口'
+    );
     // 5) 切章后要等布局落定再滚, 否则会停在和上一章差不多的位置
     const appSrc = fs2.readFileSync(
       path.join(__dirname, '..', 'webview', 'reader', 'App.vue'),
