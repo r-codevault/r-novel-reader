@@ -797,11 +797,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // 切换按钮: 双状态图标(展开=右侧条纹, 收起=左侧条纹) + 无「菜单」文字
   const toggleHtml = document.querySelector('.menu-toggle').innerHTML;
   assert(!toggleHtml.includes('菜单'), '切换按钮不应再显示「菜单」文字(仅保留 hover 提示)');
-  // 折叠按钮: 品牌 logo —— 矢量 SVG(R 用 currentColor, 书页金线绑定主题强调色)
-  const logoEl = document.querySelector('.menu-toggle svg.menu-logo');
-  assert(logoEl, '折叠按钮应有矢量 logo');
-  assert(logoEl.outerHTML.indexOf('var(--sp-accent)') >= 0, 'logo 书页金线应绑定 var(--sp-accent) 跟随主题');
-  assert(!document.querySelector('.menu-toggle img'), 'logo 不应再是位图 img');
+  // 折叠按钮: 品牌 logo(锐阅读器图标) —— 位图小图, 构建时自动内联为 data URL
+  const logoImg = document.querySelector('.menu-toggle img.menu-logo');
+  assert(logoImg, '折叠按钮应有 logo');
+  assert(/^data:image\/png;base64,/.test(logoImg.getAttribute('src') || ''), 'logo 应为内联 PNG(data URL)');
   assert(!capturedHtml.includes('.logo-spark'), '不应残留旧 logo 的放射线样式');
   assert(/\.menu-toggle \.menu-logo\s*\{[^}]*width:\s*46px/.test(capturedHtml), '展开态 logo 应为 46px');
   assert(/\.menu:not\(\.expanded\) \.menu-toggle \.menu-logo\s*\{[^}]*width:\s*28px/.test(capturedHtml), '收起态 logo 应缩到 28px');
