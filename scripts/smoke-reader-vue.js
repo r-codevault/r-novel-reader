@@ -797,76 +797,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // 切换按钮: 双状态图标(展开=右侧条纹, 收起=左侧条纹) + 无「菜单」文字
   const toggleHtml = document.querySelector('.menu-toggle').innerHTML;
   assert(!toggleHtml.includes('菜单'), '切换按钮不应再显示「菜单」文字(仅保留 hover 提示)');
-  // 折叠按钮: 品牌 logo —— 三色改用主题令牌(原先硬编码橙/深棕/米白, 在多数主题下与侧栏底几乎同色)
-  const logoSvg = document.querySelector('.menu-toggle svg');
-  assert(logoSvg, '折叠按钮应有 logo');
-  assert(/M430.602/.test(logoSvg.innerHTML), 'logo 路径应为用户提供的图形');
-  assert(
-    /fill="var\(--accent\)"/.test(logoSvg.innerHTML),
-    'logo 主色块应取 var(--accent)(原先硬编码 #ED8F27)'
-  );
-  {
-    // 书上方的放射线条: 颜色由 CSS 统一给 var(--accent), 不再按 data-theme 写两支
-    const paths = Array.from(document.querySelectorAll('.menu-toggle svg path'));
-    assert(paths.length === 9, `logo 应为 9 条路径(放射线已拆分), 实际 ${paths.length}`);
-    const spark = paths[paths.length - 1];
-    assert(spark.getAttribute('class') === 'logo-spark', '放射线应带 logo-spark 类(交给 CSS 控色)');
-    assert(spark.getAttribute('fill') === null, '放射线不应硬编码 fill');
-    assert(
-      paths[paths.length - 2].getAttribute('fill') === 'var(--chrome-fg)',
-      '书页内文字线应取 var(--chrome-fg)(原先 #300604 在黑夜里 1.07:1 看不见)'
-    );
-  }
-  assert(
-    /\.menu-toggle \.logo-spark[^{]*\{[^}]*fill:\s*var\(--accent\)/i.test(capturedHtml),
-    '放射线应跟随强调色 var(--accent)'
-  );
-  assert(
-    !/:root\[data-theme=["']?dark["']?\]\s*\.logo-spark/.test(capturedHtml),
-    '不应再有按 data-theme 写死的 logo 分支(强调色本身已随主题变化)'
-  );
+  // 折叠按钮: 品牌 logo(锐阅读器图标) —— 位图小图, 构建时自动内联为 data URL
+  const logoImg = document.querySelector('.menu-toggle img.menu-logo');
+  assert(logoImg, '折叠按钮应有 logo');
+  assert(/^data:image\/png;base64,/.test(logoImg.getAttribute('src') || ''), 'logo 应为内联 PNG(data URL)');
+  assert(!capturedHtml.includes('.logo-spark'), '不应残留旧 logo 的放射线样式');
+  assert(/\.menu-toggle \.menu-logo\s*\{[^}]*width:\s*46px/.test(capturedHtml), '展开态 logo 应为 46px');
+  assert(/\.menu:not\(\.expanded\) \.menu-toggle \.menu-logo\s*\{[^}]*width:\s*28px/.test(capturedHtml), '收起态 logo 应缩到 28px');
   assert(
     /root\.dataset\.theme\s*=\s*t\.id/.test(
       fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'store.ts'), 'utf8')
     ),
     'store 应把当前主题 id 写到根元素 data-theme(供 CSS 分支)'
-  );
-  assert(!/currentColor/.test(logoSvg.innerHTML), 'logo 不应被改成 currentColor(需保留三色层次)');
-  assert(
-    !/#ED8F27|#300604|#FCE3C3/i.test(logoSvg.innerHTML),
-    'logo 不应残留任何硬编码品牌色'
-  );
-  assert(
-    /\.menu-toggle svg\s*\{[^}]*width:\s*46px/.test(capturedHtml),
-    '展开态 logo 应为 46px'
-  );
-  assert(
-    /\.menu-toggle\s*\{[^}]*padding:\s*10px\s+0\s+10px\s+17px/.test(capturedHtml),
-    'logo 行上下内边距应与其他菜单项一致(10px), 左边距 17px 与图标对齐'
-  );
-  assert(
-    /\.menu\s*\{[^}]*padding-top:\s*0/.test(capturedHtml),
-    '菜单容器顶部不应留白(padding-top: 0)'
-  );
-  assert(
-    /\.menu:not\(\.expanded\) \.menu-toggle svg\s*\{[^}]*width:\s*28px/.test(capturedHtml),
-    '收起态 logo 应缩到 28px 并与图标列同左缘对齐'
-  );
-  assert(
-    /\.menu:not\(\.expanded\) \.menu-toggle\s*\{[^}]*padding-left:\s*9px/.test(capturedHtml),
-    '收起态 logo 应居中(padding-left: 9px)'
-  );
-  assert(
-    /\.menu:not\(\.expanded\) \.menu-item\s*\{[^}]*padding-left:\s*11px/.test(capturedHtml),
-    '收起态菜单图标应水平居中(padding-left: 11px)'
-  );
-  assert(
-    /\.menu-toggle,\s*\.menu-item\s*\{[^}]*transition:\s*padding-left/.test(capturedHtml),
-    '左右位置应可过渡(收起/展开时图标平滑移动)'
-  );
-  assert(
-    /viewBox="158 184 686 720"/.test(capturedHtml) || /viewBox="158 184 686 720"/.test(fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'components', 'SideMenu.vue'), 'utf8')),
-    'logo viewBox 应收紧到图形实际边界(去掉 SVG 自带空白, 避免显得小/偏)'
   );
   assert(!document.querySelector('.dw-lines-right, .dw-lines-left'), '不应再有旧的双状态条纹路径');
   assert(document.querySelector('.menu-toggle').getAttribute('title'), '切换按钮应保留 hover 提示(title)');

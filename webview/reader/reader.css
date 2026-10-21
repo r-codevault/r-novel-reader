@@ -374,12 +374,14 @@
     padding: 10px 0 10px 17px; /* 上下内边距与其它菜单项一致(10px) */
     justify-content: flex-start;
   }
-  .menu-toggle svg { width: 46px; height: 46px; transition: width .18s ease, height .18s ease; }
-  /* logo 放射线: 跟随强调色(原先按 data-theme 硬编码两支, 与主题色无关) */
-  .menu-toggle .logo-spark { fill: var(--accent); }
+  /* 品牌 logo(位图小图): 展开态 46px, 收起态 28px, 与菜单图标同中轴 */
+  .menu-toggle .menu-logo {
+    width: 46px; height: 46px; border-radius: 10px; flex: none; display: block;
+    transition: width .18s ease, height .18s ease, border-radius .18s ease;
+  }
   /* 收起态(48px 栏): logo 与菜单图标统一"水平居中"于同一中轴
      (border-left 3px + padding-left: logo 9px -> 28px logo 居中; 图标 11px + 20px 图标居中) */
-  .menu:not(.expanded) .menu-toggle svg { width: 28px; height: 28px; }
+  .menu:not(.expanded) .menu-toggle .menu-logo { width: 28px; height: 28px; border-radius: 7px; }
   .menu:not(.expanded) .menu-toggle { padding-left: 9px; }
   .menu:not(.expanded) .menu-item { padding-left: 11px; }
   .menu.expanded .menu-label { opacity: 1; }
