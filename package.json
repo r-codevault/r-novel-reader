@@ -297,6 +297,7 @@
     "@vitejs/plugin-vue": "^5.2.4",
     "@vscode/vsce": "^4.0.0",
     "happy-dom": "^21.0.1",
+    "sharp": "^0.35.5",
     "typescript": "^5.3.3",
     "vite": "^5.4.21",
     "vue": "^3.5.44"
