@@ -819,6 +819,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!/\.menu-toggle\s*\{[^}]*color:\s*var\(--sp-muted\)/.test(capturedHtml),
     'toggle 图标颜色不应偏淡(与菜单项一致)');
   assert(/\.menu-ico\s*\{/.test(capturedHtml), '菜单项应有图标容器 .menu-ico');
+  // 笔记图标: 设计稿矢量版, 笔杆填充绑定主题强调色(切主题实时变化)
+  const notesIco = document.querySelector('.menu-item[data-menu="notes"] .menu-ico');
+  assert(notesIco && /var\(--sp-accent\)/.test(notesIco.innerHTML), '笔记图标笔杆应绑定 var(--sp-accent) 跟随主题');
+  assert(notesIco && /viewBox="0 0 707 704"/.test(notesIco.innerHTML), '笔记图标应为设计稿矢量版(707×704)');
   const menuSrc = fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'components', 'SideMenu.vue'), 'utf8');
   assert(/SVG_SHELF/.test(menuSrc) && /1024 1024/.test(menuSrc), '书架图标应换成 1024 viewBox 的新图标');
   assert(/SVG_CATALOG/.test(menuSrc) && /863\.113/.test(menuSrc), '目录图标应换成用户提供的新图标');

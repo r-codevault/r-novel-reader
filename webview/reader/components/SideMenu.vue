@@ -43,13 +43,17 @@ const SVG_CATALOG =
   '<path d="M 776.941 484.062 H 416.087 a 24.1331 24.1331 0 0 0 0 48.2662 h 360.854 a 24.1331 24.1331 0 0 0 0 -48.2662 Z M 776.941 284.771 H 416.087 a 24.1331 24.1331 0 0 0 0 48.2662 h 360.854 a 24.1331 24.1331 0 0 0 0 -48.2662 Z M 776.941 677.642 H 416.087 a 24.1331 24.1331 0 0 0 0 48.2662 h 360.854 a 24.1331 24.1331 0 0 0 0 -48.2662 Z M 242.94 484.062 h -6.06545 a 24.1331 24.1331 0 0 0 0 48.2662 H 242.94 a 24.1331 24.1331 0 0 0 0 -48.2662 Z M 242.94 284.771 h -6.06545 a 24.1331 24.1331 0 0 0 0 48.2662 H 242.94 a 24.1331 24.1331 0 0 0 0 -48.2662 Z M 242.94 677.642 h -6.06545 a 24.1331 24.1331 0 0 0 0 48.2662 H 242.94 a 24.1331 24.1331 0 0 0 0 -48.2662 Z"/>' +
   '</svg>';
 
-/** 笔记: 便签(线性, 与阅读设置/存储位置同族: 24×24 stroke 1.6 currentColor) */
+/** 笔记: 纸+笔(来自设计稿的矢量化版本, 707×704)
+ *  笔杆填充绑定主题强调色 var(--sp-accent), 纸/线/笔沿用 currentColor —— 切换主题时实时跟随 */
 const SVG_NOTES =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"' +
-  ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-  '<path d="M6.5 3.5h7l4 4v13h-11z"/>' +
-  '<path d="M13.5 3.5v4h4"/>' +
-  '<path d="M9 11.5h6M9 15h4"/></svg>';
+  '<svg viewBox="0 0 707 704" aria-hidden="true">' +
+  '<path d="M 552 205 V 118 A 110 110 0 0 0 442 8 H 118 A 110 110 0 0 0 8 118 V 552 A 110 110 0 0 0 118 662 H 208" fill="none" stroke="currentColor" stroke-width="46" stroke-linecap="round"/>' +
+  '<path d="M 158 182 H 468" fill="none" stroke="currentColor" stroke-width="46" stroke-linecap="round"/>' +
+  '<path d="M 158 312 H 342" fill="none" stroke="currentColor" stroke-width="46" stroke-linecap="round"/>' +
+  '<g transform="translate(300,655) rotate(-45)">' +
+  '<path d="M 0 0 L 118 -80 H 446 A 46 46 0 0 1 446 80 H 118 Z" fill="currentColor"/>' +
+  '<path d="M 132 -46 H 438 A 18 18 0 0 1 438 46 H 132 Z" fill="var(--sp-accent)"/>' +
+  '</g></svg>';
 
 /** 阅读设置: 字号图标(线性) */
 const SVG_SETTINGS =
