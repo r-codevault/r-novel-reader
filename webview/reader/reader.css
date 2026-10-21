@@ -698,9 +698,11 @@
 
   /* 书分组 */
   .nt-book + .nt-book { border-top: 1px solid var(--chrome-border); }
+  /* 组头内的 spacer 撑开剩余空间: 数量/删除贴右端(标题宽度由 max-width 控制) */
+  .nt-book-head > .spacer, .nt-chap-head > .spacer { flex: 1; }
   .nt-book-head {
     display: flex; align-items: center; gap: 6px;
-    width: 100%; padding: 9px 16px;
+    width: 100%; padding: 9px 6px 9px 16px;
     background: transparent; color: var(--fg);
     border: 0; cursor: pointer; text-align: left;
     font-size: var(--ui-font);
@@ -748,7 +750,7 @@
   .nt-chap-group + .nt-chap-group { border-top: 1px dashed var(--chrome-border); }
   .nt-chap-head {
     display: flex; align-items: center; gap: 6px;
-    width: 100%; padding: 7px 16px 7px 26px;
+    width: 100%; padding: 7px 6px 7px 26px;
     background: transparent; color: var(--fg);
     border: 0; cursor: pointer; text-align: left;
     font-size: var(--ui-font-sub);

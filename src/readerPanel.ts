@@ -325,8 +325,8 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             return;
         }
         cur._chapterIndex = next;
-        // 上一章停在底部(1); 下一章/目录跳转恢复该章记忆位置(没有记忆则回顶部 0)
-        cur._scrollRatio = dir === 'prev' ? 1 : cur._rememberedRatio(next);
+        // 切章统一恢复该章的阅读记录位置(上一章不再强制落底部); 没有记录则回顶部
+        cur._scrollRatio = cur._rememberedRatio(next);
         cur._postChapter();
         ReaderPanel.onDidChangeChapter?.(next);
     }
@@ -429,10 +429,10 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                         this._ratios.set(this._chapterIndex, Math.min(1, Math.max(0, msg.curRatio)));
                     }
                     this._chapterIndex = index;
-                    // 精确恢复(笔记返回)优先; 否则上一章停在底部, 其余恢复该章记忆位置
+                    // 精确恢复(笔记返回)优先; 其余一律恢复该章阅读记录位置, 没有记录回顶部
                     this._scrollRatio = typeof msg.exactRatio === 'number'
                         ? Math.min(1, Math.max(0, msg.exactRatio))
-                        : msg.dir === 'prev' ? 1 : this._rememberedRatio(index);
+                        : this._rememberedRatio(index);
                     this._postChapter();
                     ReaderPanel.onDidChangeChapter?.(index);
                 }

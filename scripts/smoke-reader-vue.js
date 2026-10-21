@@ -1175,19 +1175,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     console.log('启动不自动弹出阅读页: 通过');
   }
 
-  // 切章落点: 上一章停底部, 下一章/目录跳转恢复该章记忆位置(无记忆回顶部), 同章不动
+  // 切章落点: 上一章/下一章/目录跳转一律恢复该章阅读记录位置(无记录回顶部), 同章不动
   {
     const fs2 = fs;
     const panelSrc = fs2.readFileSync(path.join(__dirname, '..', 'src', 'readerPanel.ts'), 'utf8');
     const extSrc = fs2.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
-    // 1) showChapter 必须带方向参数, 且只有 prev 落底部
+    // 1) showChapter 统一恢复该章记忆位置, 不再有 prev->底部 的强制分支
     assert(
-      /showChapter\(index: number, dir: 'next' \| 'prev' \| 'jump'/.test(panelSrc),
+      panelSrc.indexOf('showChapter(index: number, dir:') >= 0,
       'showChapter 应带方向参数 next/prev/jump'
     );
     assert(
-      /_scrollRatio = dir === 'prev' \? 1 : cur\._rememberedRatio\(next\)/.test(panelSrc),
-      '只有上一章落底部(1), 下一章/目录跳转恢复记忆位置'
+      panelSrc.indexOf('_scrollRatio = cur._rememberedRatio(next)') >= 0,
+      '切章应恢复该章记录位置(上一章不再强制落底部)'
+    );
+    assert(
+      panelSrc.indexOf("dir === 'prev' ? 1") < 0,
+      '不应再有上一章强制落底部的逻辑'
     );
     // 2) 同章不动 —— 必须在改 index 之前 return
     assert(
@@ -1196,19 +1200,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     );
     // 3) 命令调用点必须传方向
     assert(
-      /showChapter\(panel\.chapterIndex - 1, 'prev'\)/.test(extSrc),
-      '上一章命令应传 prev(停在底部)'
+      extSrc.indexOf("showChapter(panel.chapterIndex - 1, 'prev')") >= 0,
+      '上一章命令应传 prev'
     );
     assert(
-      /showChapter\(panel\.chapterIndex \+ 1, 'next'\)/.test(extSrc),
-      '下一章命令应传 next(回到顶部)'
+      extSrc.indexOf("showChapter(panel.chapterIndex + 1, 'next')") >= 0,
+      '下一章命令应传 next'
     );
-    // 4) 目录跳转走getChapter: dir 可选, 目标比例用记忆位置(_rememberedRatio), prev 落底部
-    const gc = panelSrc.slice(panelSrc.indexOf("case 'getChapter'"));
-    assert(
-      /msg\.dir === 'prev' \? 1 : this\._rememberedRatio\(index\)/.test(gc.slice(0, 1200)),
-      '目录跳转章节应恢复记忆位置, 上一章落底部'
-    );
+    // 4) getChapter: 精确比例优先, 否则恢复该章记忆位置(无记录回顶部)
+    const gc = panelSrc.slice(panelSrc.indexOf("case 'getChapter'")).slice(0, 1200);
+    assert(gc.indexOf('this._rememberedRatio(index)') >= 0, 'getChapter 应恢复该章记忆位置');
+    assert(gc.indexOf("msg.dir === 'prev' ? 1") < 0, 'getChapter 不应再有 prev 落底部分支');
     // 5) 切章后要等布局落定再滚, 否则会停在和上一章差不多的位置
     const appSrc = fs2.readFileSync(
       path.join(__dirname, '..', 'webview', 'reader', 'App.vue'),
@@ -1218,7 +1220,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       /nextTick\(function \(\) \{[\s\S]{0,200}requestAnimationFrame/.test(appSrc),
       '章节 watch 应在 nextTick + requestAnimationFrame 后再恢复滚动位置(等布局落定)'
     );
-    console.log('切章落点(记忆位置恢复/上一章停底部/同章不动/等布局落定): 通过');
+    console.log('切章落点(统一恢复记录位置/无记录回顶部/同章不动/等布局落定): 通过');
   }
   }
 
