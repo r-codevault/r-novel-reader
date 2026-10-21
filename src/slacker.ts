@@ -855,7 +855,23 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
         ];
         const watcher = vscode.window.onDidChangeActiveTextEditor(() => this.refreshBar());
         // 手动关掉摸鱼文档标签(非老板键)也要结束会话/熄灭高亮:
-        // 翻章或切语言时 preview 替换会先开后关, 此时仍有摸鱼标签在, 不会误判
+        // onDidCloseTextDocument 对虚拟文档时机不可靠(可能延迟甚至不触发, 高亮残留),
+        // 主通道改为监听标签页变化: 点 X 关标签立即感知; 翻章/切语言的 preview
+        // 替换是"先开后关", 此时仍有摸鱼标签在, 不会误判
+        const tabWatcher = vscode.window.tabGroups.onDidChangeTabs((e) => {
+            if (!this.cur) { return; }
+            const isFish = (t: { input?: unknown }): boolean => {
+                const uri = (t.input as { uri?: vscode.Uri } | undefined)?.uri;
+                return uri instanceof vscode.Uri && uri.scheme === SLACKER_SCHEME;
+            };
+            const touched = [...e.closed, ...e.opened, ...e.changed].some(isFish);
+            if (!touched) { return; }
+            const stillOpen = vscode.window.tabGroups.all.some((g) => g.tabs.some(isFish));
+            if (!stillOpen) {
+                this.endSession();
+            }
+        });
+        // 兜底: 某些路径(如整个组关闭)标签事件粒度不足时, 文档关闭事件仍可能先到
         const closeWatcher = vscode.workspace.onDidCloseTextDocument((doc) => {
             if (doc.uri.scheme !== SLACKER_SCHEME || !this.cur) {
                 return;
@@ -867,12 +883,17 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
                 })
             );
             if (!stillOpen) {
-                this.cur = undefined;
-                this.deps.onStateChange?.(false);
-                this.refreshBar();
+                this.endSession();
             }
         });
-        return vscode.Disposable.from(provider, watcher, closeWatcher, ...this.barItems);
+        return vscode.Disposable.from(provider, watcher, tabWatcher, closeWatcher, ...this.barItems);
+    }
+
+    /** 结束摸鱼会话: 清状态、熄灭侧边栏高亮、隐藏状态栏控制条 */
+    private endSession(): void {
+        this.cur = undefined;
+        this.deps.onStateChange?.(false);
+        this.refreshBar();
     }
 
     /** 摸鱼文档激活时显示状态栏控制条, 切走/老板键隐藏; 激活时同步书架进度 */

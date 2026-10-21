@@ -1,443 +1,443 @@
 {
-  "name": "r-novel-reader",
-  "displayName": "小说阅读器",
-  "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面：悬浮球 + 起点风格目录面板、我的书架、书库目录、字体/主题个性化设置，自动延续上次阅读状态。",
-  "version": "1.45.4",
-  "publisher": "local",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader.git"
-  },
-  "icon": "media/icon.png",
-  "engines": {
-    "vscode": "^1.85.0"
-  },
-  "categories": [
-    "Other"
-  ],
-  "keywords": [
-    "小说",
-    "阅读",
-    "novel",
-    "reader",
-    "txt",
-    "电子书"
-  ],
-  "main": "./dist/extension.js",
-  "activationEvents": [
-    "onStartupFinished"
-  ],
-  "contributes": {
-    "commands": [
-      {
-        "command": "novelReader.showBookshelf",
-        "title": "我的书架",
-        "icon": "$(library)"
-      },
-      {
-        "command": "novelReader.showChapters",
-        "title": "章节目录",
-        "icon": "$(book)"
-      },
-      {
-        "command": "novelReader.showSettings",
-        "title": "存储位置",
-        "icon": "$(settings-gear)"
-      },
-      {
-        "command": "novelReader.pickLibraryPath",
-        "title": "选择书库目录"
-      },
-      {
-        "command": "novelReader.clearLibraryPath",
-        "title": "使用原路径（不拷贝）"
-      },
-      {
-        "command": "novelReader.openLibraryFolder",
-        "title": "打开书库目录"
-      },
-      {
-        "command": "novelReader.openFile",
-        "title": "打开小说文件",
-        "icon": "$(add)"
-      },
-      {
-        "command": "novelReader.refresh",
-        "title": "刷新目录",
-        "icon": "$(refresh)",
-        "enablement": "novelReader.hasNovel"
-      },
-      {
-        "command": "novelReader.openSettings",
-        "title": "阅读设置",
-        "icon": "$(settings-gear)",
-        "enablement": "novelReader.hasNovel"
-      },
-      {
-        "command": "novelReader.resumeCurrent",
-        "title": "回到当前阅读章节"
-      },
-      {
-        "command": "novelReader.openBook",
-        "title": "打开书架中的小说"
-      },
-      {
-        "command": "novelReader.removeFromShelf",
-        "title": "从书架移除"
-      },
-      {
-        "command": "novelReader.openChapter",
-        "title": "阅读本章"
-      },
-      {
-        "command": "novelReader.prevChapter",
-        "title": "上一章",
-        "enablement": "novelReader.hasNovel"
-      },
-      {
-        "command": "novelReader.nextChapter",
-        "title": "下一章",
-        "enablement": "novelReader.hasNovel"
-      },
-      {
-        "command": "novelReader.refreshShelfFromLibrary",
-        "title": "刷新书架"
-      },
-      {
-        "command": "novelReader.slackerStart",
-        "title": "摸鱼模式: 开始摸鱼阅读",
-        "enablement": "novelReader.hasNovel"
-      },
-      {
-        "command": "novelReader.slackerNext",
-        "title": "摸鱼模式: 下一章",
-        "enablement": "novelReader.hasNovel"
-      },
-      {
-        "command": "novelReader.slackerPrev",
-        "title": "摸鱼模式: 上一章",
-        "enablement": "novelReader.hasNovel"
-      },
-      {
-        "command": "novelReader.slackerLanguage",
-        "title": "摸鱼模式: 切换伪装语言",
-        "enablement": "novelReader.hasNovel"
-      },
-      {
-        "command": "novelReader.slackerCatalog",
-        "title": "摸鱼模式: 目录（选择章节）",
-        "enablement": "novelReader.hasNovel"
-      },
-      {
-        "command": "novelReader.slackerShelf",
-        "title": "摸鱼模式: 书架（切换书籍）",
-        "enablement": "novelReader.hasNovel"
-      },
-      {
-        "command": "novelReader.slackerJump",
-        "title": "摸鱼模式: 跳章（指定章数）",
-        "enablement": "novelReader.hasNovel"
-      },
-      {
-        "command": "novelReader.slackerBoss",
-        "title": "摸鱼模式: 老板键（立即隐藏）"
-      }
-    ],
-    "menus": {
-      "commandPalette": [
-        {
-          "command": "novelReader.openFile",
-          "title": "小说阅读器: 打开小说文件"
-        },
-        {
-          "command": "novelReader.showBookshelf",
-          "title": "小说阅读器: 我的书架"
-        },
-        {
-          "command": "novelReader.showChapters",
-          "title": "小说阅读器: 章节目录"
-        },
-        {
-          "command": "novelReader.showSettings",
-          "title": "小说阅读器: 存储位置"
-        },
-        {
-          "command": "novelReader.pickLibraryPath",
-          "title": "小说阅读器: 选择书库目录"
-        },
-        {
-          "command": "novelReader.clearLibraryPath",
-          "title": "小说阅读器: 使用原路径（不拷贝）",
-          "when": "config.novelReader.libraryPath != ''"
-        },
-        {
-          "command": "novelReader.openLibraryFolder",
-          "title": "小说阅读器: 打开书库目录",
-          "when": "config.novelReader.libraryPath != ''"
-        },
-        {
-          "command": "novelReader.resumeCurrent",
-          "title": "小说阅读器: 回到当前阅读章节"
-        },
-        {
-          "command": "novelReader.openSettings",
-          "title": "小说阅读器: 阅读设置",
-          "when": "novelReader.hasNovel"
-        },
-        {
-          "command": "novelReader.openBook",
-          "when": "false"
-        },
-        {
-          "command": "novelReader.removeFromShelf",
-          "when": "false"
-        },
-        {
-          "command": "novelReader.openChapter",
-          "when": "false"
-        },
-        {
-          "command": "novelReader.refresh",
-          "when": "novelReader.hasNovel"
-        },
-        {
-          "command": "novelReader.prevChapter",
-          "when": "novelReader.hasNovel"
-        },
-        {
-          "command": "novelReader.nextChapter",
-          "when": "novelReader.hasNovel"
-        },
-        {
-          "command": "novelReader.refreshShelfFromLibrary",
-          "title": "小说阅读器: 刷新书架（按书库目录重扫）",
-          "when": "config.novelReader.libraryPath != ''"
-        },
-        {
-          "command": "novelReader.slackerStart",
-          "title": "小说阅读器: 摸鱼模式 · 开始摸鱼阅读",
-          "when": "novelReader.hasNovel"
-        },
-        {
-          "command": "novelReader.slackerNext",
-          "title": "小说阅读器: 摸鱼模式 · 下一章",
-          "when": "novelReader.hasNovel"
-        },
-        {
-          "command": "novelReader.slackerPrev",
-          "title": "小说阅读器: 摸鱼模式 · 上一章",
-          "when": "novelReader.hasNovel"
-        },
-        {
-          "command": "novelReader.slackerLanguage",
-          "title": "小说阅读器: 摸鱼模式 · 切换伪装语言",
-          "when": "novelReader.hasNovel"
-        },
-        {
-          "command": "novelReader.slackerCatalog",
-          "title": "小说阅读器: 摸鱼模式 · 目录（选择章节）",
-          "when": "novelReader.hasNovel"
-        },
-        {
-          "command": "novelReader.slackerShelf",
-          "title": "小说阅读器: 摸鱼模式 · 书架（切换书籍）",
-          "when": "novelReader.hasNovel"
-        },
-        {
-          "command": "novelReader.slackerJump",
-          "title": "小说阅读器: 摸鱼模式 · 跳章（指定章数）",
-          "when": "novelReader.hasNovel"
-        },
-        {
-          "command": "novelReader.slackerBoss",
-          "title": "小说阅读器: 摸鱼模式 · 老板键（立即隐藏）",
-          "when": "activeEditorScheme == novelfish"
-        }
-      ],
-      "explorer/context": [
-        {
-          "command": "novelReader.openFile",
-          "when": "resourceExtname == .txt",
-          "group": "navigation@10"
-        }
-      ]
+    "name": "r-novel-reader",
+    "displayName": "小说阅读器",
+    "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面：悬浮球 + 起点风格目录面板、我的书架、书库目录、字体/主题个性化设置，自动延续上次阅读状态。",
+    "version": "1.45.5",
+    "publisher": "local",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader.git"
     },
-    "keybindings": [
-      {
-        "command": "novelReader.slackerStart",
-        "key": "ctrl+alt+s",
-        "when": "novelReader.hasNovel"
-      },
-      {
-        "command": "novelReader.slackerBoss",
-        "key": "alt+b",
-        "when": "activeEditorScheme == novelfish"
-      },
-      {
-        "command": "novelReader.slackerNext",
-        "key": "ctrl+alt+arrowright",
-        "when": "activeEditorScheme == novelfish"
-      },
-      {
-        "command": "novelReader.slackerPrev",
-        "key": "ctrl+alt+arrowleft",
-        "when": "activeEditorScheme == novelfish"
-      }
+    "icon": "media/icon.png",
+    "engines": {
+        "vscode": "^1.85.0"
+    },
+    "categories": [
+        "Other"
     ],
-    "configuration": {
-      "title": "小说阅读器",
-      "properties": {
-        "novelReader.libraryPath": {
-          "type": "string",
-          "default": "",
-          "description": "书库目录（绝对路径）的默认值。留空表示直接读取导入文件的原始路径；在侧边栏「设置」中选择的目录保存于插件自身存储并优先于此项。设置后，导入小说时会先把文件复制到该目录，并从副本读取。"
+    "keywords": [
+        "小说",
+        "阅读",
+        "novel",
+        "reader",
+        "txt",
+        "电子书"
+    ],
+    "main": "./dist/extension.js",
+    "activationEvents": [
+        "onStartupFinished"
+    ],
+    "contributes": {
+        "commands": [
+            {
+                "command": "novelReader.showBookshelf",
+                "title": "我的书架",
+                "icon": "$(library)"
+            },
+            {
+                "command": "novelReader.showChapters",
+                "title": "章节目录",
+                "icon": "$(book)"
+            },
+            {
+                "command": "novelReader.showSettings",
+                "title": "存储位置",
+                "icon": "$(settings-gear)"
+            },
+            {
+                "command": "novelReader.pickLibraryPath",
+                "title": "选择书库目录"
+            },
+            {
+                "command": "novelReader.clearLibraryPath",
+                "title": "使用原路径（不拷贝）"
+            },
+            {
+                "command": "novelReader.openLibraryFolder",
+                "title": "打开书库目录"
+            },
+            {
+                "command": "novelReader.openFile",
+                "title": "打开小说文件",
+                "icon": "$(add)"
+            },
+            {
+                "command": "novelReader.refresh",
+                "title": "刷新目录",
+                "icon": "$(refresh)",
+                "enablement": "novelReader.hasNovel"
+            },
+            {
+                "command": "novelReader.openSettings",
+                "title": "阅读设置",
+                "icon": "$(settings-gear)",
+                "enablement": "novelReader.hasNovel"
+            },
+            {
+                "command": "novelReader.resumeCurrent",
+                "title": "回到当前阅读章节"
+            },
+            {
+                "command": "novelReader.openBook",
+                "title": "打开书架中的小说"
+            },
+            {
+                "command": "novelReader.removeFromShelf",
+                "title": "从书架移除"
+            },
+            {
+                "command": "novelReader.openChapter",
+                "title": "阅读本章"
+            },
+            {
+                "command": "novelReader.prevChapter",
+                "title": "上一章",
+                "enablement": "novelReader.hasNovel"
+            },
+            {
+                "command": "novelReader.nextChapter",
+                "title": "下一章",
+                "enablement": "novelReader.hasNovel"
+            },
+            {
+                "command": "novelReader.refreshShelfFromLibrary",
+                "title": "刷新书架"
+            },
+            {
+                "command": "novelReader.slackerStart",
+                "title": "摸鱼模式: 开始摸鱼阅读",
+                "enablement": "novelReader.hasNovel"
+            },
+            {
+                "command": "novelReader.slackerNext",
+                "title": "摸鱼模式: 下一章",
+                "enablement": "novelReader.hasNovel"
+            },
+            {
+                "command": "novelReader.slackerPrev",
+                "title": "摸鱼模式: 上一章",
+                "enablement": "novelReader.hasNovel"
+            },
+            {
+                "command": "novelReader.slackerLanguage",
+                "title": "摸鱼模式: 切换伪装语言",
+                "enablement": "novelReader.hasNovel"
+            },
+            {
+                "command": "novelReader.slackerCatalog",
+                "title": "摸鱼模式: 目录（选择章节）",
+                "enablement": "novelReader.hasNovel"
+            },
+            {
+                "command": "novelReader.slackerShelf",
+                "title": "摸鱼模式: 书架（切换书籍）",
+                "enablement": "novelReader.hasNovel"
+            },
+            {
+                "command": "novelReader.slackerJump",
+                "title": "摸鱼模式: 跳章（指定章数）",
+                "enablement": "novelReader.hasNovel"
+            },
+            {
+                "command": "novelReader.slackerBoss",
+                "title": "摸鱼模式: 老板键（立即隐藏）"
+            }
+        ],
+        "menus": {
+            "commandPalette": [
+                {
+                    "command": "novelReader.openFile",
+                    "title": "小说阅读器: 打开小说文件"
+                },
+                {
+                    "command": "novelReader.showBookshelf",
+                    "title": "小说阅读器: 我的书架"
+                },
+                {
+                    "command": "novelReader.showChapters",
+                    "title": "小说阅读器: 章节目录"
+                },
+                {
+                    "command": "novelReader.showSettings",
+                    "title": "小说阅读器: 存储位置"
+                },
+                {
+                    "command": "novelReader.pickLibraryPath",
+                    "title": "小说阅读器: 选择书库目录"
+                },
+                {
+                    "command": "novelReader.clearLibraryPath",
+                    "title": "小说阅读器: 使用原路径（不拷贝）",
+                    "when": "config.novelReader.libraryPath != ''"
+                },
+                {
+                    "command": "novelReader.openLibraryFolder",
+                    "title": "小说阅读器: 打开书库目录",
+                    "when": "config.novelReader.libraryPath != ''"
+                },
+                {
+                    "command": "novelReader.resumeCurrent",
+                    "title": "小说阅读器: 回到当前阅读章节"
+                },
+                {
+                    "command": "novelReader.openSettings",
+                    "title": "小说阅读器: 阅读设置",
+                    "when": "novelReader.hasNovel"
+                },
+                {
+                    "command": "novelReader.openBook",
+                    "when": "false"
+                },
+                {
+                    "command": "novelReader.removeFromShelf",
+                    "when": "false"
+                },
+                {
+                    "command": "novelReader.openChapter",
+                    "when": "false"
+                },
+                {
+                    "command": "novelReader.refresh",
+                    "when": "novelReader.hasNovel"
+                },
+                {
+                    "command": "novelReader.prevChapter",
+                    "when": "novelReader.hasNovel"
+                },
+                {
+                    "command": "novelReader.nextChapter",
+                    "when": "novelReader.hasNovel"
+                },
+                {
+                    "command": "novelReader.refreshShelfFromLibrary",
+                    "title": "小说阅读器: 刷新书架（按书库目录重扫）",
+                    "when": "config.novelReader.libraryPath != ''"
+                },
+                {
+                    "command": "novelReader.slackerStart",
+                    "title": "小说阅读器: 摸鱼模式 · 开始摸鱼阅读",
+                    "when": "novelReader.hasNovel"
+                },
+                {
+                    "command": "novelReader.slackerNext",
+                    "title": "小说阅读器: 摸鱼模式 · 下一章",
+                    "when": "novelReader.hasNovel"
+                },
+                {
+                    "command": "novelReader.slackerPrev",
+                    "title": "小说阅读器: 摸鱼模式 · 上一章",
+                    "when": "novelReader.hasNovel"
+                },
+                {
+                    "command": "novelReader.slackerLanguage",
+                    "title": "小说阅读器: 摸鱼模式 · 切换伪装语言",
+                    "when": "novelReader.hasNovel"
+                },
+                {
+                    "command": "novelReader.slackerCatalog",
+                    "title": "小说阅读器: 摸鱼模式 · 目录（选择章节）",
+                    "when": "novelReader.hasNovel"
+                },
+                {
+                    "command": "novelReader.slackerShelf",
+                    "title": "小说阅读器: 摸鱼模式 · 书架（切换书籍）",
+                    "when": "novelReader.hasNovel"
+                },
+                {
+                    "command": "novelReader.slackerJump",
+                    "title": "小说阅读器: 摸鱼模式 · 跳章（指定章数）",
+                    "when": "novelReader.hasNovel"
+                },
+                {
+                    "command": "novelReader.slackerBoss",
+                    "title": "小说阅读器: 摸鱼模式 · 老板键（立即隐藏）",
+                    "when": "activeEditorScheme == novelfish"
+                }
+            ],
+            "explorer/context": [
+                {
+                    "command": "novelReader.openFile",
+                    "when": "resourceExtname == .txt",
+                    "group": "navigation@10"
+                }
+            ]
         },
-        "novelReader.fontSize": {
-          "type": "number",
-          "default": 16,
-          "minimum": 12,
-          "maximum": 32,
-          "description": "正文字号（像素）"
-        },
-        "novelReader.fontFamily": {
-          "type": "string",
-          "default": "system",
-          "enum": [
-            "system",
-            "songti",
-            "heiti",
-            "kaiti",
-            "fangsong",
-            "yahei"
-          ],
-          "enumDescriptions": [
-            "系统默认",
-            "宋体",
-            "黑体",
-            "楷体",
-            "仿宋",
-            "微软雅黑"
-          ],
-          "description": "正文字体族"
-        },
-        "novelReader.lineHeight": {
-          "type": "number",
-          "default": 1.8,
-          "minimum": 1.2,
-          "maximum": 2.8,
-          "description": "正文行距"
-        },
-        "novelReader.paragraphSpacing": {
-          "type": "number",
-          "default": 0.8,
-          "minimum": 0,
-          "maximum": 2,
-          "description": "段落间距（em）"
-        },
-        "novelReader.theme": {
-          "type": "string",
-          "default": "sepia",
-          "enum": [
-            "white",
-            "beige",
-            "sepia",
-            "green",
-            "blue",
-            "dark"
-          ],
-          "enumDescriptions": [
-            "纯净白",
-            "米白",
-            "羊皮纸",
-            "护眼绿",
-            "浅蓝",
-            "黑夜(沿用原配色)"
-          ],
-          "description": "阅读区主题配色"
-        },
-        "novelReader.contentWidth": {
-          "type": "number",
-          "default": 720,
-          "minimum": 480,
-          "maximum": 4000,
-          "description": "阅读区域宽度（像素）。可在阅读界面选择预设档或自定义；超过窗口宽度时横向滚动"
-        },
-        "novelReader.shortcutPrevChapter": {
-          "type": "string",
-          "default": "alt+arrowleft",
-          "markdownDescription": "阅读页内「上一章」快捷键。写法：`alt+arrowleft`、`ctrl+shift+p`、`ctrl+[` 等（不区分大小写，`left`/`right` 可简写）。**留空表示禁用**。默认 `alt+arrowleft`"
-        },
-        "novelReader.shortcutNextChapter": {
-          "type": "string",
-          "default": "alt+arrowright",
-          "markdownDescription": "阅读页内「下一章」快捷键。写法同上一章，**留空表示禁用**。默认 `alt+arrowright`"
-        },
-        "novelReader.restoreOnStartup": {
-          "type": "boolean",
-          "default": true,
-          "description": "重开 VS Code 时原样恢复上次打开着的阅读页(章节与滚动位置)。关闭后重开窗口会丢弃该页签"
-        },
-        "novelReader.slackerLanguage": {
-          "type": "string",
-          "default": "javascript",
-          "enum": [
-            "javascript",
-            "typescript",
-            "python",
-            "java",
-            "go",
-            "csharp",
-            "cpp",
-            "rust",
-            "php",
-            "ruby",
-            "sql",
-            "html",
-            "css",
-            "shellscript"
-          ],
-          "enumDescriptions": [
-            "JavaScript（默认）",
-            "TypeScript",
-            "Python",
-            "Java",
-            "Go",
-            "C#",
-            "C++",
-            "Rust",
-            "PHP",
-            "Ruby",
-            "SQL",
-            "HTML",
-            "CSS",
-            "Shell"
-          ],
-          "description": "摸鱼模式：伪装代码使用的编程语言（也可用命令「摸鱼模式: 切换伪装语言」随时切换）。小说正文将以注释形式穿插在伪代码中。"
+        "keybindings": [
+            {
+                "command": "novelReader.slackerStart",
+                "key": "ctrl+alt+s",
+                "when": "novelReader.hasNovel"
+            },
+            {
+                "command": "novelReader.slackerBoss",
+                "key": "alt+b",
+                "when": "activeEditorScheme == novelfish"
+            },
+            {
+                "command": "novelReader.slackerNext",
+                "key": "ctrl+alt+arrowright",
+                "when": "activeEditorScheme == novelfish"
+            },
+            {
+                "command": "novelReader.slackerPrev",
+                "key": "ctrl+alt+arrowleft",
+                "when": "activeEditorScheme == novelfish"
+            }
+        ],
+        "configuration": {
+            "title": "小说阅读器",
+            "properties": {
+                "novelReader.libraryPath": {
+                    "type": "string",
+                    "default": "",
+                    "description": "书库目录（绝对路径）的默认值。留空表示直接读取导入文件的原始路径；在侧边栏「设置」中选择的目录保存于插件自身存储并优先于此项。设置后，导入小说时会先把文件复制到该目录，并从副本读取。"
+                },
+                "novelReader.fontSize": {
+                    "type": "number",
+                    "default": 16,
+                    "minimum": 12,
+                    "maximum": 32,
+                    "description": "正文字号（像素）"
+                },
+                "novelReader.fontFamily": {
+                    "type": "string",
+                    "default": "system",
+                    "enum": [
+                        "system",
+                        "songti",
+                        "heiti",
+                        "kaiti",
+                        "fangsong",
+                        "yahei"
+                    ],
+                    "enumDescriptions": [
+                        "系统默认",
+                        "宋体",
+                        "黑体",
+                        "楷体",
+                        "仿宋",
+                        "微软雅黑"
+                    ],
+                    "description": "正文字体族"
+                },
+                "novelReader.lineHeight": {
+                    "type": "number",
+                    "default": 1.8,
+                    "minimum": 1.2,
+                    "maximum": 2.8,
+                    "description": "正文行距"
+                },
+                "novelReader.paragraphSpacing": {
+                    "type": "number",
+                    "default": 0.8,
+                    "minimum": 0,
+                    "maximum": 2,
+                    "description": "段落间距（em）"
+                },
+                "novelReader.theme": {
+                    "type": "string",
+                    "default": "sepia",
+                    "enum": [
+                        "white",
+                        "beige",
+                        "sepia",
+                        "green",
+                        "blue",
+                        "dark"
+                    ],
+                    "enumDescriptions": [
+                        "纯净白",
+                        "米白",
+                        "羊皮纸",
+                        "护眼绿",
+                        "浅蓝",
+                        "黑夜(沿用原配色)"
+                    ],
+                    "description": "阅读区主题配色"
+                },
+                "novelReader.contentWidth": {
+                    "type": "number",
+                    "default": 720,
+                    "minimum": 480,
+                    "maximum": 4000,
+                    "description": "阅读区域宽度（像素）。可在阅读界面选择预设档或自定义；超过窗口宽度时横向滚动"
+                },
+                "novelReader.shortcutPrevChapter": {
+                    "type": "string",
+                    "default": "alt+arrowleft",
+                    "markdownDescription": "阅读页内「上一章」快捷键。写法：`alt+arrowleft`、`ctrl+shift+p`、`ctrl+[` 等（不区分大小写，`left`/`right` 可简写）。**留空表示禁用**。默认 `alt+arrowleft`"
+                },
+                "novelReader.shortcutNextChapter": {
+                    "type": "string",
+                    "default": "alt+arrowright",
+                    "markdownDescription": "阅读页内「下一章」快捷键。写法同上一章，**留空表示禁用**。默认 `alt+arrowright`"
+                },
+                "novelReader.restoreOnStartup": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "重开 VS Code 时原样恢复上次打开着的阅读页(章节与滚动位置)。关闭后重开窗口会丢弃该页签"
+                },
+                "novelReader.slackerLanguage": {
+                    "type": "string",
+                    "default": "javascript",
+                    "enum": [
+                        "javascript",
+                        "typescript",
+                        "python",
+                        "java",
+                        "go",
+                        "csharp",
+                        "cpp",
+                        "rust",
+                        "php",
+                        "ruby",
+                        "sql",
+                        "html",
+                        "css",
+                        "shellscript"
+                    ],
+                    "enumDescriptions": [
+                        "JavaScript（默认）",
+                        "TypeScript",
+                        "Python",
+                        "Java",
+                        "Go",
+                        "C#",
+                        "C++",
+                        "Rust",
+                        "PHP",
+                        "Ruby",
+                        "SQL",
+                        "HTML",
+                        "CSS",
+                        "Shell"
+                    ],
+                    "description": "摸鱼模式：伪装代码使用的编程语言（也可用命令「摸鱼模式: 切换伪装语言」随时切换）。小说正文将以注释形式穿插在伪代码中。"
+                }
+            }
         }
-      }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "package": "vsce package --baseContentUrl https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader/blob/master --baseImagesUrl https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader/raw/master",
+        "test": "node scripts/test-shelf.js && node scripts/test-library.js && node scripts/test-shelf-maintenance.js && node scripts/test-title.js && node scripts/test-theme-presets.js && node scripts/test-province-theme.js && node scripts/test-term-theme.js && node scripts/test-notes.js && node scripts/test-festival-theme.js && node scripts/test-parser.js && node scripts/test-encoding.js && node scripts/test-slacker.js && node scripts/smoke-reader-vue.js",
+        "build:webview": "vite build",
+        "pretest": "npm run compile && npm run build:webview",
+        "dev": "vite --open /webview/reader/dev.html"
+    },
+    "devDependencies": {
+        "@resvg/resvg-js": "^2.6.2",
+        "@types/node": "^18.19.0",
+        "@types/vscode": "^1.85.0",
+        "@vitejs/plugin-vue": "^5.2.4",
+        "@vscode/vsce": "^4.0.0",
+        "happy-dom": "^21.0.1",
+        "sharp": "^0.35.5",
+        "typescript": "^5.3.3",
+        "vite": "^5.4.21",
+        "vue": "^3.5.44"
     }
-  },
-  "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "package": "vsce package --baseContentUrl https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader/blob/master --baseImagesUrl https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader/raw/master",
-    "test": "node scripts/test-shelf.js && node scripts/test-library.js && node scripts/test-shelf-maintenance.js && node scripts/test-title.js && node scripts/test-theme-presets.js && node scripts/test-province-theme.js && node scripts/test-term-theme.js && node scripts/test-notes.js && node scripts/test-festival-theme.js && node scripts/test-parser.js && node scripts/test-encoding.js && node scripts/test-slacker.js && node scripts/smoke-reader-vue.js",
-    "build:webview": "vite build",
-    "pretest": "npm run compile && npm run build:webview",
-    "dev": "vite --open /webview/reader/dev.html"
-  },
-  "devDependencies": {
-    "@resvg/resvg-js": "^2.6.2",
-    "@types/node": "^18.19.0",
-    "@types/vscode": "^1.85.0",
-    "@vitejs/plugin-vue": "^5.2.4",
-    "@vscode/vsce": "^4.0.0",
-    "happy-dom": "^21.0.1",
-    "sharp": "^0.35.5",
-    "typescript": "^5.3.3",
-    "vite": "^5.4.21",
-    "vue": "^3.5.44"
-  }
 }

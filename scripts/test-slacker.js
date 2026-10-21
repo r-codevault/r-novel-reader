@@ -60,15 +60,11 @@ const vscodeStub = {
     showQuickPick: async () => undefined,
     showInputBox: async () => undefined,
     setStatusBarMessage: (msg) => { statusMsgs.push(msg); return { dispose() {} }; },
-    tabGroups: { all: [], close: async () => {} },
-    onDidChangeActiveTextEditor: (fn) => { activeEditorWatchers.push(fn); return { dispose() {} }; },
-    createStatusBarItem: (alignment, priority) => {
-      const item = { alignment, priority, text: '', tooltip: '', command: '', shown: false };
-      item.show = () => { item.shown = true; };
-      item.hide = () => { item.shown = false; };
-      item.dispose = () => {};
-      statusBarItems.push(item);
-      return item;
+    tabGroups: {
+      all: [],
+      close: async () => {},
+      tabChangeWatchers: [],
+      onDidChangeTabs(fn) { this.tabChangeWatchers.push(fn); return { dispose() {} }; },
     },
   },
   workspace: {
@@ -240,6 +236,8 @@ function makeController(novel, tabState) {
   const langCfg = { value: 'javascript' };
   statusBarItems.length = 0;
   activeEditorWatchers = [];
+  vscodeStub.window.tabGroups.tabChangeWatchers.length = 0;
+  vscodeStub.workspace.closeWatchers.length = 0;
   const shelfState = { progressIndex: 0 };
   const stateChanges = [];
   const ctrl = new SlackerController({
@@ -296,10 +294,10 @@ function makeController(novel, tabState) {
     const fishTab = { input: { uri: slackerUri(NOVEL, 0, getLang('javascript')) } };
     const fileTab = { input: { uri: FakeUri.file('D:/work/index.js') } };
     const closed = [];
-    vscodeStub.window.tabGroups = {
-      all: [{ tabs: [fishTab, fileTab] }, { tabs: [fishTab] }],
-      close: async (tabs) => { closed.push(...tabs); },
-    };
+    const tg = vscodeStub.window.tabGroups;
+    tg.all = [{ tabs: [fishTab, fileTab] }, { tabs: [fishTab] }];
+    const origClose = tg.close;
+    tg.close = async (tabs) => { closed.push(...tabs); };
     const { ctrl, stateChanges } = makeController(NOVEL);
     await ctrl.open(NOVEL, 0);
     assert.strictEqual(ctrl.isActive, true, '会话中 isActive 应为 true');
@@ -309,7 +307,8 @@ function makeController(novel, tabState) {
     assert.strictEqual(stateChanges.at(-1), false, '关闭应回调 false');
     assert.strictEqual(closed.length, 2, `应关闭 2 个摸鱼标签, 实际 ${closed.length}`);
     assert.ok(closed.every((t) => t.input.uri.scheme === SLACKER_SCHEME));
-    vscodeStub.window.tabGroups = { all: [], close: async () => {} };
+    tg.all = [];
+    tg.close = origClose;
   });
   await ok('pickLanguage: 取消选择不动作', async () => {
     const { ctrl, langCfg } = makeController(NOVEL);
@@ -359,21 +358,36 @@ function makeController(novel, tabState) {
     const { ctrl, stateChanges } = makeController(NOVEL);
     await ctrl.open(NOVEL, 0);
     assert.strictEqual(stateChanges.at(-1), true);
-    // 模拟用户点 X 关掉唯一的摸鱼标签(tabGroups 里已无 novelfish)
-    vscodeStub.window.tabGroups = { all: [], close: async () => {} };
-    const closedDoc = { uri: slackerUri(NOVEL, 0, getLang('javascript')) };
-    vscodeStub.workspace.closeWatchers.forEach((fn) => fn(closedDoc));
-    assert.strictEqual(ctrl.isActive, false, '关闭后会话应结束');
+    // 模拟用户点 X 关掉唯一的摸鱼标签: tabGroups 清空 + 触发 onDidChangeTabs(真实主通道)
+    const tg2 = vscodeStub.window.tabGroups;
+    tg2.all = [];
+    const closedTab = { input: { uri: slackerUri(NOVEL, 0, getLang('javascript')) } };
+    tg2.tabChangeWatchers.forEach((fn) =>
+      fn({ closed: [closedTab], opened: [], changed: [] }));
+    assert.strictEqual(ctrl.isActive, false, '关闭标签后会话应结束');
     assert.strictEqual(stateChanges.at(-1), false, '应回调 false 熄灭高亮');
-    // 翻章替换文档: 仍有摸鱼标签在, 不应误判结束
+    // 兜底通道: onDidCloseTextDocument 先到(标签已无 novelfish)也不应报错/重复结束
+    vscodeStub.workspace.closeWatchers.forEach((fn) =>
+      fn({ uri: slackerUri(NOVEL, 0, getLang('javascript')) }));
+    assert.strictEqual(ctrl.isActive, false, '兜底通道不应误报异常');
+    // 翻章替换文档: closed(旧)+opened(新) 同批, 仍有摸鱼标签在, 不应误判结束
     await ctrl.open(NOVEL, 1);
     assert.strictEqual(stateChanges.at(-1), true);
     const newFish = { input: { uri: slackerUri(NOVEL, 1, getLang('javascript')) } };
-    vscodeStub.window.tabGroups = { all: [{ tabs: [newFish] }], close: async () => {} };
-    vscodeStub.workspace.closeWatchers.forEach((fn) => fn({ uri: slackerUri(NOVEL, 0, getLang('javascript')) }));
-    assert.strictEqual(ctrl.isActive, true, '翻章关旧文档不应误判结束');
+    const oldFish = { input: { uri: slackerUri(NOVEL, 0, getLang('javascript')) } };
+    vscodeStub.window.tabGroups.all = [{ tabs: [newFish] }];
+    vscodeStub.window.tabGroups.tabChangeWatchers.forEach((fn) =>
+      fn({ closed: [oldFish], opened: [newFish], changed: [] }));
+    assert.strictEqual(ctrl.isActive, true, '翻章关旧标签不应误判结束');
     assert.strictEqual(stateChanges.at(-1), true);
-    vscodeStub.window.tabGroups = { all: [], close: async () => {} };
+    // 文档关闭兜底在翻章时同样不应误判
+    vscodeStub.workspace.closeWatchers.forEach((fn) => fn({ uri: slackerUri(NOVEL, 0, getLang('javascript')) }));
+    assert.strictEqual(ctrl.isActive, true, '翻章时兜底通道不应误判结束');
+    // 再真正关掉: 无标签 -> 结束
+    vscodeStub.window.tabGroups.all = [];
+    vscodeStub.window.tabGroups.tabChangeWatchers.forEach((fn) =>
+      fn({ closed: [newFish], opened: [], changed: [] }));
+    assert.strictEqual(ctrl.isActive, false, '再次关闭应结束会话');
   });
   await ok('双向同步: 阅读页切章后(书架进度变), 切回摸鱼文档自动跟随', async () => {
     const { ctrl, progress, setShelfProgress } = makeController(NOVEL);
