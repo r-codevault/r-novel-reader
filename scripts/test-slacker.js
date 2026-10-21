@@ -285,14 +285,23 @@ function makeController(novel, tabState) {
       assert.ok(cmds.has(`novelReader.${c}`), `缺少命令 novelReader.${c}`);
     }
   });
-  ok('keybindings: 老板键 alt+b, 翻章 ctrl+alt+←/→, 均限定 novelfish', () => {
+  ok('keybindings: 启动 ctrl+alt+s, 老板键 alt+b, 翻章 ctrl+alt+←/→', () => {
     const kb = pkg.contributes.keybindings || [];
     const byCmd = Object.fromEntries(kb.map((k) => [k.command, k]));
+    assert.strictEqual(byCmd['novelReader.slackerStart'].key, 'ctrl+alt+s');
     assert.strictEqual(byCmd['novelReader.slackerBoss'].key, 'alt+b');
     assert.strictEqual(byCmd['novelReader.slackerNext'].key, 'ctrl+alt+arrowright');
     assert.strictEqual(byCmd['novelReader.slackerPrev'].key, 'ctrl+alt+arrowleft');
-    for (const k of kb.filter((k) => k.command.startsWith('novelReader.slacker'))) {
-      assert.ok(k.when && k.when.includes('activeEditorScheme == novelfish'), `${k.command} 缺少 when 限定`);
+    // 启动键: 有书即可按; 老板键与翻章: 仅摸鱼文档激活时响应, 不占用全局按键
+    assert.ok(
+      byCmd['novelReader.slackerStart'].when.includes('novelReader.hasNovel'),
+      '启动键缺少 hasNovel 条件'
+    );
+    for (const c of ['slackerBoss', 'slackerNext', 'slackerPrev']) {
+      assert.ok(
+        (byCmd[`novelReader.${c}`].when || '').includes('activeEditorScheme == novelfish'),
+        `novelReader.${c} 缺少 novelfish 限定`
+      );
     }
   });
   ok('configuration: slackerLanguage 默认 javascript 且枚举与语言表一致', () => {
