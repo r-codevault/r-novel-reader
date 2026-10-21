@@ -15,5 +15,5 @@ README.md
 media/**/*.json
 media/**/*.json
 .playwright-cli
-.shots
+.shots*
 .vite-dev.log

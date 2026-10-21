@@ -727,7 +727,7 @@
   }
   .nt-tag-off { color: var(--fg-muted); }
   .nt-book-count {
-    min-width: 18px; text-align: right;
+    min-width: 0; text-align: left;
     color: var(--fg-muted); font-size: var(--ui-font-sub);
     font-variant-numeric: tabular-nums;
   }
@@ -793,7 +793,7 @@
   .nt-acts {
     /* 不占位高度: 悬浮/聚焦时才渲染出来, 避免未显示时留一大块空白 */
     display: none;
-    align-items: center; gap: 6px;
+    align-items: center; gap: 6px; justify-content: flex-end;
     margin-top: 6px;
   }
   .nt-item:hover .nt-acts, .nt-item:focus-within .nt-acts { display: flex; }
@@ -897,8 +897,8 @@
     border: 1px solid var(--input-border); border-radius: 5px;
     font-size: var(--ui-font); line-height: 1.6; font-family: inherit;
   }
-  /* 聚焦: 细边框(1px 主题色), 不再用 2px 粗轮廓 */
-  .nc-text:focus { outline: 1px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+  /* 聚焦: 1px 细边框(仅边框变主题色, 不再叠加 outline 造成 2px 视觉粗框) */
+  .nc-text:focus { outline: none; border-color: var(--accent); }
   /* 底部行: 查看卡片单行; 编辑卡片两行(按钮行在上, 提示行在下);
      两行间距与文本域到按钮行的间距统一为 8px, 各元素左缘对齐卡片内边距 */
   .nc-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: nowrap; }

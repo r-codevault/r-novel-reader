@@ -234,8 +234,8 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
           <span class="nt-book-title" :title="g.bookPath">{{ g.bookTitle }}</span>
           <span v-if="g.current" class="nt-tag">在读</span>
           <span v-else-if="g.orphan" class="nt-tag nt-tag-off">已移出书架</span>
-          <span class="spacer"></span>
           <span class="nt-book-count">{{ g.items.length }}</span>
+          <span class="spacer"></span>
           <span class="ng-del" role="button" tabindex="0"
             :class="{ confirming: groupDeleteConfirming(bookDelKey(g)) }"
             :title="groupDeleteConfirming(bookDelKey(g)) ? '再次点击删除本书全部笔记' : '删除本书全部笔记'"
@@ -257,8 +257,8 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
               </span>
               <span class="nt-chap-title">{{ c.chapterTitle }}</span>
               <span v-if="c.current" class="nt-tag">在读</span>
-              <span class="spacer"></span>
               <span class="nt-book-count">{{ c.items.length }}</span>
+              <span class="spacer"></span>
               <span class="ng-del" role="button" tabindex="0"
                 :class="{ confirming: groupDeleteConfirming(chapDelKey(g.bookPath, c)) }"
                 :title="groupDeleteConfirming(chapDelKey(g.bookPath, c)) ? '再次点击删除本章全部笔记' : '删除本章全部笔记'"
