@@ -8,7 +8,7 @@
 | --- | --- |
 | 插件 ID | `local.r-novel-reader` |
 | 显示名称 | 小说阅读器 |
-| 当前版本 | 1.45.5 |
+| 当前版本 | 1.45.6 |
 | 要求 | VS Code 1.85.0+（实测 1.128.0），Node.js 18+（仅打包时需要） |
 | 开源协议 | MIT |
 | 代码仓库 | [Gitee](https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader)（主仓） · [GitHub](https://github.com/r-codevault/r-novel-reader)（同步镜像） |
