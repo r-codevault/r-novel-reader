@@ -20,7 +20,7 @@ const cardStyle = computed(function () {
   if (!c) { return {}; }
   const margin = 8;
   const w = Math.min(420, window.innerWidth - 32);
-  const estH = c.phase === 'viewing' ? 150 : 186;
+  const estH = c.phase === 'viewing' ? 150 : 214;
   let top = c.anchorBottom + margin;
   if (top + estH > window.innerHeight - margin) {
     top = Math.max(margin, c.anchorTop - estH - margin);
@@ -130,16 +130,22 @@ function onKeydown(e: KeyboardEvent): void {
     <template v-else>
       <textarea ref="textRef" class="nc-text" v-model="comp.text" rows="3"
         placeholder="写点什么…" @input="comp.error = ''"></textarea>
-      <div class="nc-foot">
-        <span class="nc-err">{{ comp.error || '' }}</span>
-        <button v-if="comp.editId" class="nc-btn" :class="{ 'nc-btn-danger': pendingDelete }"
-          @click="requestDelete()">{{ pendingDelete ? '确认删除' : '删除' }}</button>
-        <button v-if="pendingDelete" class="nc-btn" data-cancel @click="cancelDelete()">取消</button>
-        <span class="spacer"></span>
-        <span class="nc-hint">Esc 取消 · Ctrl+Enter 保存</span>
-        <button class="nc-btn" @click="cancel()">取消</button>
-        <button class="nc-btn nc-btn-primary" :disabled="comp.phase === 'saving'"
-          @click="save()">{{ comp.phase === 'saving' ? '保存中…' : '保存' }}</button>
+      <div class="nc-foot nc-foot-stack">
+        <!-- 两行布局: 按钮行在上, 提示/错误行在下 -->
+        <div class="nc-foot-line">
+          <button v-if="comp.editId" class="nc-btn" :class="{ 'nc-btn-danger': pendingDelete }"
+            @click="requestDelete()">{{ pendingDelete ? '确认删除' : '删除' }}</button>
+          <button v-if="pendingDelete" class="nc-btn" data-cancel @click="cancelDelete()">取消</button>
+          <span class="spacer"></span>
+          <button class="nc-btn" @click="cancel()">取消</button>
+          <button class="nc-btn nc-btn-primary" :disabled="comp.phase === 'saving'"
+            @click="save()">{{ comp.phase === 'saving' ? '保存中…' : '保存' }}</button>
+        </div>
+        <div class="nc-foot-line">
+          <span class="nc-err">{{ comp.error || '' }}</span>
+          <span class="spacer"></span>
+          <span class="nc-hint">Esc 取消 · Ctrl+Enter 保存</span>
+        </div>
       </div>
     </template>
   </div>
