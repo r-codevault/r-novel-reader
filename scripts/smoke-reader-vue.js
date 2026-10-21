@@ -473,18 +473,33 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!menuEl.classList.contains('expanded'), '点菜单按钮应收起');
   assert(document.documentElement.style.getPropertyValue('--menu-w') === '48px', '收起时 --menu-w 应为 48px');
   assert(
-    document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar)').length === 5,
-    '菜单应有 5 个弹窗功能项, 实际: ' + document.querySelectorAll('.menu-item').length + ' (含状态栏) / ' + document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar)').length + ' (不含)'
+    document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not([data-menu="slacker"])').length === 5,
+    '菜单应有 5 个弹窗功能项, 实际: ' + document.querySelectorAll('.menu-item').length + ' (含状态栏/摸鱼) / ' + document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not([data-menu="slacker"])').length + ' (弹窗项)'
   );
-  assert(document.querySelectorAll('.menu-item[data-menu]').length === 6, '菜单共 6 项(含状态栏开关)');
+  assert(document.querySelectorAll('.menu-item[data-menu]').length === 7, '菜单共 7 项(状态栏开关 + 摸鱼入口)');
   assert(document.querySelector('.menu-item[data-menu="statusbar"]'), '菜单应有「状态栏」显隐开关');
-  // 顺序: 书架 → 目录 → 状态栏 → 阅读设置 → 存储位置, 分割线在最下方
+  assert(document.querySelector('.menu-item[data-menu="slacker"]'), '菜单应有「摸鱼模式」入口');
+  // 顺序: 书架 → 目录 → 状态栏 → 阅读设置 → 存储位置 → 摸鱼模式, 分割线在最下方
   const order = Array.from(document.querySelector('.menu').children).map((el) =>
     el.classList.contains('menu-divider') ? 'divider' : el.getAttribute('data-menu'));
   assert(
-    JSON.stringify(order) === JSON.stringify([null, 'divider', 'shelf', 'catalog', 'notes', 'statusbar', 'settings', 'storage']),
-    '菜单顺序应为 折叠按钮 + 分割线 + 书架/目录/笔记/状态栏/阅读设置/存储位置, 实际: ' + JSON.stringify(order)
+    JSON.stringify(order) === JSON.stringify([null, 'divider', 'shelf', 'catalog', 'notes', 'statusbar', 'settings', 'storage', 'slacker']),
+    '菜单顺序应为 折叠按钮 + 分割线 + 书架/目录/笔记/状态栏/阅读设置/存储位置/摸鱼模式, 实际: ' + JSON.stringify(order)
   );
+  // 摸鱼入口点击 -> postMessage slackerStart(转发到 novelReader.slackerStart 命令)
+  {
+    const before = posted.filter((m) => m.type === 'slackerStart').length;
+    document.querySelector('.menu-item[data-menu="slacker"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(
+      posted.filter((m) => m.type === 'slackerStart').length === before + 1,
+      '点击摸鱼入口应发送 slackerStart 消息'
+    );
+    // 摸鱼图标应跟随主题(currentColor), 不允许写死颜色
+    const slackerSvg = document.querySelector('.menu-item[data-menu="slacker"] .menu-ico svg');
+    assert(slackerSvg, '摸鱼入口应有内联 SVG 图标');
+    assert(slackerSvg.getAttribute('viewBox') === '0 0 2228 1024', '摸鱼图标 viewBox 应保持原始比例');
+  }
   assert(/\.menu-divider\s*\{[^}]*margin:\s*0\s+12px/.test(capturedHtml), '分隔线应无上下外边距(仅左右缩进)');
   // CSS 完整性: 源文件注释必须成对闭合(未闭合的 /* 会吞掉后续声明, 曾导致分隔线背景丢失)
   {

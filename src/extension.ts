@@ -685,6 +685,8 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('novelReader.slackerNext', () => slacker.step(1)),
         vscode.commands.registerCommand('novelReader.slackerPrev', () => slacker.step(-1)),
         vscode.commands.registerCommand('novelReader.slackerLanguage', () => slacker.pickLanguage()),
+        vscode.commands.registerCommand('novelReader.slackerCatalog', () => slacker.catalog()),
+        vscode.commands.registerCommand('novelReader.slackerShelf', () => slacker.shelf()),
         vscode.commands.registerCommand('novelReader.slackerBoss', () => slacker.boss())
     );
 
@@ -709,6 +711,9 @@ export function activate(context: vscode.ExtensionContext): void {
         onProgress: (filePath: string, chapterIndex: number) => {
             void shelf.updateProgress(filePath, chapterIndex, 0).then(refreshShelfView);
         },
+        listBooks: () => shelfItems(),
+        switchBook: (filePath: string) =>
+            loadNovel(filePath, { openPanel: false, silent: true }).then((n) => n ?? null),
     });
     context.subscriptions.push(slacker.register());
 

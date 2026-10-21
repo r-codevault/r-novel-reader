@@ -30,6 +30,9 @@ class FakeUri {
 }
 
 const statusMsgs = [];
+const statusBarItems = [];
+let activeEditor = undefined;
+let activeEditorWatchers = [];
 const vscodeStub = {
   Uri: FakeUri,
   EventEmitter: class {
@@ -40,7 +43,18 @@ const vscodeStub = {
   },
   ViewColumn: { One: 1, Two: 2 },
   ConfigurationTarget: { Global: 1 },
+  StatusBarAlignment: { Left: 1, Right: 2 },
   window: {
+    get activeTextEditor() { return activeEditor; },
+    onDidChangeActiveTextEditor: (fn) => { activeEditorWatchers.push(fn); return { dispose() {} }; },
+    createStatusBarItem: (alignment, priority) => {
+      const item = { alignment, priority, text: '', tooltip: '', command: '', shown: false };
+      item.show = () => { item.shown = true; };
+      item.hide = () => { item.shown = false; };
+      item.dispose = () => {};
+      statusBarItems.push(item);
+      return item;
+    },
     showTextDocument: async () => ({ viewColumn: 1 }),
     showInformationMessage: async () => undefined,
     showQuickPick: async () => undefined,
@@ -51,6 +65,7 @@ const vscodeStub = {
     openTextDocument: async () => ({}),
     registerTextDocumentContentProvider: () => ({ dispose() {} }),
   },
+  Disposable: { from: (...ds) => ({ dispose() { ds.forEach((d) => d.dispose && d.dispose()); } }) },
 };
 
 const origLoad = Module._load;
@@ -211,24 +226,33 @@ console.log('[摸鱼模式 · 会话控制]');
 function makeController(novel, tabState) {
   const progress = [];
   const langCfg = { value: 'javascript' };
+  statusBarItems.length = 0;
+  activeEditorWatchers = [];
   const ctrl = new SlackerController({
     getNovel: async () => novel,
     getLanguage: () => langCfg.value,
     setLanguage: (id) => { langCfg.value = id; return Promise.resolve(); },
     onProgress: (fp, idx) => progress.push([fp, idx]),
+    listBooks: () => [
+      { filePath: novel.filePath, title: novel.bookTitle, author: novel.author || '',
+        chapterIndex: 0, totalChapters: novel.chapters.length, current: true },
+      { filePath: 'D:/books/另一本.txt', title: '另一本书', author: '作者乙',
+        chapterIndex: 4, totalChapters: 30, current: false },
+    ],
+    switchBook: async () => null, // 默认不切书, 具体 case 覆盖
   });
   ctrl.register();
   return { ctrl, progress, langCfg };
 }
 
 (async () => {
-  ok('open: 打开当前进度章节并写回书架', async () => {
+  await ok('open: 打开当前进度章节并写回书架', async () => {
     statusMsgs.length = 0;
     const { ctrl, progress } = makeController(NOVEL);
     await ctrl.open(NOVEL, 0);
     assert.deepStrictEqual(progress, [[NOVEL.filePath, 0]]);
   });
-  ok('provideTextDocumentContent: 生成并缓存, 二次取同内容', async () => {
+  await ok('provideTextDocumentContent: 生成并缓存, 二次取同内容', async () => {
     const { ctrl } = makeController(NOVEL);
     await ctrl.open(NOVEL, 0); // 写入 novels/contents 缓存
     const uri = slackerUri(NOVEL, 0, getLang('javascript'));
@@ -237,7 +261,7 @@ function makeController(novel, tabState) {
     assert.ok(first.includes('罗峰站在'));
     assert.strictEqual(ctrl.provideTextDocumentContent(uri), first, '缓存不一致');
   });
-  ok('step: 下一章/上一章, 越界停在原章并提示', async () => {
+  await ok('step: 下一章/上一章, 越界停在原章并提示', async () => {
     statusMsgs.length = 0;
     const { ctrl, progress } = makeController(NOVEL);
     await ctrl.open(NOVEL, 0);
@@ -252,7 +276,7 @@ function makeController(novel, tabState) {
     assert.ok(statusMsgs.some((m) => m.includes('第一章')));
     assert.strictEqual(progress.at(-1)[1], 0);
   });
-  ok('boss: 关闭全部 novelfish 标签页, 忽略其它文档', async () => {
+  await ok('boss: 关闭全部 novelfish 标签页, 忽略其它文档', async () => {
     const fishTab = { input: { uri: slackerUri(NOVEL, 0, getLang('javascript')) } };
     const fileTab = { input: { uri: FakeUri.file('D:/work/index.js') } };
     const closed = [];
@@ -267,10 +291,101 @@ function makeController(novel, tabState) {
     assert.ok(closed.every((t) => t.input.uri.scheme === SLACKER_SCHEME));
     vscodeStub.window.tabGroups = { all: [], close: async () => {} };
   });
-  ok('pickLanguage: 取消选择不动作', async () => {
+  await ok('pickLanguage: 取消选择不动作', async () => {
     const { ctrl, langCfg } = makeController(NOVEL);
     await ctrl.pickLanguage(); // QuickPick 返回 undefined
     assert.strictEqual(langCfg.value, 'javascript');
+  });
+
+  // ---------------------------------------------------------------- 状态栏控制条
+
+  console.log('[摸鱼模式 · 状态栏控制条]');
+  await ok('register: 创建 上一章/下一章/目录/书架 四个右对齐状态栏项', () => {
+    const { ctrl } = makeController(NOVEL);
+    void ctrl;
+    assert.strictEqual(statusBarItems.length, 4, `实际 ${statusBarItems.length}`);
+    const cmds = statusBarItems.map((i) => i.command);
+    for (const c of ['slackerPrev', 'slackerNext', 'slackerCatalog', 'slackerShelf']) {
+      assert.ok(cmds.some((x) => x === `novelReader.${c}`), `缺少 ${c}`);
+    }
+    assert.ok(statusBarItems.every((i) => i.alignment === 2 /* Right */));
+  });
+  await ok('refreshBar: 摸鱼文档激活显示, 切走/关闭隐藏', async () => {
+    const { ctrl } = makeController(NOVEL);
+    await ctrl.open(NOVEL, 0);
+    ctrl.refreshBar();
+    assert.ok(statusBarItems.every((i) => !i.shown), '非摸鱼编辑器不应显示');
+    activeEditor = { document: { uri: slackerUri(NOVEL, 0, getLang('javascript')) } };
+    ctrl.refreshBar();
+    assert.ok(statusBarItems.every((i) => i.shown), '摸鱼文档激活时应全部显示');
+    activeEditor = { document: { uri: FakeUri.file('D:/work/a.js') } };
+    ctrl.refreshBar();
+    assert.ok(statusBarItems.every((i) => !i.shown), '切到普通文件应隐藏');
+    activeEditor = undefined;
+  });
+  await ok('watcher: 活动编辑器变化自动刷新显隐', async () => {
+    const { ctrl } = makeController(NOVEL);
+    await ctrl.open(NOVEL, 0);
+    activeEditor = { document: { uri: slackerUri(NOVEL, 0, getLang('javascript')) } };
+    activeEditorWatchers.forEach((fn) => fn());
+    assert.ok(statusBarItems.every((i) => i.shown));
+    activeEditor = undefined;
+    activeEditorWatchers.forEach((fn) => fn());
+    assert.ok(statusBarItems.every((i) => !i.shown));
+  });
+  await ok('catalog: QuickPick 选择章节后跳转(同章/取消不动作)', async () => {
+    const picks = [];
+    const origQP = vscodeStub.window.showQuickPick;
+    vscodeStub.window.showQuickPick = async (items) => { picks.push(items); return items[1]; };
+    const { ctrl, progress } = makeController(NOVEL);
+    await ctrl.open(NOVEL, 0);
+    await ctrl.catalog();
+    assert.deepStrictEqual(progress.at(-1), [NOVEL.filePath, 1], '应跳到第 2 章');
+    assert.ok(picks[0].some((it) => it.picked), '当前章应有 picked 标记');
+    await ctrl.catalog(); // 再选第 2 章(已在) -> 不动作
+    assert.strictEqual(progress.length, 2);
+    vscodeStub.window.showQuickPick = async () => undefined;
+    await ctrl.catalog();
+    assert.strictEqual(progress.length, 2, '取消应不动作');
+    vscodeStub.window.showQuickPick = origQP;
+  });
+  await   ok('shelf: QuickPick 切书后从该书进度章节打开', async () => {
+    // mock 书需要 >= 5 章, 否则进度章节 4 会被 open() clamp
+    const otherNovel = {
+      ...NOVEL,
+      filePath: 'D:/books/另一本.txt',
+      bookTitle: '另一本书',
+      chapters: [0, 1, 2, 3, 4].map((i) => ({ index: i, title: `第${i + 1}章`, content: '正文', wordCount: 2 })),
+    };
+    const origQP = vscodeStub.window.showQuickPick;
+    const { ctrl, progress } = makeController(NOVEL);
+    // 覆盖 switchBook: 返回另一本书
+    Object.assign(ctrl, {});
+    const ctrlDeps = { switchBook: async () => otherNovel };
+    // SlackerController 把 deps 存在构造参数里, 这里直接重建一个带定制 switchBook 的实例
+    const ctrl2 = new SlackerController({
+      getNovel: async () => NOVEL,
+      getLanguage: () => 'javascript',
+      setLanguage: () => Promise.resolve(),
+      onProgress: (fp, idx) => progress.push([fp, idx]),
+      listBooks: () => [
+        { filePath: NOVEL.filePath, title: '吞噬星空2', author: '', chapterIndex: 0, totalChapters: 2, current: true },
+        { filePath: 'D:/books/另一本.txt', title: '另一本书', author: '作者乙', chapterIndex: 4, totalChapters: 30, current: false },
+      ],
+      switchBook: async () => otherNovel,
+    });
+    ctrl2.register();
+    void ctrlDeps;
+    await ctrl2.open(NOVEL, 0);
+    vscodeStub.window.showQuickPick = async (items) => items.find((it) => it.filePath === 'D:/books/另一本.txt');
+    await ctrl2.shelf();
+    assert.deepStrictEqual(progress.at(-1), [otherNovel.filePath, 4], '应从进度章节打开');
+    // 取消: 不动作
+    const before = progress.length;
+    vscodeStub.window.showQuickPick = async () => undefined;
+    await ctrl2.shelf();
+    assert.strictEqual(progress.length, before);
+    vscodeStub.window.showQuickPick = origQP;
   });
 
   // ---------------------------------------------------------------- 清单断言
@@ -280,12 +395,12 @@ function makeController(novel, tabState) {
   const path = require('path');
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
   const cmds = new Set(pkg.contributes.commands.map((c) => c.command));
-  ok('commands: 5 个摸鱼命令齐备', () => {
-    for (const c of ['slackerStart', 'slackerNext', 'slackerPrev', 'slackerLanguage', 'slackerBoss']) {
+  await ok('commands: 7 个摸鱼命令齐备', () => {
+    for (const c of ['slackerStart', 'slackerNext', 'slackerPrev', 'slackerLanguage', 'slackerCatalog', 'slackerShelf', 'slackerBoss']) {
       assert.ok(cmds.has(`novelReader.${c}`), `缺少命令 novelReader.${c}`);
     }
   });
-  ok('keybindings: 启动 ctrl+alt+s, 老板键 alt+b, 翻章 ctrl+alt+←/→', () => {
+  await ok('keybindings: 启动 ctrl+alt+s, 老板键 alt+b, 翻章 ctrl+alt+←/→', () => {
     const kb = pkg.contributes.keybindings || [];
     const byCmd = Object.fromEntries(kb.map((k) => [k.command, k]));
     assert.strictEqual(byCmd['novelReader.slackerStart'].key, 'ctrl+alt+s');
@@ -304,7 +419,7 @@ function makeController(novel, tabState) {
       );
     }
   });
-  ok('configuration: slackerLanguage 默认 javascript 且枚举与语言表一致', () => {
+  await ok('configuration: slackerLanguage 默认 javascript 且枚举与语言表一致', () => {
     const prop = pkg.contributes.configuration.properties['novelReader.slackerLanguage'];
     assert.strictEqual(prop.default, 'javascript');
     assert.deepStrictEqual(
@@ -313,12 +428,14 @@ function makeController(novel, tabState) {
       '枚举与 LANGS 不一致'
     );
   });
-  ok('extension.ts: 摸鱼命令全部接线', () => {
+  await ok('extension.ts: 摸鱼命令全部接线', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
-    for (const c of ['slackerStart', 'slackerNext', 'slackerPrev', 'slackerLanguage', 'slackerBoss']) {
+    for (const c of ['slackerStart', 'slackerNext', 'slackerPrev', 'slackerLanguage', 'slackerCatalog', 'slackerShelf', 'slackerBoss']) {
       assert.ok(src.includes(`'novelReader.${c}'`), `extension.ts 未注册 ${c}`);
     }
     assert.ok(src.includes('new SlackerController'), '缺少控制器实例化');
+    const panel = fs.readFileSync(path.join(__dirname, '..', 'src', 'readerPanel.ts'), 'utf8');
+    assert.ok(panel.includes("'slackerStart'"), '阅读面板未转发摸鱼入口消息');
   });
 
   if (process.exitCode !== 1) {

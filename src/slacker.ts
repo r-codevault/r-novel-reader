@@ -790,6 +790,20 @@ export interface SlackerDeps {
     setLanguage: (id: string) => Thenable<void>;
     /** 章节进度写回书架 */
     onProgress: (filePath: string, chapterIndex: number) => void;
+    /** 书架列表(状态栏「书架」QuickPick 用; 由 extension 注入) */
+    listBooks?: () => ShelfBookInfo[];
+    /** 切换摸鱼的书(extension 侧解析文件并登记书架) */
+    switchBook?: (filePath: string) => Promise<Novel | null>;
+}
+
+/** 状态栏「书架」选择用的书架条目(与 ShelfItemView 字段一致, 解耦类型) */
+export interface ShelfBookInfo {
+    filePath: string;
+    title: string;
+    author: string;
+    chapterIndex: number;
+    totalChapters: number;
+    current: boolean;
 }
 
 export class SlackerController implements vscode.TextDocumentContentProvider {
@@ -799,11 +813,50 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
     private lastColumn?: vscode.ViewColumn;
     private readonly onDidChangeEvent = new vscode.EventEmitter<vscode.Uri>();
     readonly onDidChange = this.onDidChangeEvent.event;
+    /** 摸鱼状态栏控制条(仅摸鱼文档激活时显示) */
+    private barItems: vscode.StatusBarItem[] = [];
 
     constructor(private readonly deps: SlackerDeps) {}
 
     register(): vscode.Disposable {
-        return vscode.workspace.registerTextDocumentContentProvider(SLACKER_SCHEME, this);
+        const provider = vscode.workspace.registerTextDocumentContentProvider(SLACKER_SCHEME, this);
+        // 状态栏控制条: $(chevron-left) $(chevron-right) 目录 书架 —— 图标式, 低调
+        const mk = (
+            text: string,
+            tooltip: string,
+            command: string,
+            priority: number
+        ): vscode.StatusBarItem => {
+            const item = vscode.window.createStatusBarItem(
+                vscode.StatusBarAlignment.Right,
+                priority
+            );
+            item.text = text;
+            item.tooltip = tooltip;
+            item.command = command;
+            return item;
+        };
+        this.barItems = [
+            mk('$(chevron-left)', '摸鱼模式: 上一章 (Ctrl+Alt+←)', 'novelReader.slackerPrev', 44),
+            mk('$(chevron-right)', '摸鱼模式: 下一章 (Ctrl+Alt+→)', 'novelReader.slackerNext', 43),
+            mk('$(list-unordered)', '摸鱼模式: 目录(选择章节)', 'novelReader.slackerCatalog', 42),
+            mk('$(library)', '摸鱼模式: 书架(切换书籍)', 'novelReader.slackerShelf', 41),
+        ];
+        const watcher = vscode.window.onDidChangeActiveTextEditor(() => this.refreshBar());
+        return vscode.Disposable.from(provider, watcher, ...this.barItems);
+    }
+
+    /** 摸鱼文档激活时显示状态栏控制条, 切走/老板键隐藏 */
+    refreshBar(): void {
+        const active = vscode.window.activeTextEditor;
+        const show = !!active && active.document.uri.scheme === SLACKER_SCHEME;
+        for (const item of this.barItems) {
+            if (show) {
+                item.show();
+            } else {
+                item.hide();
+            }
+        }
     }
 
     /** provider 回调: 生成(或取缓存)文档内容 */
@@ -891,6 +944,58 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
         }
     }
 
+    /** 目录: QuickPick 选择当前书的章节跳转 */
+    async catalog(): Promise<void> {
+        if (!this.cur) {
+            vscode.window.setStatusBarMessage('摸鱼模式: 请先开始摸鱼阅读', 3000);
+            return;
+        }
+        const { novel, index } = this.cur;
+        const picked = await vscode.window.showQuickPick(
+            novel.chapters.map((c) => ({
+                label: c.title || `第 ${c.index + 1} 章`,
+                description: `${c.wordCount} 字`,
+                idx: c.index,
+                picked: c.index === index,
+            })),
+            { title: '摸鱼模式 · 目录(当前书章节)', matchOnDescription: true }
+        );
+        if (!picked || picked.idx === index) {
+            return;
+        }
+        await this.open(novel, picked.idx);
+    }
+
+    /** 书架: QuickPick 切换摸鱼的书(从该书上次进度章节继续) */
+    async shelf(): Promise<void> {
+        const list = this.deps.listBooks?.() ?? [];
+        if (!list.length) {
+            void vscode.window.showInformationMessage('书架里还没有小说，先添加一本吧。');
+            return;
+        }
+        const picked = await vscode.window.showQuickPick(
+            list.map((b) => ({
+                label: (b.current ? '$(check) ' : '') + b.title,
+                description: b.author || '',
+                detail:
+                    b.totalChapters > 0
+                        ? `读至 第 ${Math.max(1, b.chapterIndex + 1)} 章 / 共 ${b.totalChapters} 章`
+                        : '',
+                filePath: b.filePath,
+                chapterIndex: b.chapterIndex,
+            })),
+            { title: '摸鱼模式 · 书架(切换阅读的书)' }
+        );
+        if (!picked || (this.cur && picked.filePath === this.cur.novel.filePath)) {
+            return;
+        }
+        const novel = await this.deps.switchBook?.(picked.filePath);
+        if (!novel || !novel.chapters.length) {
+            return;
+        }
+        await this.open(novel, Math.max(0, picked.chapterIndex));
+    }
+
     /** 老板键: 立即关闭所有摸鱼文档 */
     async boss(): Promise<void> {
         const tabs = vscode.window.tabGroups.all
@@ -903,5 +1008,6 @@ export class SlackerController implements vscode.TextDocumentContentProvider {
             await vscode.window.tabGroups.close(tabs, true);
         }
         this.cur = undefined;
+        this.refreshBar();
     }
 }

@@ -59,6 +59,7 @@ type WebviewMessage =
     | { type: 'resetSettings' }
     | { type: 'saveProgress'; chapterIndex: number; scrollRatio: number }
     | { type: 'openFile' }
+    | { type: 'slackerStart' }
     // 左抽屉(书架/目录/存储)动作
     | { type: 'openBook'; filePath: string }
     | { type: 'removeBook'; filePath: string }
@@ -475,6 +476,10 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                 break;
             case 'openFile':
                 void vscode.commands.executeCommand('novelReader.openFile');
+                break;
+            // 侧边菜单「摸鱼模式」入口: 转发到摸鱼命令(伪装代码文档阅读)
+            case 'slackerStart':
+                void vscode.commands.executeCommand('novelReader.slackerStart');
                 break;
             // 抽屉(书架/存储)动作: 转发到既有命令, 逻辑与旧侧边栏一致
             case 'openBook':
