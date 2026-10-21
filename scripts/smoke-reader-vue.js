@@ -1627,6 +1627,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(20);
   assert(chapDel.textContent.trim() === '确认删除', '第一次点应变「确认删除」');
   assert(!posted.some((m) => m.type === 'removeNoteGroup'), '确认前不应发 removeNoteGroup');
+  // 确认态旁应有「取消」: 点击回退到「删除」, 不发 removeNoteGroup
+  const gCancel = document.querySelector('#notesPopup .nt-chap-head .ng-cancel');
+  assert(gCancel && gCancel.textContent.trim() === '取消', '章组头确认态旁应有「取消」按钮');
+  gCancel.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  const chapDelBtn2 = document.querySelector('#notesPopup .nt-chap-head .ng-del:not(.ng-cancel)');
+  assert(chapDelBtn2.textContent.trim() === '删除', '点取消应回退到「删除」');
+  assert(!document.querySelector('#notesPopup .nt-chap-head .ng-cancel'), '回退后取消按钮应消失');
+  assert(!posted.some((m) => m.type === 'removeNoteGroup'), '取消不应发 removeNoteGroup');
+  chapDelBtn2.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  document.querySelector('#notesPopup .nt-chap-head .ng-del:not(.ng-cancel)').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   chapDel.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(40);
   const chapDelMsg = posted.find((m) => m.type === 'removeNoteGroup');
