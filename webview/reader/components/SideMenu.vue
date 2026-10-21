@@ -6,8 +6,6 @@
 import { computed } from 'vue';
 import { state } from '../composables/vscode';
 import { persistSettings } from '../store';
-// 品牌 logo 小图(48px, 米色圆角底+图形留白); 构建时 <4KB 自动内联为 data URL
-import logoUrl from '../assets/logo.png';
 
 /** 状态栏显隐(默认显示) */
 function statusBarVisible(): boolean {
@@ -116,9 +114,18 @@ function toggle(item: MenuItem): void {
   <nav class="menu" :class="{ expanded: state.menuExpanded }">
     <button class="menu-toggle" :title="state.menuExpanded ? '收起菜单' : '展开菜单'"
       @click="state.menuExpanded = !state.menuExpanded">
-      <!-- 品牌 logo(用户提供的锐阅读器图标): 位图小图(米色圆角底+图形留白),
-           构建时内联为 data URL, 深色/浅色侧栏下都清晰 -->
-      <img class="menu-logo" :src="logoUrl" alt="锐阅读器" aria-hidden="true" />
+      <!-- 品牌 logo: 矢量版(R 用 currentColor, 书页金线用主题强调色) —— 随主题实时变化 -->
+      <svg class="menu-logo" viewBox="0 0 786 690" aria-hidden="true">
+        <g fill="none" stroke="var(--sp-accent)" stroke-width="34" stroke-linecap="round">
+          <path d="M40 646 C 8 470, 8 320, 40 168" />
+          <path d="M110 646 C 78 470, 78 320, 110 168" />
+          <path d="M180 646 C 148 470, 148 320, 180 168" />
+        </g>
+        <g fill="none" stroke="currentColor" stroke-width="64" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M250 640 V 70 H 505 A 112 112 0 0 1 505 294 H 250" />
+          <path d="M452 302 L 668 640" />
+        </g>
+      </svg>
     </button>
 
     <!-- 菜单分隔线(位于折叠按钮与菜单项之间) -->
