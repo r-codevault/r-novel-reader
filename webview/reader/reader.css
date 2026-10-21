@@ -888,16 +888,19 @@
     white-space: pre-wrap; word-break: break-word;
   }
   .nc-text {
+    display: block;
     width: 100%; box-sizing: border-box;
     padding: 7px 9px; resize: vertical; min-height: 76px;
     background: var(--input-bg); color: var(--input-fg);
     border: 1px solid var(--input-border); border-radius: 5px;
     font-size: var(--ui-font); line-height: 1.6; font-family: inherit;
   }
-  .nc-text:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  /* 底部行: 查看卡片单行; 编辑卡片分两行(提示行 + 按钮行), 避免按钮挤压变形 */
+  /* 聚焦: 细边框(1px 主题色), 不再用 2px 粗轮廓 */
+  .nc-text:focus { outline: 1px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+  /* 底部行: 查看卡片单行; 编辑卡片两行(按钮行在上, 提示行在下);
+     两行间距与文本域到按钮行的间距统一为 8px, 各元素左缘对齐卡片内边距 */
   .nc-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: nowrap; }
-  .nc-foot-stack { flex-direction: column; align-items: stretch; gap: 6px; }
+  .nc-foot-stack { flex-direction: column; align-items: stretch; gap: 8px; }
   .nc-foot-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .nc-foot-line .nc-err { flex: 0 1 auto; min-width: 0; }
   .nc-err {
@@ -905,7 +908,7 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .nc-hint {
-    flex: none; text-align: right;
+    flex: none; text-align: left;
     color: var(--fg-muted); font-size: var(--ui-font-sub);
     white-space: nowrap;
   }

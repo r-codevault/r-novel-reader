@@ -142,8 +142,7 @@ function onKeydown(e: KeyboardEvent): void {
             @click="save()">{{ comp.phase === 'saving' ? '保存中…' : '保存' }}</button>
         </div>
         <div class="nc-foot-line">
-          <span class="nc-err">{{ comp.error || '' }}</span>
-          <span class="spacer"></span>
+          <span v-if="comp.error" class="nc-err">{{ comp.error }}</span>
           <span class="nc-hint">Esc 取消 · Ctrl+Enter 保存</span>
         </div>
       </div>
