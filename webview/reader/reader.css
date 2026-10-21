@@ -134,7 +134,8 @@
   /* 阅读主题行: 第一行预设色块, 第二行三个选择器(地域色彩/廿四节气/节日色彩) */
   .sp-row-theme { align-items: flex-start; }
   .sp-row-theme > .sp-label { padding-top: 3px; }
-  .sp-themes { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+  /* 主题行两排(色点 / 下拉)间距与其它设置行保持一致, 避免视觉上挤在一起 */
+  .sp-themes { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
   .sp-theme-dots { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .sp-theme-extra { position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .sp-dot {
@@ -827,7 +828,8 @@
     font-size: var(--ui-font); line-height: 1.55;
     font-family: inherit;
   }
-  .nt-edit-area:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  /* 聚焦: 与新建/编辑卡片一致, 仅 1px 边框变主题色(不叠加 outline) */
+  .nt-edit-area:focus { outline: none; border-color: var(--accent); }
   .nt-edit-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
   .nt-quote-hint {
     margin-top: 4px; color: var(--fg-muted); font-size: var(--ui-font-sub);
