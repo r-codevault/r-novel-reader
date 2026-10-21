@@ -2,7 +2,7 @@
   "name": "r-novel-reader",
   "displayName": "小说阅读器",
   "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面：悬浮球 + 起点风格目录面板、我的书架、书库目录、字体/主题个性化设置，自动延续上次阅读状态。",
-  "version": "1.42.6",
+  "version": "1.43.0",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -103,6 +103,30 @@
       {
         "command": "novelReader.refreshShelfFromLibrary",
         "title": "刷新书架"
+      },
+      {
+        "command": "novelReader.slackerStart",
+        "title": "摸鱼模式: 开始摸鱼阅读",
+        "enablement": "novelReader.hasNovel"
+      },
+      {
+        "command": "novelReader.slackerNext",
+        "title": "摸鱼模式: 下一章",
+        "enablement": "novelReader.hasNovel"
+      },
+      {
+        "command": "novelReader.slackerPrev",
+        "title": "摸鱼模式: 上一章",
+        "enablement": "novelReader.hasNovel"
+      },
+      {
+        "command": "novelReader.slackerLanguage",
+        "title": "摸鱼模式: 切换伪装语言",
+        "enablement": "novelReader.hasNovel"
+      },
+      {
+        "command": "novelReader.slackerBoss",
+        "title": "摸鱼模式: 老板键（立即隐藏）"
       }
     ],
     "menus": {
@@ -174,6 +198,31 @@
           "command": "novelReader.refreshShelfFromLibrary",
           "title": "小说阅读器: 刷新书架（按书库目录重扫）",
           "when": "config.novelReader.libraryPath != ''"
+        },
+        {
+          "command": "novelReader.slackerStart",
+          "title": "小说阅读器: 摸鱼模式 · 开始摸鱼阅读",
+          "when": "novelReader.hasNovel"
+        },
+        {
+          "command": "novelReader.slackerNext",
+          "title": "小说阅读器: 摸鱼模式 · 下一章",
+          "when": "novelReader.hasNovel"
+        },
+        {
+          "command": "novelReader.slackerPrev",
+          "title": "小说阅读器: 摸鱼模式 · 上一章",
+          "when": "novelReader.hasNovel"
+        },
+        {
+          "command": "novelReader.slackerLanguage",
+          "title": "小说阅读器: 摸鱼模式 · 切换伪装语言",
+          "when": "novelReader.hasNovel"
+        },
+        {
+          "command": "novelReader.slackerBoss",
+          "title": "小说阅读器: 摸鱼模式 · 老板键（立即隐藏）",
+          "when": "activeEditorScheme == novelfish"
         }
       ],
       "explorer/context": [
@@ -184,6 +233,23 @@
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "novelReader.slackerBoss",
+        "key": "alt+b",
+        "when": "activeEditorScheme == novelfish"
+      },
+      {
+        "command": "novelReader.slackerNext",
+        "key": "ctrl+alt+arrowright",
+        "when": "activeEditorScheme == novelfish"
+      },
+      {
+        "command": "novelReader.slackerPrev",
+        "key": "ctrl+alt+arrowleft",
+        "when": "activeEditorScheme == novelfish"
+      }
+    ],
     "configuration": {
       "title": "小说阅读器",
       "properties": {
@@ -276,6 +342,43 @@
           "type": "boolean",
           "default": true,
           "description": "重开 VS Code 时原样恢复上次打开着的阅读页(章节与滚动位置)。关闭后重开窗口会丢弃该页签"
+        },
+        "novelReader.slackerLanguage": {
+          "type": "string",
+          "default": "javascript",
+          "enum": [
+            "javascript",
+            "typescript",
+            "python",
+            "java",
+            "go",
+            "csharp",
+            "cpp",
+            "rust",
+            "php",
+            "ruby",
+            "sql",
+            "html",
+            "css",
+            "shellscript"
+          ],
+          "enumDescriptions": [
+            "JavaScript（默认）",
+            "TypeScript",
+            "Python",
+            "Java",
+            "Go",
+            "C#",
+            "C++",
+            "Rust",
+            "PHP",
+            "Ruby",
+            "SQL",
+            "HTML",
+            "CSS",
+            "Shell"
+          ],
+          "description": "摸鱼模式：伪装代码使用的编程语言（也可用命令「摸鱼模式: 切换伪装语言」随时切换）。小说正文将以注释形式穿插在伪代码中。"
         }
       }
     }
@@ -285,7 +388,7 @@
     "compile": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p ./",
     "watch": "tsc -watch -p ./",
     "package": "vsce package --baseContentUrl https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader/blob/master --baseImagesUrl https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader/raw/master",
-    "test": "node scripts/test-shelf.js && node scripts/test-library.js && node scripts/test-shelf-maintenance.js && node scripts/test-title.js && node scripts/test-theme-presets.js && node scripts/test-province-theme.js && node scripts/test-term-theme.js && node scripts/test-notes.js && node scripts/test-festival-theme.js && node scripts/test-parser.js && node scripts/test-encoding.js && node scripts/smoke-reader-vue.js",
+    "test": "node scripts/test-shelf.js && node scripts/test-library.js && node scripts/test-shelf-maintenance.js && node scripts/test-title.js && node scripts/test-theme-presets.js && node scripts/test-province-theme.js && node scripts/test-term-theme.js && node scripts/test-notes.js && node scripts/test-festival-theme.js && node scripts/test-parser.js && node scripts/test-encoding.js && node scripts/test-slacker.js && node scripts/smoke-reader-vue.js",
     "build:webview": "vite build",
     "pretest": "npm run compile && npm run build:webview",
     "dev": "vite --open /webview/reader/dev.html"

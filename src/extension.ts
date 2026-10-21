@@ -21,6 +21,7 @@ import { shelfBookKey, planDuplicateRemoval } from './shelfMaintenance';
 import { moveToTrash } from './trash';
 import { ReadingSettings, SettingsStore } from './settings';
 import { decodeBuffer } from './encoding';
+import { SlackerController } from './slacker';
 
 interface LoadOptions {
     chapterIndex?: number;
@@ -660,7 +661,31 @@ export function activate(context: vscode.ExtensionContext): void {
                 // 'next' -> 回到新章顶部
                 ReaderPanel.showChapter(panel.chapterIndex + 1, 'next');
             }
-        })
+        }),
+
+        // ---------------------------------------------------------------- 摸鱼模式
+        // 小说伪装成代码注释, 用 VS Code 原生编辑器展示(不共用阅读 webview);
+        // 老板键一键关闭所有摸鱼文档
+        vscode.commands.registerCommand('novelReader.slackerStart', async () => {
+            const novel = await ensureNovel();
+            if (!novel) {
+                const picked = await vscode.window.showInformationMessage(
+                    '书架里还没有小说，先添加一本吧。',
+                    '添加书籍'
+                );
+                if (picked === '添加书籍') {
+                    await vscode.commands.executeCommand('novelReader.openFile');
+                }
+                return;
+            }
+            const entry = shelf.get(novel.filePath);
+            const idx = entry && entry.chapterIndex >= 0 ? entry.chapterIndex : 0;
+            await slacker.open(novel, idx);
+        }),
+        vscode.commands.registerCommand('novelReader.slackerNext', () => slacker.step(1)),
+        vscode.commands.registerCommand('novelReader.slackerPrev', () => slacker.step(-1)),
+        vscode.commands.registerCommand('novelReader.slackerLanguage', () => slacker.pickLanguage()),
+        vscode.commands.registerCommand('novelReader.slackerBoss', () => slacker.boss())
     );
 
     // ---------------------------------------------------------------- 阅读进度 -> 书架
@@ -670,6 +695,22 @@ export function activate(context: vscode.ExtensionContext): void {
         // 窗口恢复出来的面板不会经过 loadNovel, currentNovel 可能为空或指向别的书
         void shelf.updateProgress(filePath, chapterIndex, scrollRatio).then(refreshShelfView);
     };
+
+    // ---------------------------------------------------------------- 摸鱼模式会话
+
+    const slacker = new SlackerController({
+        getNovel: ensureNovel,
+        getLanguage: () =>
+            vscode.workspace.getConfiguration('novelReader').get<string>('slackerLanguage', 'javascript'),
+        setLanguage: (id: string) =>
+            vscode.workspace
+                .getConfiguration('novelReader')
+                .update('slackerLanguage', id, vscode.ConfigurationTarget.Global),
+        onProgress: (filePath: string, chapterIndex: number) => {
+            void shelf.updateProgress(filePath, chapterIndex, 0).then(refreshShelfView);
+        },
+    });
+    context.subscriptions.push(slacker.register());
 
 
     // ---------------------------------------------------------------- VS Code 设置页 -> 同步阅读偏好

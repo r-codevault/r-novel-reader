@@ -101,6 +101,17 @@
 
 ![新建笔记](docs/images/ui-note-composer.png)
 
+### 摸鱼模式（伪装成写代码）
+
+把当前章节渲染成一份**伪代码文档**，直接用 VS Code 原生编辑器打开 —— 语法高亮、行号、minimap、标签页与平常写代码**完全一致**，不共用阅读 webview：
+
+- **小说正文以注释形式穿插在真实感的业务代码之间**（函数、配置读取、重试、日志等代码片段由种子随机生成，同章节内容稳定）
+- **14 种编程语言可伪装**：JavaScript（默认）/ TypeScript / Python / Java / Go / C# / C++ / Rust / PHP / Ruby / SQL / HTML / CSS / Shell，命令「摸鱼模式: 切换伪装语言」随时切换（选择会记住），文档扩展名随语言变化、语法高亮自动跟随
+- **老板键 `Alt+B`**：一键关闭所有摸鱼文档，立刻回到"正经工作"界面；再执行「开始摸鱼阅读」即可从上次章节继续
+- **翻章**：`Ctrl+Alt+←` / `Ctrl+Alt+→`（或在命令面板执行上一章/下一章），首末章自动提示
+- 章节进度**写回书架**，与普通阅读页互通（阅读页接着读、书架进度条一致）
+- 摸鱼文档**只读**（虚拟文档，无脏标记、不会误保存），切换伪装语言或换章都会重新生成
+
 ### 阅读界面
 
 - 编辑器区域内的阅读页**没有顶部工具栏**，左侧是一条竖排菜单（书架 / 目录 / 状态栏 / 阅读设置 / 存储位置），随阅读字号一起缩放，可折叠成窄条只留图标
@@ -193,6 +204,10 @@ npm run compile
 | `小说阅读器: 回到当前阅读章节` | 打开/回到当前正在读的章节 |
 | `小说阅读器: 上一章` / `下一章` | 章节切换 |
 | `小说阅读器: 刷新目录` | 重新解析当前文件（文件内容更新后使用） |
+| `小说阅读器: 摸鱼模式 · 开始摸鱼阅读` | 把当前章节伪装成代码注释在编辑器里阅读 |
+| `小说阅读器: 摸鱼模式 · 上一章 / 下一章` | 摸鱼模式翻章 |
+| `小说阅读器: 摸鱼模式 · 切换伪装语言` | 选择伪装的编程语言（默认 JavaScript） |
+| `小说阅读器: 摸鱼模式 · 老板键（立即隐藏）` | 一键关闭所有摸鱼文档 |
 
 ### 快捷键
 
@@ -201,6 +216,8 @@ npm run compile
 | `Alt` + `←` | 上一章（**可自定义**） |
 | `Alt` + `→` | 下一章（**可自定义**） |
 | `Ctrl` + 滚轮 | 阅读页内放大 / 缩小正文字号（macOS 为 `Cmd` + 滚轮） |
+| `Alt` + `B` | 摸鱼模式**老板键**：立即隐藏所有摸鱼文档（仅摸鱼文档激活时生效，可在键盘快捷方式中自定义） |
+| `Ctrl` + `Alt` + `←` / `→` | 摸鱼模式上一章 / 下一章 |
 | `Esc` | 关闭目录 / 设置面板 |
 
 > 上一章/下一章按键可在 VS Code 设置里改：`novelReader.shortcutPrevChapter` / `novelReader.shortcutNextChapter`，写法如 `ctrl+shift+p`、`alt+[`、`alt+arrowleft`；**留空即禁用**。修改后立即生效（阅读页重新打开时会带上最新配置）。
@@ -217,6 +234,7 @@ npm run compile
 | `novelReader.lineHeight` | number | `1.8` | 1.2–2.8 |
 | `novelReader.paragraphSpacing` | number | `0.8` | 0–2（em） |
 | `novelReader.restoreOnStartup` | boolean | `true` | 上次退出时阅读页开着，重开 VS Code 就原样恢复（章节 + 章内滚动位置）。设为 `false` 则丢弃该页签 |
+| `novelReader.slackerLanguage` | string | `javascript` | 摸鱼模式伪装的编程语言，可选 `javascript` / `typescript` / `python` / `java` / `go` / `csharp` / `cpp` / `rust` / `php` / `ruby` / `sql` / `html` / `css` / `shellscript` |
 | `novelReader.contentWidth` | number | `720` | 480–4000（像素）；面板提供视口比例档 33.33%/55.55%/66.66%/77.77%（随窗口自适应）或自定义像素，超出窗口时横向滚动 |
 | `novelReader.theme` | string | `sepia` | `white` / `beige` / `sepia` / `green` / `blue` / `dark` |
 | `novelReader.shortcutPrevChapter` | string | `alt+arrowleft` | 阅读页内「上一章」快捷键，如 `ctrl+shift+p`；留空禁用 |

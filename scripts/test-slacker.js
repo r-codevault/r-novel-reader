@@ -1,0 +1,318 @@
+/**
+ * test-slacker.js — 摸鱼模式测试
+ * 用法: node scripts/test-slacker.js
+ *
+ * 覆盖: 注释折行 / 伪代码生成(默认 JS + 全语言注释前缀 + 块注释转义 + 种子稳定)
+ *       虚拟文档 URI 往返 / SlackerController(打开/翻章/越界/老板键/缓存)
+ *       命令与快捷键清单(package.json + extension.ts 接线)
+ */
+
+'use strict';
+
+const assert = require('assert');
+const Module = require('module');
+
+// ---------------------------------------------------------------- vscode 桩
+
+class FakeUri {
+  constructor(parts) { Object.assign(this, parts); }
+  static parse(s) {
+    const m = /^(\w+):\/\/([^/]*)([^?]*)\??(.*)$/.exec(s);
+    assert.ok(m, `Uri.parse 无法解析: ${s}`);
+    return new FakeUri({
+      scheme: m[1], authority: m[2], path: m[3], query: m[4] || '',
+      fsPath: decodeURIComponent(m[3]), toString: () => s,
+    });
+  }
+  static file(p) {
+    return new FakeUri({ scheme: 'file', path: p, fsPath: p, query: '', toString: () => p });
+  }
+}
+
+const statusMsgs = [];
+const vscodeStub = {
+  Uri: FakeUri,
+  EventEmitter: class {
+    constructor() { this.listeners = []; }
+    get event() { return (fn) => { this.listeners.push(fn); return { dispose() {} }; }; }
+    fire(v) { this.listeners.forEach((l) => l(v)); }
+    dispose() {}
+  },
+  ViewColumn: { One: 1, Two: 2 },
+  ConfigurationTarget: { Global: 1 },
+  window: {
+    showTextDocument: async () => ({ viewColumn: 1 }),
+    showInformationMessage: async () => undefined,
+    showQuickPick: async () => undefined,
+    setStatusBarMessage: (msg) => { statusMsgs.push(msg); return { dispose() {} }; },
+    tabGroups: { all: [], close: async () => {} },
+  },
+  workspace: {
+    openTextDocument: async () => ({}),
+    registerTextDocumentContentProvider: () => ({ dispose() {} }),
+  },
+};
+
+const origLoad = Module._load;
+Module._load = function (request, parent, isMain) {
+  if (request === 'vscode') { return vscodeStub; }
+  return origLoad.call(this, request, parent, isMain);
+};
+
+const {
+  SLACKER_SCHEME, LANGS, getLang, wrapText, buildFakeCode, slackerUri,
+  hashSeed, SlackerController,
+} = require('../dist/slacker');
+
+// ---------------------------------------------------------------- 样例数据
+
+const NOVEL = {
+  filePath: 'D:/books/吞噬星空2.txt',
+  bookTitle: '吞噬星空2',
+  author: '我吃西红柿',
+  chapters: [
+    { index: 0, title: '第1章 起源', content: '夜色渐深，罗峰站在楼顶。\n城市的灯火在他脚下延绵。', wordCount: 20 },
+    { index: 1, title: '第2章 试炼', content: '第二天的清晨来得很快，雾气还没有散去。', wordCount: 18 },
+  ],
+};
+
+function fakeNovel(paras) {
+  return { ...NOVEL, chapters: [{ index: 0, title: '第1章 起源', content: paras.join('\n'), wordCount: 10 }] };
+}
+
+let passed = 0;
+async function ok(name, fn) {
+  try {
+    await fn();
+    passed += 1;
+    console.log(`  ${name}: 通过`);
+  } catch (err) {
+    console.error(`  ${name}: 失败 -> ${err.message}`);
+    process.exitCode = 1;
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------- 注释折行
+
+console.log('[摸鱼模式 · 注释折行]');
+ok('短文本单行', () => {
+  assert.deepStrictEqual(wrapText('你好世界'), ['你好世界']);
+});
+ok('长文本按宽度折行且不丢字', () => {
+  const text = '这是一段很长很长的小说正文内容'.repeat(8);
+  const lines = wrapText(text, 46);
+  assert.ok(lines.length > 1);
+  assert.ok(lines.every((l) => l.length <= 46));
+  assert.strictEqual(lines.join(''), text);
+});
+ok('空白规范化', () => {
+  assert.deepStrictEqual(wrapText('  你好   世界  '), ['你好 世界']);
+  assert.deepStrictEqual(wrapText('   '), []);
+});
+
+// ---------------------------------------------------------------- 语言表
+
+console.log('[摸鱼模式 · 语言表]');
+ok(`支持 ${LANGS.length} 种语言且默认 JavaScript 置顶`, () => {
+  assert.ok(LANGS.length >= 14, `实际 ${LANGS.length}`);
+  assert.strictEqual(LANGS[0].id, 'javascript');
+});
+ok('id / ext 无重复', () => {
+  assert.strictEqual(new Set(LANGS.map((l) => l.id)).size, LANGS.length);
+  assert.strictEqual(new Set(LANGS.map((l) => l.ext)).size, LANGS.length);
+});
+ok('getLang 未知 id 回退 JavaScript', () => {
+  assert.strictEqual(getLang('nope').id, 'javascript');
+  assert.strictEqual(getLang(undefined).id, 'javascript');
+});
+
+// ---------------------------------------------------------------- 代码生成
+
+console.log('[摸鱼模式 · 伪代码生成]');
+const src = { chapterTitle: '第274章 雨澜城', paragraphs: ['雨澜城的清晨，薄雾还未散尽。', '罗峰站在城主府的了望塔上远眺。'] };
+
+ok('默认 JS: 每个段落以行注释出现', () => {
+  const code = buildFakeCode(src, 'javascript', 42);
+  const commentLines = code.split('\n').filter((l) => l.startsWith('// '));
+  assert.ok(commentLines.length >= 2);
+  for (const p of src.paragraphs) {
+    const head = p.slice(0, 8);
+    assert.ok(commentLines.some((l) => l.includes(head)), `缺少段落注释: ${head}`);
+  }
+});
+ok('伪代码包含真实感片段(函数/配置)', () => {
+  const code = buildFakeCode(src, 'javascript', 42);
+  assert.ok(/function |const |=>/.test(code), '缺少 JS 代码特征');
+});
+ok('章节标题以批次注释出现', () => {
+  const code = buildFakeCode(src, 'javascript', 42);
+  assert.ok(code.includes('[batch 1]'), '缺少批次注释');
+  assert.ok(code.includes('第274章 雨澜城'), '缺少章节标题');
+});
+ok('种子稳定: 同参数输出一致, 异种子不同', () => {
+  const a = buildFakeCode(src, 'javascript', 123456);
+  const b = buildFakeCode(src, 'javascript', 123456);
+  const c = buildFakeCode(src, 'javascript', 654321);
+  assert.strictEqual(a, b);
+  assert.notStrictEqual(a, c);
+});
+ok('全部语言可生成且段落注释前缀正确', () => {
+  for (const lang of LANGS) {
+    const code = buildFakeCode(src, lang.id, 7);
+    assert.ok(code.trim().length > 50, `${lang.id} 输出过短`);
+    const head = src.paragraphs[0].slice(0, 6);
+    const lines = code.split('\n');
+    const hit = lines.find((l) => l.includes(head));
+    assert.ok(hit, `${lang.id} 缺少段落注释`);
+    const prefixes = { javascript: '//', typescript: '//', python: '#', java: '//', go: '//', csharp: '//', cpp: '//', rust: '//', php: '//', ruby: '#', sql: '--', html: '<!--', css: '/*', shellscript: '#' };
+    assert.ok(hit.trimStart().startsWith(prefixes[lang.id]), `${lang.id} 注释前缀错误: ${hit}`);
+  }
+});
+ok('块注释语言转义闭合符(段落含 */ 或 -->)', () => {
+  const paras = ['这段里有闭合符号 */ 和 --> 必须被转义'];
+  const css = buildFakeCode({ chapterTitle: 't', paragraphs: paras }, 'css', 3);
+  const cline = css.split('\n').find((l) => l.includes('这段里有闭合符号'));
+  assert.ok(cline.startsWith('/* ') && cline.endsWith(' */'), `css 注释行格式异常: ${cline}`);
+  assert.ok(!cline.slice(3, -3).includes('*/'), `css 注释未转义 */: ${cline}`);
+  const html = buildFakeCode({ chapterTitle: 't', paragraphs: paras }, 'html', 3);
+  const hline = html.split('\n').find((l) => l.includes('这段里有闭合符号'));
+  assert.ok(hline.startsWith('<!-- ') && hline.endsWith(' -->'), `html 注释行格式异常: ${hline}`);
+  assert.ok(!hline.slice(5, -4).includes('-->'), `html 注释未转义 -->: ${hline}`);
+});
+ok('空段落被过滤', () => {
+  const code = buildFakeCode({ chapterTitle: 'x', paragraphs: ['', '   ', '有内容的一段'] }, 'javascript', 5);
+  assert.ok(code.includes('有内容的一段'));
+});
+
+// ---------------------------------------------------------------- URI
+
+console.log('[摸鱼模式 · 虚拟文档 URI]');
+ok('URI 往返: scheme/扩展名/query 可解析', () => {
+  const lang = getLang('python');
+  const uri = slackerUri(NOVEL, 1, lang);
+  assert.strictEqual(uri.scheme, SLACKER_SCHEME);
+  assert.ok(uri.path.endsWith('.py'), `扩展名错误: ${uri.path}`);
+  const q = new URLSearchParams(uri.query);
+  assert.strictEqual(q.get('book'), NOVEL.filePath);
+  assert.strictEqual(q.get('idx'), '1');
+  assert.strictEqual(q.get('lang'), 'python');
+});
+ok('章节名特殊字符被清洗', () => {
+  const n = { ...NOVEL, chapters: [{ index: 0, title: '第1章: 起源/试炼?', content: 'x', wordCount: 1 }] };
+  const uri = slackerUri(n, 0, getLang('javascript'));
+  assert.ok(!/[/?]/.test(decodeURIComponent(uri.path.slice(1))), `路径含非法字符: ${uri.path}`);
+});
+
+// ---------------------------------------------------------------- Controller
+
+console.log('[摸鱼模式 · 会话控制]');
+
+function makeController(novel, tabState) {
+  const progress = [];
+  const langCfg = { value: 'javascript' };
+  const ctrl = new SlackerController({
+    getNovel: async () => novel,
+    getLanguage: () => langCfg.value,
+    setLanguage: (id) => { langCfg.value = id; return Promise.resolve(); },
+    onProgress: (fp, idx) => progress.push([fp, idx]),
+  });
+  ctrl.register();
+  return { ctrl, progress, langCfg };
+}
+
+(async () => {
+  ok('open: 打开当前进度章节并写回书架', async () => {
+    statusMsgs.length = 0;
+    const { ctrl, progress } = makeController(NOVEL);
+    await ctrl.open(NOVEL, 0);
+    assert.deepStrictEqual(progress, [[NOVEL.filePath, 0]]);
+  });
+  ok('provideTextDocumentContent: 生成并缓存, 二次取同内容', async () => {
+    const { ctrl } = makeController(NOVEL);
+    await ctrl.open(NOVEL, 0); // 写入 novels/contents 缓存
+    const uri = slackerUri(NOVEL, 0, getLang('javascript'));
+    const first = ctrl.provideTextDocumentContent(uri);
+    assert.ok(first.includes('// '));
+    assert.ok(first.includes('罗峰站在'));
+    assert.strictEqual(ctrl.provideTextDocumentContent(uri), first, '缓存不一致');
+  });
+  ok('step: 下一章/上一章, 越界停在原章并提示', async () => {
+    statusMsgs.length = 0;
+    const { ctrl, progress } = makeController(NOVEL);
+    await ctrl.open(NOVEL, 0);
+    await ctrl.step(1);
+    assert.deepStrictEqual(progress.at(-1), [NOVEL.filePath, 1]);
+    await ctrl.step(1); // 越界
+    assert.ok(statusMsgs.some((m) => m.includes('最后一章')), `缺少越界提示: ${statusMsgs}`);
+    assert.strictEqual(progress.at(-1)[1], 1);
+    await ctrl.step(-1);
+    assert.strictEqual(progress.at(-1)[1], 0);
+    await ctrl.step(-1); // 越界
+    assert.ok(statusMsgs.some((m) => m.includes('第一章')));
+    assert.strictEqual(progress.at(-1)[1], 0);
+  });
+  ok('boss: 关闭全部 novelfish 标签页, 忽略其它文档', async () => {
+    const fishTab = { input: { uri: slackerUri(NOVEL, 0, getLang('javascript')) } };
+    const fileTab = { input: { uri: FakeUri.file('D:/work/index.js') } };
+    const closed = [];
+    vscodeStub.window.tabGroups = {
+      all: [{ tabs: [fishTab, fileTab] }, { tabs: [fishTab] }],
+      close: async (tabs) => { closed.push(...tabs); },
+    };
+    const { ctrl } = makeController(NOVEL);
+    await ctrl.open(NOVEL, 0);
+    await ctrl.boss();
+    assert.strictEqual(closed.length, 2, `应关闭 2 个摸鱼标签, 实际 ${closed.length}`);
+    assert.ok(closed.every((t) => t.input.uri.scheme === SLACKER_SCHEME));
+    vscodeStub.window.tabGroups = { all: [], close: async () => {} };
+  });
+  ok('pickLanguage: 取消选择不动作', async () => {
+    const { ctrl, langCfg } = makeController(NOVEL);
+    await ctrl.pickLanguage(); // QuickPick 返回 undefined
+    assert.strictEqual(langCfg.value, 'javascript');
+  });
+
+  // ---------------------------------------------------------------- 清单断言
+
+  console.log('[摸鱼模式 · 命令与快捷键清单]');
+  const fs = require('fs');
+  const path = require('path');
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  const cmds = new Set(pkg.contributes.commands.map((c) => c.command));
+  ok('commands: 5 个摸鱼命令齐备', () => {
+    for (const c of ['slackerStart', 'slackerNext', 'slackerPrev', 'slackerLanguage', 'slackerBoss']) {
+      assert.ok(cmds.has(`novelReader.${c}`), `缺少命令 novelReader.${c}`);
+    }
+  });
+  ok('keybindings: 老板键 alt+b, 翻章 ctrl+alt+←/→, 均限定 novelfish', () => {
+    const kb = pkg.contributes.keybindings || [];
+    const byCmd = Object.fromEntries(kb.map((k) => [k.command, k]));
+    assert.strictEqual(byCmd['novelReader.slackerBoss'].key, 'alt+b');
+    assert.strictEqual(byCmd['novelReader.slackerNext'].key, 'ctrl+alt+arrowright');
+    assert.strictEqual(byCmd['novelReader.slackerPrev'].key, 'ctrl+alt+arrowleft');
+    for (const k of kb.filter((k) => k.command.startsWith('novelReader.slacker'))) {
+      assert.ok(k.when && k.when.includes('activeEditorScheme == novelfish'), `${k.command} 缺少 when 限定`);
+    }
+  });
+  ok('configuration: slackerLanguage 默认 javascript 且枚举与语言表一致', () => {
+    const prop = pkg.contributes.configuration.properties['novelReader.slackerLanguage'];
+    assert.strictEqual(prop.default, 'javascript');
+    assert.deepStrictEqual(
+      new Set(prop.enum),
+      new Set(LANGS.map((l) => l.id)),
+      '枚举与 LANGS 不一致'
+    );
+  });
+  ok('extension.ts: 摸鱼命令全部接线', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
+    for (const c of ['slackerStart', 'slackerNext', 'slackerPrev', 'slackerLanguage', 'slackerBoss']) {
+      assert.ok(src.includes(`'novelReader.${c}'`), `extension.ts 未注册 ${c}`);
+    }
+    assert.ok(src.includes('new SlackerController'), '缺少控制器实例化');
+  });
+
+  if (process.exitCode !== 1) {
+    console.log(`\n摸鱼模式测试全部通过 ✔ (${passed} 项)`);
+  }
+})().catch(() => {});
