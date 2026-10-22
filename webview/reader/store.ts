@@ -92,7 +92,6 @@ export function applyThemeVars(s: ReadingSettings): void {
   root.style.setProperty('--line-height', String(s.lineHeight));
   root.style.setProperty('--para-spacing', s.paragraphSpacing + 'em');
   applyContentWidth(s);
-  syncXScrollbar();
 }
 
 /**
@@ -112,30 +111,12 @@ function applyContentWidth(s: ReadingSettings): void {
 }
 
 // 比例档需要跟随窗口: 尺寸变化时只重算栏宽(不重跑整套主题变量)
+// 注: 文档出现横向滚动条时, fixed bottom:0 的状态栏由浏览器自动落在滚动条上方,
+// 无需(也不能)再手动上移让位 —— v1.45.8 之前用 --x-sb 补偿反而多抬一截, 露出正文
 window.addEventListener('resize', function () {
   if (!state.settings) { return; }
   if ((Number(state.settings.widthRatio) || 0) > 0) { applyContentWidth(state.settings); }
-  syncXScrollbar();
 });
-
-let xSbPending = false;
-/**
- * 横向滚动条实测高度 -> --x-sb。
- * 自定义宽度超出窗口时, 文档底部会出现横向滚动条, 固定状态栏会把它盖住, 故让状态栏上移让位。
- * (每帧至多量一次, 避免拖拽时反复触发布局)
- */
-export function syncXScrollbar(): void {
-  if (xSbPending) { return; }
-  xSbPending = true;
-  requestAnimationFrame(function () {
-    xSbPending = false;
-    const root = document.documentElement;
-    const h = root.dataset.widthMode === 'custom'
-      ? Math.max(0, window.innerHeight - root.clientHeight)
-      : 0;
-    root.style.setProperty('--x-sb', h + 'px');
-  });
-}
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingPatch: Partial<ReadingSettings> = {};

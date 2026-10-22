@@ -6,7 +6,7 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { state, gotoChapter, type NoteItem } from '../composables/vscode';
 import { findParagraph } from '../../../src/noteAnchor';
-import { persistSettings, CONTENT_WIDTH, syncXScrollbar, peekSuppressParaClick, setSuppressParaClick } from '../store';
+import { persistSettings, CONTENT_WIDTH, peekSuppressParaClick, setSuppressParaClick } from '../store';
 
 // 与 settings.ts 的 CONTENT_WIDTH 一致: 上限放宽到 4000, 允许拖出窗口宽度(横向滚动)
 const WIDTH_MIN = CONTENT_WIDTH.min;
@@ -184,7 +184,6 @@ function moveWidthDrag(e: PointerEvent): void {
   const next = Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, Math.round(widthDrag.startW + factor * delta)));
   document.documentElement.style.setProperty('--content-width', next + 'px');
   positionHandles();
-  syncXScrollbar();
 }
 
 function endWidthDrag(e: PointerEvent): void {
@@ -209,7 +208,6 @@ onMounted(function () {
   document.addEventListener('pointerup', function (e: PointerEvent) { endWidthDrag(e); });
   document.addEventListener('pointercancel', function (e: PointerEvent) { endWidthDrag(e); });
   window.addEventListener('resize', positionHandles);
-  window.addEventListener('resize', syncXScrollbar);
   requestAnimationFrame(positionHandles);
 });
 

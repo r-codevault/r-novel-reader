@@ -248,7 +248,7 @@
 
   /* ---------- 底部状态栏(含整书进度条) ---------- */
   .statusbar {
-    position: fixed; left: var(--menu-w, 48px); right: 0; bottom: var(--x-sb, 0px);
+    position: fixed; left: var(--menu-w, 48px); right: 0; bottom: 0;
     display: flex; flex-direction: column;
     font-size: 12px;
     /* 状态栏属 chrome 层: 用 VS Code UI 字体, 与正文阅读字体解耦(否则会跟着宋体/黑体变) */
@@ -963,7 +963,7 @@
   /* 返回上次阅读位置: 边框固定灰色(与界面一致), 悬停哪个文字哪个变金; 章名两行截断 */
   .note-return {
     position: fixed; z-index: 44;
-    right: 18px; bottom: calc(var(--x-sb, 0px) + 56px);
+    right: 18px; bottom: 56px;
     display: flex; align-items: stretch;
     max-width: calc(100vw - 36px);
     background: var(--sp-bg);
