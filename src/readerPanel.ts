@@ -356,12 +356,24 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
         void ReaderPanel.current?._panel.webview.postMessage({ type: 'library', path });
     }
 
-    /** 推送摸鱼会话状态(侧边栏「摸鱼模式」高亮) */
+    /** 摸鱼会话当前状态: 扩展侧注入的实时查询(优先), 兜底用最近一次推送值 */
+    static slackerStateProvider: (() => boolean) | undefined;
+    private static _slackerActiveState = false;
+
+    /** 推送摸鱼会话状态(侧边栏「摸鱼模式」高亮); 同时记住, 供新开面板 init 补发 */
     static setSlackerActive(active: boolean): void {
+        ReaderPanel._slackerActiveState = active;
         void ReaderPanel.current?._panel.webview.postMessage({
             type: 'slackerActive',
             payload: active,
         });
+    }
+
+    /** 当前摸鱼会话是否开启(静态查询, 供 _postInit 把状态带给新 webview) */
+    private static _currentSlackerActive(): boolean {
+        return ReaderPanel.slackerStateProvider
+            ? ReaderPanel.slackerStateProvider()
+            : ReaderPanel._slackerActiveState;
     }
 
     /**
@@ -638,6 +650,12 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
         };
         this._openSettingsOnLoad = false;
         this._panel.webview.postMessage({ type: 'init', payload });
+        // 摸鱼会话状态补发: webview 是新实例(state.slackerActive 初始 false),
+        // 若会话早已开启(先摸鱼后开阅读器), 不补发会导致侧边栏高亮丢失
+        this._panel.webview.postMessage({
+            type: 'slackerActive',
+            payload: ReaderPanel._currentSlackerActive(),
+        });
     }
 
     private _postChapter(): void {

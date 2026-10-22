@@ -720,6 +720,8 @@ export function activate(context: vscode.ExtensionContext): void {
         getProgress: (filePath: string) => shelf.get(filePath)?.chapterIndex ?? -1,
         onStateChange: (active: boolean) => ReaderPanel.setSlackerActive(active),
     });
+    // 阅读面板(新开/重开)init 时实时查询摸鱼会话状态, 保证侧边栏高亮不丢
+    ReaderPanel.slackerStateProvider = () => slacker.isActive;
     context.subscriptions.push(slacker.register());
 
 

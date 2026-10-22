@@ -544,8 +544,14 @@ function makeController(novel, tabState) {
       assert.ok(src.includes(`'novelReader.${c}'`), `extension.ts 未注册 ${c}`);
     }
     assert.ok(src.includes('new SlackerController'), '缺少控制器实例化');
+    // 先摸鱼后开阅读器: 面板 init 时要补发会话状态(高亮不丢)
+    assert.ok(src.includes('ReaderPanel.slackerStateProvider = () => slacker.isActive'),
+      'extension.ts 未注入摸鱼状态实时查询');
     const panel = fs.readFileSync(path.join(__dirname, '..', 'src', 'readerPanel.ts'), 'utf8');
     assert.ok(panel.includes("'slackerStart'"), '阅读面板未转发摸鱼入口消息');
+    assert.ok(panel.includes('slackerStateProvider'), '阅读面板缺少摸鱼状态查询钩子');
+    const postInit = panel.slice(panel.indexOf('private _postInit'));
+    assert.ok(/slackerActive/.test(postInit), '_postInit 未向新 webview 补发 slackerActive');
   });
 
   if (process.exitCode !== 1) {
