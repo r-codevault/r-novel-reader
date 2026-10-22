@@ -1,0 +1,267 @@
+/**
+ * rules/evalRule.ts — legado 规则求值(统一入口)
+ *
+ * 处理顺序(与 legado 的行为尽量一致):
+ *   1. `a||b` 兜底: 前者无结果再用后者
+ *   2. `{{...}}` 插值: `{{key}}` `{{page}}` `{{$.a.b}}`(JSON) / `{{book.title}}`
+ *   3. 规则前缀: `@js:` / `<js>…</js>` / `@css:` / `@json:`, 无前缀按内容类型推断
+ *   4. 提取后缀: `@text` `@ownText` `@html` `@href` `@src` `@attr=xxx`
+ *   5. `##正则##替换` 后处理(全局替换, 支持 $1)
+ *
+ * 不支持 XPath: 抛出 UnsupportedRuleError, 由调用方把该源标为「暂不支持」。
+ */
+import { HNode, innerHtml, nodeText, parseHtml } from './html';
+import { selectAll } from './css';
+import { queryJson } from './jsonPath';
+import { resolveUrl } from './url';
+import { runJsScript, SandboxHttp, JsSandboxError } from './jsSandbox';
+
+export type RuleErrorKind = 'unsupported' | 'syntax' | 'empty' | 'network' | 'js';
+
+export class RuleError extends Error {
+    constructor(public readonly kind: RuleErrorKind, message: string) {
+        super(message);
+        this.name = 'RuleError';
+    }
+}
+
+export class UnsupportedRuleError extends RuleError {
+    constructor(message: string) {
+        super('unsupported', message);
+        this.name = 'UnsupportedRuleError';
+    }
+}
+
+export interface RuleContext {
+    /** 页面文本(HTML/JSON 均可) */
+    html?: string;
+    /** 已解析的 JSON(内容像 JSON 时由调用方传入) */
+    json?: unknown;
+    /** 已解析的 DOM 子树(列表逐项求值时避免重复解析整页) */
+    node?: HNode;
+    baseUrl: string;
+    key?: string;
+    page?: number;
+    book?: Record<string, unknown>;
+    sourceName?: string;
+    http?: SandboxHttp;
+    vars?: Record<string, string>;
+}
+
+/** 按顶层 `||` 切分(尊重引号与括号) */
+export function splitFallback(rule: string): string[] {
+    const out: string[] = [];
+    let depth = 0;
+    let quote = '';
+    let start = 0;
+    for (let i = 0; i < rule.length; i++) {
+        const ch = rule[i];
+        if (quote) {
+            if (ch === quote && rule[i - 1] !== '\\') { quote = ''; }
+            continue;
+        }
+        if (ch === '"' || ch === "'") { quote = ch; continue; }
+        if (ch === '(' || ch === '[') { depth++; continue; }
+        if (ch === ')' || ch === ']') { depth--; continue; }
+        if (ch === '|' && rule[i + 1] === '|' && depth === 0) {
+            out.push(rule.slice(start, i));
+            i++;
+            start = i + 1;
+        }
+    }
+    out.push(rule.slice(start));
+    return out;
+}
+
+/** `{{key}}` / `{{page}}` / `{{$.a.b}}` / `{{book.title}}` 插值 */
+export function interpolate(tpl: string, ctx: RuleContext): string {
+    if (!tpl || tpl.indexOf('{{') < 0) { return tpl; }
+    return tpl.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (whole, exprRaw: string) => {
+        const expr = exprRaw.trim();
+        if (expr === 'key') { return ctx.key || ''; }
+        if (expr === 'page') { return String(ctx.page === undefined ? 1 : ctx.page); }
+        if (expr.startsWith('$')) {
+            const values = queryJson(ctx.json, expr);
+            return values.length ? toStr(values[0]) : '';
+        }
+        if (expr.startsWith('book.') && ctx.book) {
+            const v = ctx.book[expr.slice(5)];
+            return v === undefined ? '' : toStr(v);
+        }
+        if (expr.startsWith('source.') && ctx.sourceName && expr === 'source.name') {
+            return ctx.sourceName;
+        }
+        if (ctx.vars && Object.prototype.hasOwnProperty.call(ctx.vars, expr)) {
+            return ctx.vars[expr];
+        }
+        return whole;
+    });
+}
+
+function toStr(v: unknown): string {
+    if (v === null || v === undefined) { return ''; }
+    if (typeof v === 'string') { return v; }
+    if (typeof v === 'number' || typeof v === 'boolean') { return String(v); }
+    try { return JSON.stringify(v); } catch { return String(v); }
+}
+
+const EXTRACT_RE = /@(text|ownText|html|href|src|attr=([A-Za-z0-9_:-]+))$/;
+
+interface ExtractSpec {
+    kind: 'text' | 'ownText' | 'html' | 'href' | 'src' | 'attr';
+    attr?: string;
+}
+
+function extractFromNode(node: HNode, spec: ExtractSpec | null, baseUrl: string): string {
+    if (!spec) { return nodeText(node).trim(); }
+    switch (spec.kind) {
+        case 'text': return nodeText(node).trim();
+        case 'ownText': return nodeText(node, true).trim();
+        case 'html': return innerHtml(node);
+        case 'href': return resolveUrl(baseUrl, node.attrs['href'] || '');
+        case 'src': return resolveUrl(baseUrl, node.attrs['src'] || '');
+        case 'attr': return node.attrs[spec.attr || ''] || '';
+        default: return '';
+    }
+}
+
+/** 判断一段内容是否像 JSON(书源站点大量 JSON API) */
+export function looksLikeJson(text: string): boolean {
+    const s = (text || '').trim();
+    if (!s) { return false; }
+    if (s[0] !== '{' && s[0] !== '[') { return false; }
+    try { JSON.parse(s); return true; } catch { return false; }
+}
+
+function applyRegex(value: string, pattern: string, repl: string): string {
+    if (!pattern) { return value; }
+    try {
+        return value.replace(new RegExp(pattern, 'g'), repl);
+    } catch {
+        // 非法正则不阻断整条规则: 保留原值
+        return value;
+    }
+}
+
+/** JSON 列表项的标量字段 -> 沙箱全局(legado 脚本可直接引用字段名) */
+function jsonGlobals(json: unknown): Record<string, unknown> | undefined {
+    if (!json || typeof json !== 'object' || Array.isArray(json)) { return undefined; }
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(json as Record<string, unknown>)) {
+        if (v === null || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+            out[k] = v;
+        }
+    }
+    return Object.keys(out).length ? out : undefined;
+}
+
+async function evalAlternative(raw: string, ctx: RuleContext): Promise<string[]> {
+    let rule = interpolate(raw.trim(), ctx);
+    if (!rule) { return []; }
+
+    // ##正则##替换
+    let regex: { pattern: string; repl: string } | null = null;
+    const hashParts = rule.split('##');
+    if (hashParts.length >= 3) {
+        rule = hashParts[0];
+        regex = {
+            pattern: hashParts[1],
+            repl: hashParts.slice(2).join('##'),
+        };
+    }
+
+    // @js / <js>
+    const jsMatch = /^@js:\s*([\s\S]*)$/.exec(rule);
+    const tagMatch = /^<js>\s*([\s\S]*?)\s*<\/js>$/.exec(rule);
+    if (jsMatch || tagMatch) {
+        const script = (jsMatch ? jsMatch[1] : tagMatch![1]);
+        let out = '';
+        try {
+            out = await runJsScript(script, {
+                baseUrl: ctx.baseUrl,
+                key: ctx.key,
+                page: ctx.page,
+                book: ctx.book,
+                sourceName: ctx.sourceName,
+                http: ctx.http,
+                vars: ctx.vars,
+                globals: jsonGlobals(ctx.json),
+            });
+        } catch (err) {
+            if (err instanceof JsSandboxError) {
+                const unsupported = /暂不支持/.test(err.message);
+                throw new RuleError(unsupported ? 'unsupported' : 'js', err.message);
+            }
+            throw new RuleError('js', (err as Error).message);
+        }
+        if (!out) { return []; }
+        let values = [out];
+        if (regex) { values = values.map((v) => applyRegex(v, regex!.pattern, regex!.repl)); }
+        return values.filter((v) => v.trim() !== '');
+    }
+
+    // XPath 明确不支持
+    if (/^@xpath:/i.test(rule) || rule.startsWith('//') || rule.startsWith('/html')) {
+        throw new UnsupportedRuleError('暂不支持 XPath 规则: ' + rule);
+    }
+
+    // 提取后缀
+    let spec: ExtractSpec | null = null;
+    const ex = EXTRACT_RE.exec(rule);
+    if (ex) {
+        spec = { kind: ex[2] ? 'attr' : (ex[1] as ExtractSpec['kind']), attr: ex[2] };
+        rule = rule.slice(0, ex.index);
+    }
+
+    let values: string[] = [];
+    const cssPrefix = /^@css:\s*([\s\S]*)$/.exec(rule);
+    const jsonPrefix = /^@json:\s*([\s\S]*)$/.exec(rule);
+
+    if (cssPrefix) {
+        if (!ctx.node && !ctx.html) { return []; }
+        const nodes = selectAll(ctx.node || parseHtml(ctx.html || ''), cssPrefix[1].trim());
+        values = nodes.map((n) => extractFromNode(n, spec, ctx.baseUrl));
+    } else if (jsonPrefix) {
+        const raw2 = queryJson(ctx.json, jsonPrefix[1].trim());
+        values = raw2.map(toStr);
+    } else {
+        // 无前缀: JSON 内容且规则像路径 -> JSON; 否则按 CSS
+        const looksPath = /^[\w$.*\[\]'"-]+$/.test(rule) && (rule.indexOf('.') >= 0 || rule.indexOf('[') >= 0 || rule.startsWith('$'));
+        if (ctx.json !== undefined && looksPath && ctx.html === undefined && ctx.node === undefined) {
+            values = queryJson(ctx.json, rule).map(toStr);
+        } else if (ctx.node || ctx.html) {
+            const nodes = selectAll(ctx.node || parseHtml(ctx.html || ''), rule);
+            values = nodes.map((n) => extractFromNode(n, spec, ctx.baseUrl));
+        } else if (ctx.json !== undefined) {
+            values = queryJson(ctx.json, rule).map(toStr);
+        }
+    }
+
+    if (regex) { values = values.map((v) => applyRegex(v, regex!.pattern, regex!.repl)); }
+    return values.map((v) => v.trim()).filter((v) => v !== '');
+}
+
+/** 求值一条规则, 返回所有候选值 */
+export async function evalRule(rule: string | undefined | null, ctx: RuleContext): Promise<string[]> {
+    if (!rule) { return []; }
+    const alts = splitFallback(String(rule));
+    let lastErr: Error | null = null;
+    for (const alt of alts) {
+        const text = alt.trim();
+        if (!text) { continue; }
+        try {
+            const values = await evalAlternative(text, ctx);
+            if (values.length) { return values; }
+        } catch (err) {
+            lastErr = err as Error;
+        }
+    }
+    if (lastErr) { throw lastErr; }
+    return [];
+}
+
+/** 求值并取第一个值 */
+export async function evalRuleOne(rule: string | undefined | null, ctx: RuleContext): Promise<string> {
+    const values = await evalRule(rule, ctx);
+    return values.length ? values[0] : '';
+}

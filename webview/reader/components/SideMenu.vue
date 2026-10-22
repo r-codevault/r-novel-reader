@@ -22,9 +22,9 @@ function toggleStatusBar(): void {
 }
 
 interface MenuItem {
-  id: 'shelf' | 'catalog' | 'notes' | 'settings' | 'storage';
+  id: 'shelf' | 'catalog' | 'notes' | 'settings' | 'storage' | 'source';
   name: string;
-  key: 'shelfOpen' | 'catalogOpen' | 'notesOpen' | 'settingsOpen' | 'storageOpen';
+  key: 'shelfOpen' | 'catalogOpen' | 'notesOpen' | 'settingsOpen' | 'storageOpen' | 'sourceOpen';
   /** 完整内联 SVG(fill/stroke 由各自定义, 颜色统一用 currentColor 跟随主题) */
   svg: string;
 }
@@ -78,6 +78,14 @@ const SVG_SETTINGS =
   '<circle cx="353.5" cy="352" r="86" fill="var(--sp-accent)"/>' +
   '</svg>';
 
+/** 书源: 云朵 + 下载箭头(箭头用主题强调色, 与其它图标语言一致) */
+const SVG_SOURCE =
+  '<svg viewBox="0 0 707 704" aria-hidden="true">' +
+  '<path d="M196 500 C 116 500 62 442 62 372 C 62 306 112 252 176 244 C 194 158 268 96 356 96 C 456 96 536 170 544 268 C 612 280 660 334 660 400 C 660 452 630 490 590 512" fill="none" stroke="currentColor" stroke-width="46" stroke-linecap="round"/>' +
+  '<path d="M353 430 V 590" fill="none" stroke="var(--sp-accent)" stroke-width="52" stroke-linecap="round"/>' +
+  '<path d="M282 528 L 353 604 L 424 528" fill="none" stroke="var(--sp-accent)" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/>' +
+  '</svg>';
+
 /** 存储位置: 立方体 + 内部强调色块 —— 设计稿矢量版 */
 const SVG_STORAGE =
   '<svg viewBox="0 0 707 704" aria-hidden="true">' +
@@ -94,6 +102,7 @@ const items: MenuItem[] = [
   { id: 'notes', name: '笔记', key: 'notesOpen', svg: SVG_NOTES },
   { id: 'settings', name: '阅读设置', key: 'settingsOpen', svg: SVG_SETTINGS },
   { id: 'storage', name: '存储位置', key: 'storageOpen', svg: SVG_STORAGE },
+  { id: 'source', name: '书源', key: 'sourceOpen', svg: SVG_SOURCE },
 ];
 
 /** 当前书的笔记条数(角标; 0 不显示) */
@@ -112,6 +121,7 @@ function toggle(item: MenuItem): void {
   state.shelfOpen = false;
   state.storageOpen = false;
   state.notesOpen = false;
+  state.sourceOpen = false;
   state[key] = willOpen;
 }
 

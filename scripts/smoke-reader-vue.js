@@ -107,7 +107,7 @@ assert(
   '滚动条应主题化(默认 Chromium 深色滚动条与浅色主题不符)'
 );
 assert(
-  /#catalogPanel,\s*#settingsPanel,\s*#shelfPopup,\s*#storagePopup,\s*#notesPopup\s*\{[^}]*background:\s*var\(--bg\)/.test(capturedHtml),
+  /#catalogPanel,\s*#settingsPanel,\s*#shelfPopup,\s*#storagePopup,\s*#notesPopup,\s*#sourcePopup\s*\{[^}]*background:\s*var\(--bg\)/.test(capturedHtml),
   '弹窗底色应统一为正文纸面色(--bg)'
 );
 assert(
@@ -473,18 +473,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!menuEl.classList.contains('expanded'), '点菜单按钮应收起');
   assert(document.documentElement.style.getPropertyValue('--menu-w') === '48px', '收起时 --menu-w 应为 48px');
   assert(
-    document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not([data-menu="slacker"])').length === 5,
-    '菜单应有 5 个弹窗功能项, 实际: ' + document.querySelectorAll('.menu-item').length + ' (含状态栏/摸鱼) / ' + document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not([data-menu="slacker"])').length + ' (弹窗项)'
+    document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not([data-menu="slacker"])').length === 6,
+    '菜单应有 6 个弹窗功能项, 实际: ' + document.querySelectorAll('.menu-item').length + ' (含状态栏/摸鱼) / ' + document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not([data-menu="slacker"])').length + ' (弹窗项)'
   );
-  assert(document.querySelectorAll('.menu-item[data-menu]').length === 7, '菜单共 7 项(状态栏开关 + 摸鱼入口)');
+  assert(document.querySelectorAll('.menu-item[data-menu]').length === 8, '菜单共 8 项(状态栏开关 + 摸鱼入口 + 书源)');
   assert(document.querySelector('.menu-item[data-menu="statusbar"]'), '菜单应有「状态栏」显隐开关');
   assert(document.querySelector('.menu-item[data-menu="slacker"]'), '菜单应有「摸鱼模式」入口');
   // 顺序: 书架 → 目录 → 状态栏 → 阅读设置 → 存储位置 → 摸鱼模式, 分割线在最下方
   const order = Array.from(document.querySelector('.menu').children).map((el) =>
     el.classList.contains('menu-divider') ? 'divider' : el.getAttribute('data-menu'));
   assert(
-    JSON.stringify(order) === JSON.stringify([null, 'divider', 'shelf', 'catalog', 'notes', 'statusbar', 'settings', 'storage', 'slacker']),
-    '菜单顺序应为 折叠按钮 + 分割线 + 书架/目录/笔记/状态栏/阅读设置/存储位置/摸鱼模式, 实际: ' + JSON.stringify(order)
+    JSON.stringify(order) === JSON.stringify([null, 'divider', 'shelf', 'catalog', 'notes', 'statusbar', 'settings', 'storage', 'source', 'slacker']),
+    '菜单顺序应为 折叠按钮 + 分割线 + 书架/目录/笔记/状态栏/阅读设置/存储位置/书源/摸鱼模式, 实际: ' + JSON.stringify(order)
   );
   // 摸鱼入口点击 -> postMessage slackerStart(转发到 novelReader.slackerStart 命令)
   {
@@ -1021,8 +1021,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     assert(/showStatusBar: boolean/.test(settingsSrc), '设置应包含 showStatusBar 字段');
     assert(/showStatusBar: true/.test(settingsSrc), 'showStatusBar 默认应为 true(显示)');
     assert(/'  "showStatusBar",'/.test(settingsSrc) || /"showStatusBar",/.test(settingsSrc), 'showStatusBar 应可持久化');
-    for (const need of ['novelReader.showBookshelf', 'novelReader.showChapters', 'novelReader.showSettings']) {
+    for (const need of ['novelReader.showBookshelf', 'novelReader.showChapters', 'novelReader.showSettings', 'novelReader.showSources']) {
       assert(cmds.includes(need), '弹窗入口命令应保留: ' + need);
+    }
+    for (const need of ['novelReader.importSourceFromUrl', 'novelReader.importSourceFromClipboard', 'novelReader.importSourceFromFile', 'novelReader.checkSources', 'novelReader.exportSources']) {
+      assert(cmds.includes(need), '书源命令应注册: ' + need);
     }
     assert(pkgJson.activationEvents.includes('onStartupFinished'), '启动自动恢复需 onStartupFinished');
     const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
@@ -1218,6 +1221,123 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   }
   }
 
+
+  // ================================================================ 书源(一期: 导入/管理/搜索)
+  console.log('[书源]');
+  // 1) 菜单打开 + 互斥
+  menuItem('catalog').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  menuItem('source').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert($('#sourcePopup').classList.contains('open'), '点菜单「书源」应打开书源面板');
+  assert(!$('#catalogPanel').classList.contains('open'), '打开书源应关闭目录(互斥)');
+
+  // 2) 空态 -> 去导入 -> 管理视图
+  assert(document.querySelector('#sourcePopup .src-empty'), '无书源时应显示空态引导');
+  document.querySelector('#sourcePopup [data-src-open-manage]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(document.querySelector('#sourcePopup .src-filter'), '点「去导入书源」应切到管理视图');
+
+  // 3) 扩展回推书源列表
+  sendMsg({ type: 'sources', items: [
+    { id: 's1', name: 'A站', url: 'https://a.com', group: '玄幻', enabled: true, searchUrl: 'https://a.com/s?q={{key}}', lastCheckOk: true, lastCheckMessage: '可用, 命中 3 条' },
+    { id: 's2', name: 'B站', url: 'https://b.com', group: '', enabled: true, searchUrl: 'https://b.com/s?q={{key}}' },
+    { id: 's3', name: 'C站', url: 'https://c.com', group: '', enabled: false, searchUrl: 'https://c.com/s?q={{key}}', lastCheckOk: false, lastCheckMessage: 'HTTP 404' },
+  ] });
+  await sleep(30);
+  assert(document.querySelectorAll('#sourcePopup .src-row').length === 3, '管理视图应渲染 3 个书源');
+  assert(document.querySelector('#sourcePopup .src-row .src-status.is-ok'), '可用书源应显示绿色状态');
+  assert(document.querySelector('#sourcePopup .src-row .src-status.is-bad'), '不可用书源应显示红色状态');
+  assert(document.querySelector('#sourcePopup .src-risk').textContent.includes('第三方'),
+    '管理页应有「书源来自第三方」提示');
+
+  // 4) 启停 / 编辑 / 两步删除 / 导入
+  posted.length = 0;
+  document.querySelector('#sourcePopup [data-src-toggle="s3"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceToggle' && m.id === 's3' && m.enabled === true),
+    '点开关应发送 sourceToggle(enabled=true)');
+
+  document.querySelector('#sourcePopup [data-src-edit="s1"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  const editName = document.querySelector('#sourcePopup [data-src-edit-name]');
+  assert(editName && editName.value === 'A站', '点编辑应带出原名');
+  editName.value = 'A站改名';
+  editName.dispatchEvent(new win.Event('input', { bubbles: true }));
+  posted.length = 0;
+  document.querySelector('#sourcePopup [data-src-edit-save]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceUpdate' && m.id === 's1' && m.name === 'A站改名'),
+    '保存编辑应发送 sourceUpdate');
+
+  posted.length = 0;
+  const srcDelBtn = document.querySelector('#sourcePopup [data-src-del="s2"]');
+  srcDelBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(srcDelBtn.textContent.includes('确认删除'), '第一次点删除应进入确认态');
+  assert(!posted.some((m) => m.type === 'sourceRemove'), '第一次点删除不应真的删除');
+  srcDelBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceRemove' && m.id === 's2'), '确认后应发送 sourceRemove');
+
+  posted.length = 0;
+  document.querySelector('#sourcePopup [data-src-import="url"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceImport' && m.mode === 'url'), '点「从 URL 导入」应发送 sourceImport(url)');
+
+  // 5) 搜索视图: 输入 + 回车 -> sourceSearch; 回包渲染结果
+  document.querySelector('#sourcePopup [data-src-tab="search"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(document.querySelectorAll('#sourcePopup .src-chip').length === 3, '书源勾选条应为「全部启用」+ 2 个启用源');
+  const input = document.querySelector('#sourcePopup [data-src-input]');
+  input.value = '遮天';
+  input.dispatchEvent(new win.Event('input', { bubbles: true }));
+  input.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  await sleep(30);
+  const searchMsg = posted.filter((m) => m.type === 'sourceSearch').pop();
+  assert(searchMsg && searchMsg.key === '遮天', '回车应发送 sourceSearch');
+  assert(typeof searchMsg.token === 'number', 'sourceSearch 应带 token');
+  assert(document.querySelector('#sourcePopup .src-hint').textContent.includes('正在搜索'),
+    '搜索中应显示提示');
+
+  sendMsg({ type: 'searchResults', token: searchMsg.token, done: true, errors: [
+    { sourceId: 's2', sourceName: 'B站', kind: 'timeout', message: '搜索超时(10s)' },
+  ], items: [
+    { sourceId: 's1', sourceName: 'A站', title: '遮天', author: '辰东', bookUrl: 'https://a.com/b/1', kind: '玄幻', wordCount: 6350000, lastChapter: '第1888章 完美世界' },
+    { sourceId: 's1', sourceName: 'A站', title: '完美世界', author: '辰东', bookUrl: 'https://a.com/b/2' },
+  ] });
+  await sleep(30);
+  assert(document.querySelectorAll('#sourcePopup .src-result').length === 2, '应渲染 2 条搜索结果');
+  assert(document.querySelector('#sourcePopup .src-result-title').textContent === '遮天', '结果标题应正确');
+  assert(document.querySelector('#sourcePopup .src-result-meta').textContent.includes('635 万字'),
+    '字数应折算为万字');
+  assert(document.querySelector('#sourcePopup .src-badge').textContent === 'A站', '应显示来源书源');
+  assert(document.querySelector('#sourcePopup .src-error').textContent.includes('搜索超时'),
+    '应展示单源错误');
+  assert(document.querySelector('#sourcePopup .src-hint').textContent.includes('找到 2 本'),
+    '结果统计应显示找到数量');
+  assert(document.querySelector('#sourcePopup .src-add').disabled, '一期「加入书架」应置灰');
+
+  // 6) 过期回包不覆盖(新搜索清空列表后, 旧 token 的结果不应落地)
+  input.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  await sleep(20);
+  const newer = posted.filter((m) => m.type === 'sourceSearch').pop();
+  assert(document.querySelectorAll('#sourcePopup .src-result').length === 0, '新搜索应清空上一次结果');
+  sendMsg({ type: 'searchResults', token: newer.token - 1, done: true, items: [
+    { sourceId: 's1', sourceName: 'A站', title: '旧结果', author: '', bookUrl: 'https://a.com/old' },
+  ], errors: [] });
+  await sleep(20);
+  assert(document.querySelectorAll('#sourcePopup .src-result').length === 0, '过期 token 的搜索结果不应落地');
+  sendMsg({ type: 'searchResults', token: newer.token, done: true, items: [
+    { sourceId: 's1', sourceName: 'A站', title: '新结果', author: '', bookUrl: 'https://a.com/new' },
+  ], errors: [] });
+  await sleep(20);
+  assert(document.querySelectorAll('#sourcePopup .src-result').length === 1
+    && document.querySelector('#sourcePopup .src-result-title').textContent === '新结果',
+    '当前 token 的结果应生效');
+
+  document.querySelector('#sourcePopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
 
   // ================================================================ 阅读笔记
   console.log('[阅读笔记]');

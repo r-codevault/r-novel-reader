@@ -16,6 +16,9 @@ import { readWebviewAsset } from './webviewAssets';
 
 import { ReadingSettings, SettingsStore, THEMES, fontStackById, themeById } from './settings';
 import type { NoteDraft, NoteItem } from './notes';
+import type { BookSourceView, ImportResult } from './bookSource';
+import type { SearchBookItem } from './online/ruleApply';
+import type { SourceSearchError } from './online/searchService';
 
 interface InitPayload {
     filePath: string;
@@ -40,6 +43,8 @@ interface InitPayload {
     libraryPath: string;
     /** 全部阅读笔记(按书分组在 webview 完成, 一次带全避免打开浮层再请求) */
     notes: NoteItem[];
+    /** 书源列表(精简视图) */
+    sources: BookSourceView[];
 }
 
 interface ChapterPayload {
@@ -72,7 +77,16 @@ type WebviewMessage =
     | { type: 'updateNote'; id: string; text: string }
     | { type: 'removeNote'; id: string }
     | { type: 'removeNoteGroup'; bookPath: string; chapterTitle?: string }
-    | { type: 'requestNotes' };
+    | { type: 'requestNotes' }
+    // 网络书源
+    | { type: 'requestSources' }
+    | { type: 'sourceSearch'; key: string; sourceIds?: string[]; token: number }
+    | { type: 'sourceImport'; mode: 'url' | 'clipboard' | 'file' }
+    | { type: 'sourceToggle'; id: string; enabled: boolean }
+    | { type: 'sourceRemove'; id: string }
+    | { type: 'sourceUpdate'; id: string; name?: string; searchUrl?: string }
+    | { type: 'sourceExport' }
+    | { type: 'sourceCheck'; id?: string };
 
 /** 窗口重开时的恢复信息(VS Code 持久化 webview 状态用) */
 export interface ReaderPanelState {
@@ -95,7 +109,22 @@ export interface ShelfItemView {
 }
 
 /** 左抽屉页签 */
-export type DrawerTab = 'shelf' | 'catalog' | 'notes' | 'storage';
+export type DrawerTab = 'shelf' | 'catalog' | 'notes' | 'storage' | 'source';
+
+/** 书源能力接口(插件入口注入 BookSourceStore + SearchService) */
+export interface BookSourceApi {
+    list(): BookSourceView[];
+    /** 导入文本; 弹窗交互(URL/剪贴板/文件)由扩展命令完成, 这里只处理内容 */
+    importText(text: string): Promise<ImportResult>;
+    remove(id: string): Promise<void>;
+    setEnabled(id: string, enabled: boolean): Promise<void>;
+    update(id: string, patch: { name?: string; searchUrl?: string }): Promise<BookSourceView | undefined>;
+    exportText(): string;
+    /** 搜索; token 原样回传, 供 webview 丢弃过期结果 */
+    search(key: string, sourceIds: string[] | undefined): Promise<{ items: SearchBookItem[]; errors: SourceSearchError[] }>;
+    /** 触发导入交互(url/clipboard/file), 由扩展实现弹窗与下载 */
+    importInteractive?: (mode: 'url' | 'clipboard' | 'file') => Promise<void>;
+}
 
 /** 笔记存储接口(插件入口注入 NotesStore) */
 export interface NotesApi {
@@ -129,6 +158,8 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
     public static getChapterRatio?: (filePath: string, chapterIndex: number) => number | undefined;
     /** 笔记存储(插件入口注入): init 时下发全量, 增删改后回推增量 */
     public static notes?: NotesApi;
+    /** 书源存储与搜索(插件入口注入) */
+    public static bookSources?: BookSourceApi;
     /** 视图就绪前的抽屉打开请求 */
     private static _pendingDrawer: DrawerTab | null = null;
 
@@ -593,7 +624,61 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             case 'requestNotes':
                 this.postNotes();
                 break;
+            case 'requestSources':
+                this.postSources();
+                break;
+            case 'sourceSearch': {
+                const api = ReaderPanel.bookSources;
+                if (!api) { break; }
+                void api.search(msg.key, msg.sourceIds).then((out) => {
+                    void this._panel.webview.postMessage({
+                        type: 'searchResults',
+                        token: msg.token,
+                        items: out.items,
+                        errors: out.errors,
+                        done: true,
+                    });
+                }, (err: unknown) => {
+                    void this._panel.webview.postMessage({
+                        type: 'searchResults',
+                        token: msg.token,
+                        items: [],
+                        errors: [{ sourceId: '', sourceName: '', kind: 'fatal', message: err instanceof Error ? err.message : String(err) }],
+                        done: true,
+                    });
+                });
+                break;
+            }
+            case 'sourceImport':
+                void ReaderPanel.bookSources?.importInteractive?.(msg.mode);
+                break;
+            case 'sourceToggle':
+                void ReaderPanel.bookSources?.setEnabled(msg.id, msg.enabled).then(() => this.postSources());
+                break;
+            case 'sourceRemove':
+                void ReaderPanel.bookSources?.remove(msg.id).then(() => this.postSources());
+                break;
+            case 'sourceUpdate':
+                void ReaderPanel.bookSources
+                    ?.update(msg.id, { name: msg.name, searchUrl: msg.searchUrl })
+                    .then(() => this.postSources());
+                break;
+            case 'sourceExport':
+                void vscode.commands.executeCommand('novelReader.exportSources');
+                break;
+            case 'sourceCheck':
+                void vscode.commands.executeCommand('novelReader.checkSources', msg.id);
+                break;
         }
+    }
+
+    /** 推送书源列表(精简视图) */
+    public postSources(): void {
+        if (!this._ready) { return; }
+        void this._panel.webview.postMessage({
+            type: 'sources',
+            items: ReaderPanel.bookSources ? ReaderPanel.bookSources.list() : [],
+        });
     }
 
     /** 把全量笔记推给 webview(init 后/路径迁移后调用) */
@@ -647,6 +732,7 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             shelf: ReaderPanel.getShelf ? ReaderPanel.getShelf() : [],
             libraryPath: ReaderPanel.getLibrary ? ReaderPanel.getLibrary() : '',
             notes: ReaderPanel.notes ? ReaderPanel.notes.list() : [],
+            sources: ReaderPanel.bookSources ? ReaderPanel.bookSources.list() : [],
         };
         this._openSettingsOnLoad = false;
         this._panel.webview.postMessage({ type: 'init', payload });

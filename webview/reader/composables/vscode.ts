@@ -89,7 +89,7 @@ export interface NoteJumpTarget {
 export type NoteGroupOpenMap = Record<string, boolean>;
 
 /** 左抽屉页签 */
-export type DrawerTab = 'shelf' | 'catalog' | 'notes' | 'storage';
+export type DrawerTab = 'shelf' | 'catalog' | 'notes' | 'storage' | 'source';
 
 /**
  * 写入"窗口重开恢复信息"(VS Code 的 webview state)。
@@ -102,6 +102,41 @@ export function saveRestoreState(s: { filePath: string; chapterIndex: number; sc
   } catch {
     // 非 webview 环境(单测/浏览器预览)忽略
   }
+}
+
+/** 书源(扩展下发的精简视图, 不含规则体) */
+export interface BookSourceView {
+  id: string;
+  name: string;
+  url: string;
+  group: string;
+  enabled: boolean;
+  searchUrl: string;
+  lastCheck?: number;
+  lastCheckOk?: boolean;
+  lastCheckMessage?: string;
+}
+
+/** 搜索结果条目 */
+export interface SearchBookItem {
+  sourceId: string;
+  sourceName: string;
+  title: string;
+  author: string;
+  bookUrl: string;
+  coverUrl?: string;
+  intro?: string;
+  kind?: string;
+  lastChapter?: string;
+  wordCount?: number;
+}
+
+/** 单源搜索错误 */
+export interface SourceSearchError {
+  sourceId: string;
+  sourceName: string;
+  kind: string;
+  message: string;
 }
 
 /** 全局共享状态(与扩展侧消息协议字段一一对应) */
@@ -139,6 +174,22 @@ export const state = reactive({
   slackerActive: false,
   /** 跨书跳转: 待目标书 init 落地后再按笔记定位 */
   pendingNoteJump: null as NoteItem | null,
+  // ---- 网络书源
+  sourceOpen: false,
+  /** 书源弹窗内的视图: 搜索 / 管理 */
+  sourceView: 'search' as 'search' | 'manage',
+  sources: [] as BookSourceView[],
+  searchKeyword: '',
+  /** 空数组 = 搜索全部已启用书源 */
+  searchSourceIds: [] as string[],
+  searching: false,
+  /** 搜索序号: 扩展回包时比对, 丢弃过期结果 */
+  searchToken: 0,
+  searchResults: [] as SearchBookItem[],
+  searchErrors: [] as SourceSearchError[],
+  searchDone: false,
+  /** 书源管理: 正在编辑的 sourceId(空 = 无) */
+  sourceEditingId: '',
 });
 
 /** 发消息给扩展(自由格式, 字段与协议一一对应) */

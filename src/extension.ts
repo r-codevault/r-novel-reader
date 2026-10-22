@@ -22,6 +22,11 @@ import { moveToTrash } from './trash';
 import { ReadingSettings, SettingsStore } from './settings';
 import { decodeBuffer } from './encoding';
 import { SlackerController } from './slacker';
+import { BookSourceStore, toSourceView } from './bookSource';
+import { SearchService } from './online/searchService';
+import { buildSearchRequest } from './online/searchUrl';
+import { parseSearchPage } from './online/ruleApply';
+import { fetchForSource, sandboxHttpFor, SourceHttpPool } from './online/sourceHttp';
 
 interface LoadOptions {
     chapterIndex?: number;
@@ -281,6 +286,134 @@ export function activate(context: vscode.ExtensionContext): void {
             ReaderPanel.openDrawer(tab);
         }
 
+    // ---------------------------------------------------------------- 网络书源(可选功能)
+
+    const bookSources = new BookSourceStore(context.globalState);
+    const sourcePool = new SourceHttpPool();
+    const searchService = new SearchService(bookSources, sourcePool);
+
+    /** 导入交互: URL / 剪贴板 / 本地文件 -> 存库 -> 刷新面板 */
+    async function importSourcesInteractive(mode: 'url' | 'clipboard' | 'file'): Promise<void> {
+        let text = '';
+        if (mode === 'url') {
+            const url = await vscode.window.showInputBox({
+                title: '从 URL 导入书源',
+                prompt: '粘贴 legado 书源 JSON 地址(例如 Yiove 书源合集导入链接)',
+                placeHolder: 'https://shuyuan-api.yiove.com/import/book-source-collection/…',
+                ignoreFocusOut: true,
+            });
+            if (!url) { return; }
+            try {
+                const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 r-novel-reader' } });
+                if (!res.ok) { throw new Error('HTTP ' + res.status); }
+                text = decodeBuffer(Buffer.from(await res.arrayBuffer())).text;
+            } catch (err) {
+                void vscode.window.showErrorMessage('下载书源失败: ' + (err instanceof Error ? err.message : String(err)));
+                return;
+            }
+        } else if (mode === 'clipboard') {
+            text = await vscode.env.clipboard.readText();
+            if (!text.trim()) {
+                void vscode.window.showWarningMessage('剪贴板里没有内容');
+                return;
+            }
+        } else {
+            const picked = await vscode.window.showOpenDialog({
+                canSelectFiles: true,
+                canSelectMany: false,
+                title: '选择书源文件',
+                filters: { '书源 JSON (*.json;*.txt)': ['json', 'txt'], '所有文件': ['*'] },
+            });
+            if (!picked || !picked[0]) { return; }
+            try {
+                text = decodeBuffer(fs.readFileSync(picked[0].fsPath)).text;
+            } catch (err) {
+                void vscode.window.showErrorMessage('读取书源文件失败: ' + (err instanceof Error ? err.message : String(err)));
+                return;
+            }
+        }
+        const result = await bookSources.importText(text);
+        ReaderPanel.current?.postSources();
+        const summary = '书源导入完成: 新增 ' + result.added + ' 条, 更新 ' + result.updated + ' 条, 跳过 ' + result.skipped + ' 条';
+        if (result.errors.length) {
+            void vscode.window.showWarningMessage(summary + ' (' + result.errors.join('; ') + ')');
+        } else {
+            void vscode.window.showInformationMessage(summary);
+        }
+    }
+
+    /** 书源可用性检查: 用测试关键词搜一次, 看是否出结果 */
+    async function checkBookSources(id?: string): Promise<void> {
+        const targets = id
+            ? [bookSources.get(id)].filter((x): x is NonNullable<typeof x> => !!x)
+            : bookSources.enabled().slice(0, 20);
+        if (!targets.length) {
+            void vscode.window.showInformationMessage('没有可检查的书源');
+            return;
+        }
+        await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: '检查书源可用性', cancellable: false },
+            async (progress) => {
+                for (let i = 0; i < targets.length; i++) {
+                    const source = targets[i];
+                    progress.report({ message: source.bookSourceName, increment: 100 / targets.length });
+                    try {
+                        const req = await buildSearchRequest(source, '我的', 1, sandboxHttpFor(source, sourcePool));
+                        const res = await fetchForSource(source, sourcePool, req.url, {
+                            method: req.method,
+                            headers: req.headers,
+                            body: req.body,
+                            timeoutMs: 12000,
+                        });
+                        const items = await parseSearchPage(source, res.text, res.url, sandboxHttpFor(source, sourcePool));
+                        await bookSources.markCheck(source.id, true, items.length ? '命中 ' + items.length + ' 条' : '可请求, 但未命中结果');
+                    } catch (err) {
+                        const message = err instanceof Error ? err.message : String(err);
+                        await bookSources.markCheck(source.id, false, message);
+                    }
+                }
+            }
+        );
+        ReaderPanel.current?.postSources();
+    }
+
+    ReaderPanel.bookSources = {
+        list: () => bookSources.list().map(toSourceView),
+        importText: (text) => bookSources.importText(text),
+        remove: (id) => bookSources.remove(id),
+        setEnabled: (id, enabled) => bookSources.setEnabled(id, enabled),
+        update: async (id, patch) => {
+            const current = bookSources.get(id);
+            if (!current) { return undefined; }
+            const next = {
+                ...current,
+                bookSourceName: patch.name === undefined ? current.bookSourceName : patch.name,
+                searchUrl: patch.searchUrl === undefined ? current.searchUrl : patch.searchUrl,
+            };
+            await bookSources.upsert(next);
+            return toSourceView(next);
+        },
+        exportText: () => bookSources.exportText(),
+        search: (key, sourceIds) => searchService.search(key, { sourceIds }).then((out) => ({ items: out.items, errors: out.errors })),
+        importInteractive: importSourcesInteractive,
+    };
+
+    /** 打开书源面板: 没有书时提示先打开一本(面板依赖阅读页) */
+    async function showSourcesPanel(): Promise<void> {
+        const novel = await ensureNovel();
+        if (!novel) {
+            const picked = await vscode.window.showInformationMessage(
+                '请先打开一本书, 再使用书源搜索。',
+                '选择本地文件'
+            );
+            if (picked === '选择本地文件') {
+                await vscode.commands.executeCommand('novelReader.openFile');
+            }
+            return;
+        }
+        await openDrawerAt('source');
+    }
+
     // 打开/添加小说文件的共用实现(openFile 与标题栏「添加书籍」按钮同一行为)
     async function openNovelFile(arg?: vscode.Uri): Promise<void> {
         // 资源管理器右键 .txt 文件: 只加入书架, 不自动打开阅读面板
@@ -302,6 +435,25 @@ export function activate(context: vscode.ExtensionContext): void {
 
     context.subscriptions.push(
         vscode.commands.registerCommand('novelReader.openFile', openNovelFile),
+        vscode.commands.registerCommand('novelReader.showSources', showSourcesPanel),
+        vscode.commands.registerCommand('novelReader.importSourceFromUrl', () => importSourcesInteractive('url')),
+        vscode.commands.registerCommand('novelReader.importSourceFromClipboard', () => importSourcesInteractive('clipboard')),
+        vscode.commands.registerCommand('novelReader.importSourceFromFile', () => importSourcesInteractive('file')),
+        vscode.commands.registerCommand('novelReader.checkSources', (id?: string) => checkBookSources(id)),
+        vscode.commands.registerCommand('novelReader.exportSources', async () => {
+            const picked = await vscode.window.showSaveDialog({
+                title: '导出书源',
+                filters: { '书源 JSON': ['json'] },
+                saveLabel: '导出',
+            });
+            if (!picked) { return; }
+            try {
+                fs.writeFileSync(picked.fsPath, bookSources.exportText(), 'utf8');
+                void vscode.window.showInformationMessage('书源已导出: ' + path.basename(picked.fsPath));
+            } catch (err) {
+                void vscode.window.showErrorMessage('导出失败: ' + (err instanceof Error ? err.message : String(err)));
+            }
+        }),
 
         // 书架: 打开某本书(自动延续该书上次的阅读进度)
         vscode.commands.registerCommand('novelReader.openBook', async (filePath: string) => {

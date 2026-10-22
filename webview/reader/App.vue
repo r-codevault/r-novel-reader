@@ -18,11 +18,13 @@ import ShelfPopup from './components/ShelfPopup.vue';
 import StoragePopup from './components/StoragePopup.vue';
 import NotesPopup from './components/NotesPopup.vue';
 import NoteComposer from './components/NoteComposer.vue';
+import SourcePopup from './components/SourcePopup.vue';
 import './reader.css';
 
 const catalogRef = ref<InstanceType<typeof CatalogPanel> | null>(null);
 const settingsRef = ref<InstanceType<typeof SettingsPanel> | null>(null);
 const shelfRef = ref<InstanceType<typeof ShelfPopup> | null>(null);
+const sourceRef = ref<InstanceType<typeof SourcePopup> | null>(null);
 const storageRef = ref<InstanceType<typeof StoragePopup> | null>(null);
 const notesRef = ref<InstanceType<typeof NotesPopup> | null>(null);
 const readerRef = ref<InstanceType<typeof ReaderArea> | null>(null);
@@ -42,7 +44,7 @@ watch(function () { return state.menuExpanded; }, function (expanded) {
 }, { immediate: true });
 
 // ---------------------------------------------------------------- 弹窗互斥(同一时刻只允许一个)
-const popupKeys = ['catalogOpen', 'settingsOpen', 'shelfOpen', 'storageOpen', 'notesOpen'] as const;
+const popupKeys = ['catalogOpen', 'settingsOpen', 'shelfOpen', 'storageOpen', 'notesOpen', 'sourceOpen'] as const;
 
 /** 状态栏是否显示(设置项, 默认显示) */
 function statusBarVisible(): boolean {
@@ -50,7 +52,7 @@ function statusBarVisible(): boolean {
 }
 
 function anyPopupOpen(): boolean {
-  return state.catalogOpen || state.settingsOpen || state.shelfOpen || state.storageOpen || state.notesOpen;
+  return state.catalogOpen || state.settingsOpen || state.shelfOpen || state.storageOpen || state.notesOpen || state.sourceOpen;
 }
 
 /** 关闭全部弹窗(点击弹窗外任意处/按 Esc 时调用) */
@@ -60,6 +62,7 @@ function closeAllPopups(): void {
   state.shelfOpen = false;
   state.storageOpen = false;
   state.notesOpen = false;
+  state.sourceOpen = false;
 }
 
 function openOnly(key: typeof popupKeys[number]): void {
@@ -88,6 +91,7 @@ function openTab(tab: DrawerTab | undefined): void {
   else if (tab === 'catalog') { openOnly('catalogOpen'); }
   else if (tab === 'storage') { openOnly('storageOpen'); }
   else if (tab === 'notes') { openOnly('notesOpen'); }
+  else if (tab === 'source') { openOnly('sourceOpen'); }
   else { openOnly('shelfOpen'); }
 }
 
@@ -128,6 +132,7 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.shelf = (p.shelf as ShelfItemView[]) || [];
       state.libraryPath = (p.libraryPath as string) || '';
       state.notes = (p.notes as NoteItem[]) || [];
+      state.sources = (p.sources as typeof state.sources) || [];
       // 换书/重开: 笔记相关的临时态一律清空
       state.noteComposer = null;
       state.noteReturn = null;
@@ -187,6 +192,19 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
     case 'noteRemoved': {
       const id = (msg as { id?: string }).id;
       state.notes = state.notes.filter(function (n) { return n.id !== id; });
+      break;
+    }
+    case 'sources':
+      state.sources = (msg as { items?: typeof state.sources }).items || [];
+      break;
+    case 'searchResults': {
+      const m = msg as { token?: number; items?: typeof state.searchResults; errors?: typeof state.searchErrors; done?: boolean };
+      // 只有最后一次搜索的结果才落地(用户连续搜索时丢弃过期回包)
+      if (m.token !== undefined && m.token !== state.searchToken) { break; }
+      state.searchResults = m.items || [];
+      state.searchErrors = m.errors || [];
+      state.searchDone = !!m.done;
+      state.searching = false;
       break;
     }
     case 'noteError': {
@@ -342,6 +360,7 @@ function onDocMouseDown(e: MouseEvent): void {
     (shelfRef.value?.el && shelfRef.value.el.contains(target)) ||
     (storageRef.value?.el && storageRef.value.el.contains(target)) ||
     (notesRef.value?.el && notesRef.value.el.contains(target)) ||
+    (sourceRef.value?.el && sourceRef.value.el.contains(target)) ||
     (el.closest ? !!el.closest('.menu') : false);
   if (!inside) { closeAllPopups(); }
 }
@@ -441,6 +460,7 @@ onMounted(function () {
       <ShelfPopup ref="shelfRef" />
       <StoragePopup ref="storageRef" />
       <NotesPopup ref="notesRef" @jump="jumpToNote" />
+      <SourcePopup ref="sourceRef" />
       <NoteComposer />
       <ReaderArea ref="readerRef" />
       <StatusBar v-show="statusBarVisible()" />

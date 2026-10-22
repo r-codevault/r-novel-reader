@@ -1,0 +1,209 @@
+/**
+ * test-source-search.js — 搜索链路测试(URL 构建 / 结果映射 / 多源聚合)
+ *
+ * 用桩掉的全局 fetch 提供 HTML 与 JSON 两种响应, 覆盖:
+ *  - {{key}} 插值 / 无占位符追加 ?key= / `URL, {json}` 选项
+ *  - HTML 列表逐项提取(相对地址转绝对)
+ *  - JSON API 列表(data.books + 相对键)
+ *  - 未配置 searchUrl / XPath 规则 -> unsupported
+ *  - 多源并发去重 + 相关性排序 + 单源失败/超时不影响其它
+ */
+'use strict';
+const assert = require('assert');
+const { BookSourceStore } = require('../dist/bookSource');
+const { buildSearchRequest, splitUrlOptions } = require('../dist/online/searchUrl');
+const { parseSearchPage, relevanceScore, resultKey } = require('../dist/online/ruleApply');
+const { SearchService } = require('../dist/online/searchService');
+const fx = require('./fixtures-source');
+
+function memoryState() {
+  const mem = {};
+  return {
+    mem,
+    get: (k, fb) => (k in mem ? mem[k] : fb),
+    update: async (k, v) => { if (v === undefined) { delete mem[k]; } else { mem[k] = v; } },
+  };
+}
+
+function makeResponse(status, body, contentType) {
+  const buf = Buffer.isBuffer(body) ? body : Buffer.from(body, 'utf8');
+  return {
+    status,
+    headers: {
+      get(name) {
+        const key = String(name).toLowerCase();
+        if (key === 'content-type') { return contentType || 'text/html; charset=utf-8'; }
+        return null;
+      },
+      getSetCookie() { return []; },
+    },
+    async arrayBuffer() { return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength); },
+  };
+}
+
+const HTML_SOURCE = {
+  bookSourceName: 'HTML站',
+  bookSourceUrl: 'https://www.example.com',
+  searchUrl: 'https://www.example.com/search?q={{key}}',
+  ruleSearch: {
+    bookList: '.book-item',
+    name: 'h3.book-name a@text',
+    author: '.author span@text',
+    bookUrl: 'h3.book-name a@href',
+    intro: '.intro@text',
+    kind: '.kind@text',
+    lastChapter: '.last@text##最新章节：##',
+  },
+};
+
+const JSON_SOURCE = {
+  bookSourceName: 'JSON站',
+  bookSourceUrl: 'https://api.example.com',
+  searchUrl: 'https://api.example.com/search, {"method":"POST","body":"kw={{key}}"}',
+  ruleSearch: {
+    bookList: 'data.books',
+    name: 'original_title',
+    author: 'original_author',
+    bookUrl: '@js: "https://api.example.com/book/" + book_id',
+    coverUrl: 'image_link',
+    intro: 'intro',
+    wordCount: 'words_num',
+  },
+};
+
+const realFetch = globalThis.fetch;
+
+(async () => {
+  // 1) URL 构建: 插值 + 编码
+  {
+    const req = await buildSearchRequest(HTML_SOURCE, '遮 天', 1);
+    assert.strictEqual(req.url, 'https://www.example.com/search?q=遮 天', '插值后交给 fetch, 编码由 fetch 负责');
+    assert.strictEqual(req.method, 'GET');
+  }
+
+  // 2) 无占位符 -> 追加 ?key=
+  {
+    const req = await buildSearchRequest({ ...HTML_SOURCE, searchUrl: 'https://x.com/s' }, '遮天', 1);
+    assert.strictEqual(req.url, 'https://x.com/s?key=' + encodeURIComponent('遮天'));
+  }
+
+  // 3) `URL, {json}` 选项 -> POST + body
+  {
+    const req = await buildSearchRequest(JSON_SOURCE, '遮天', 1);
+    assert.strictEqual(req.url, 'https://api.example.com/search');
+    assert.strictEqual(req.method, 'POST');
+    assert.strictEqual(req.body, 'kw=遮天');
+    const split = splitUrlOptions('https://a.com/x, {"method":"GET"}');
+    assert.strictEqual(split.url, 'https://a.com/x');
+    assert.strictEqual(split.options.method, 'GET');
+  }
+
+  // 4) 未配置 searchUrl -> unsupported
+  {
+    await assert.rejects(
+      () => buildSearchRequest({ ...HTML_SOURCE, searchUrl: '' }, 'x', 1),
+      (e) => e.name === 'UnsupportedRuleError');
+  }
+
+  // 5) HTML 结果映射(相对/协议相对地址)
+  {
+    const items = await parseSearchPage(HTML_SOURCE, fx.SEARCH_HTML, 'https://www.example.com/search?q=遮天');
+    assert.strictEqual(items.length, 3, '应解析出 3 本, 实际 ' + items.length);
+    assert.strictEqual(items[0].title, '遮天');
+    assert.strictEqual(items[0].author, '辰东');
+    assert.strictEqual(items[0].bookUrl, 'https://www.example.com/book/1024/');
+    assert.strictEqual(items[1].bookUrl, 'https://m.example.com/book/2048/', '协议相对地址应补全');
+    assert.strictEqual(items[0].kind, '玄幻 仙侠', 'nbsp 应折叠为普通空格');
+    assert.strictEqual(items[0].lastChapter, '第1888章 完美世界', '## 后处理应生效');
+    assert.strictEqual(items[2].author, '', '缺失作者应为空串');
+  }
+
+  // 6) JSON 结果映射(@js bookUrl + 数值字段)
+  {
+    const items = await parseSearchPage(JSON_SOURCE, JSON.stringify(fx.SEARCH_JSON), 'https://api.example.com/search');
+    assert.strictEqual(items.length, 2);
+    assert.strictEqual(items[0].title, '遮天');
+    assert.strictEqual(items[0].bookUrl, 'https://api.example.com/book/1024');
+    assert.strictEqual(items[0].wordCount, 6350000);
+    assert.strictEqual(items[1].coverUrl, undefined, '空封面不应变成空串字段');
+  }
+
+  // 7) 缺少 bookList -> unsupported
+  {
+    await assert.rejects(
+      () => parseSearchPage({ ...HTML_SOURCE, ruleSearch: {} }, fx.SEARCH_HTML, 'https://www.example.com'),
+      (e) => e.name === 'UnsupportedRuleError');
+  }
+
+  // 8) 相关性排序: 完全匹配 > 前缀 > 包含
+  {
+    assert.strictEqual(relevanceScore('遮天', '遮天'), 0);
+    assert.strictEqual(relevanceScore('遮天外传', '遮天'), 1);
+    assert.strictEqual(relevanceScore('新遮天', '遮天'), 2);
+    assert.strictEqual(relevanceScore('完美世界', '遮天'), 3);
+    assert.strictEqual(resultKey({ title: '遮 天', author: '辰 东' }), resultKey({ title: '遮天', author: '辰东' }));
+  }
+
+  // 9) 多源聚合: 去重 + 排序 + 错误聚合
+  {
+    const store = new BookSourceStore(memoryState());
+    await store.importText(JSON.stringify([
+      HTML_SOURCE,
+      JSON_SOURCE,
+      { bookSourceName: '坏源', bookSourceUrl: 'https://bad.example.com', searchUrl: '//div[@class="x"]', ruleSearch: { bookList: '.x' } },
+      { bookSourceName: '空源', bookSourceUrl: 'https://empty.example.com', searchUrl: '', ruleSearch: { bookList: '.x' } },
+    ]));
+
+    const calls = [];
+    globalThis.fetch = async (url, init) => {
+      calls.push({ url, method: init.method, body: init.body });
+      const u = String(url);
+      if (u.indexOf('www.example.com/search') >= 0) { return makeResponse(200, fx.SEARCH_HTML); }
+      if (u.indexOf('api.example.com/search') >= 0) { return makeResponse(200, JSON.stringify(fx.SEARCH_JSON), 'application/json'); }
+      return makeResponse(404, 'not found');
+    };
+
+    const service = new SearchService(store);
+    const out = await service.search('遮天');
+    assert.strictEqual(out.sourceCount, 4, '应尝试全部 4 个启用书源');
+    // 两份响应里同名同作者的书只留一条
+    const titles = out.items.map((i) => i.title + '/' + i.author);
+    assert.deepStrictEqual(titles, ['遮天/辰东', '完美世界/辰东', '无作者的书/'], '应按相关性排序并去重, 实际 ' + JSON.stringify(titles));
+    assert.strictEqual(out.errors.length, 2, '坏源 + 空源应各产生一条错误, 实际 ' + out.errors.length);
+    assert.ok(out.errors.some((e) => e.kind === 'unsupported'));
+    assert.ok(calls.some((c) => c.method === 'POST' && c.body === 'kw=遮天'), 'JSON 源应走 POST');
+  }
+
+  // 10) 超时不拖垮整轮
+  {
+    const store = new BookSourceStore(memoryState());
+    await store.importText(JSON.stringify([HTML_SOURCE, { ...JSON_SOURCE, bookSourceUrl: 'https://slow.example.com', searchUrl: 'https://slow.example.com/s?q={{key}}' }]));
+    globalThis.fetch = async (url) => {
+      if (String(url).indexOf('slow.example.com') >= 0) {
+        return new Promise(() => { /* 永不返回, 由超时中断 */ });
+      }
+      return makeResponse(200, fx.SEARCH_HTML);
+    };
+    const service = new SearchService(store);
+    const out = await service.search('遮天', { perSourceTimeoutMs: 80 });
+    assert.strictEqual(out.items.length, 3, '健康源仍应返回结果');
+    assert.ok(out.errors.some((e) => e.kind === 'timeout'), '超时源应记录 timeout');
+  }
+
+  // 11) 空关键词 -> 不发请求
+  {
+    const store = new BookSourceStore(memoryState());
+    await store.importText(JSON.stringify([HTML_SOURCE]));
+    globalThis.fetch = async () => { throw new Error('不应发请求'); };
+    const out = await new SearchService(store).search('   ');
+    assert.strictEqual(out.items.length, 0);
+    assert.strictEqual(out.sourceCount, 0);
+  }
+
+  globalThis.fetch = realFetch;
+  console.log('书源搜索测试全部通过 ✔');
+})().catch((err) => {
+  globalThis.fetch = realFetch;
+  console.error(err);
+  process.exit(1);
+});
