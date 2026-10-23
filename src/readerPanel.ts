@@ -121,7 +121,11 @@ export interface BookSourceApi {
     update(id: string, patch: { name?: string; searchUrl?: string }): Promise<BookSourceView | undefined>;
     exportText(): string;
     /** 搜索; token 原样回传, 供 webview 丢弃过期结果 */
-    search(key: string, sourceIds: string[] | undefined): Promise<{ items: SearchBookItem[]; errors: SourceSearchError[] }>;
+    search(key: string, sourceIds: string[] | undefined): Promise<{
+        items: SearchBookItem[];
+        errors: SourceSearchError[];
+        skippedSources: number;
+    }>;
     /** 触发导入交互(url/clipboard/file), 由扩展实现弹窗与下载 */
     importInteractive?: (mode: 'url' | 'clipboard' | 'file') => Promise<void>;
 }
@@ -636,6 +640,7 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                         token: msg.token,
                         items: out.items,
                         errors: out.errors,
+                        skippedSources: out.skippedSources,
                         done: true,
                     });
                 }, (err: unknown) => {

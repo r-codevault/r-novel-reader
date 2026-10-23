@@ -188,8 +188,14 @@ export const state = reactive({
   searchResults: [] as SearchBookItem[],
   searchErrors: [] as SourceSearchError[],
   searchDone: false,
+  /** 本次因源上限(100)未参与搜索的书源数 */
+  searchSkipped: 0,
   /** 书源管理: 正在编辑的 sourceId(空 = 无) */
   sourceEditingId: '',
+  /** 搜索书源选择弹窗(书源上千时用它全选/反选) */
+  sourcePickerOpen: false,
+  sourcePickerFilter: '',
+  sourcePickerDraft: [] as string[],
 });
 
 /** 发消息给扩展(自由格式, 字段与协议一一对应) */

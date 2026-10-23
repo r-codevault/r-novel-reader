@@ -8,15 +8,22 @@
 const assert = require('assert');
 const { BookSourceStore, parseSourceText, normalizeSource, sourceIdFor } = require('../dist/bookSource');
 
-function memoryState() {
-  const mem = {};
+/** 内存存储适配器(书源已改为文件存储) */
+function memoryStore(initial) {
+  const box = { text: initial === undefined ? null : initial };
   return {
-    mem,
-    get: (key, fallback) => (key in mem ? mem[key] : fallback),
-    update: async (key, value) => {
-      if (value === undefined) { delete mem[key]; } else { mem[key] = value; }
-    },
+    box,
+    read: async () => box.text,
+    write: async (t) => { box.text = t; },
   };
+}
+
+/** 建一个已加载的 store */
+async function makeStore(initial) {
+  const storage = memoryStore(initial);
+  const store = new BookSourceStore(storage);
+  await store.load();
+  return { store, storage };
 }
 
 const SRC_A = {
@@ -88,7 +95,7 @@ const SRC_B = {
 
   // 5) 存储: 导入统计 + 幂等更新 + 保留本地 enabled
   {
-    const store = new BookSourceStore(memoryState());
+    const { store } = await makeStore();
     const r1 = await store.importText(JSON.stringify([SRC_A, SRC_B, { bookSourceUrl: 'bad' }]));
     assert.strictEqual(r1.added, 2, '应新增 2 条, 实际 ' + r1.added);
     assert.strictEqual(r1.skipped, 1);
@@ -111,7 +118,7 @@ const SRC_B = {
 
   // 6) enabled() 只返回启用的 + 排序
   {
-    const store = new BookSourceStore(memoryState());
+    const { store } = await makeStore();
     await store.importText(JSON.stringify([
       { bookSourceName: '乙', bookSourceUrl: 'https://b2.com', enabled: true },
       { bookSourceName: '甲', bookSourceUrl: 'https://a2.com', enabled: false },
@@ -123,7 +130,7 @@ const SRC_B = {
 
   // 7) 删除 / 标记检查结果 / 导出
   {
-    const store = new BookSourceStore(memoryState());
+    const { store } = await makeStore();
     await store.importText(JSON.stringify([SRC_A, SRC_B]));
     const first = store.list()[0];
     await store.markCheck(first.id, false, 'HTTP 404');
@@ -140,13 +147,33 @@ const SRC_B = {
     assert.strictEqual(store.size(), 1);
   }
 
-  // 8) 损坏的存储内容按空处理
+  // 8) 损坏的存储内容按空处理 + 脏条目过滤
   {
-    const state = memoryState();
     const { normalizeSource } = require('../dist/bookSource');
-    state.mem['novelReader.bookSources'] = { v: 1, items: [{ bad: true }, normalizeSource(SRC_A)] };
-    const store = new BookSourceStore(state);
+    const { store } = await makeStore(JSON.stringify({ v: 1, items: [{ bad: true }, normalizeSource(SRC_A)] }));
     assert.strictEqual(store.size(), 1, '脏条目应被过滤');
+
+    const broken = await makeStore('{not json');
+    assert.strictEqual(broken.store.size(), 0, '损坏文件应以空表启动');
+  }
+
+  // 9) 落盘: 写入后重新加载能读回; 旧版 globalState 迁移
+  {
+    const { store, storage } = await makeStore();
+    await store.importText(JSON.stringify([SRC_A]));
+    const reloaded = new (require('../dist/bookSource').BookSourceStore)(storage);
+    await reloaded.load();
+    assert.strictEqual(reloaded.size(), 1, '重新加载应读到已保存的书源');
+
+    const empty = await makeStore();
+    const legacy = JSON.parse(JSON.stringify({ v: 1, items: [{
+      id: 'abc', bookSourceName: '旧', bookSourceUrl: 'https://old.com',
+      bookSourceName2: undefined, enabled: true, addedAt: 1,
+    }] }));
+    const moved = await empty.store.migrateLegacy(legacy);
+    assert.strictEqual(moved, 1, '应迁移 1 条旧数据');
+    assert.strictEqual(empty.store.size(), 1);
+    assert.strictEqual(await empty.store.migrateLegacy(legacy), 0, '已有数据时不应重复迁移');
   }
 
   console.log('书源存储测试全部通过 ✔');

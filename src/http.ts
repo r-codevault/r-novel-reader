@@ -168,7 +168,7 @@ export class HttpClient {
                         throw new HttpError(timedOut ? 'timeout' : 'abort',
                             timedOut ? '请求超时(' + timeoutMs + 'ms)' : '请求已取消');
                     }
-                    throw new HttpError('network', '网络错误: ' + (err as Error).message);
+                    throw new HttpError('network', '网络错误: ' + (err as Error).message + ' (' + host + ')');
                 }
 
                 this.jar.addFromSetCookie(host, getSetCookies(res));

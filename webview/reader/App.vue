@@ -198,11 +198,12 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.sources = (msg as { items?: typeof state.sources }).items || [];
       break;
     case 'searchResults': {
-      const m = msg as { token?: number; items?: typeof state.searchResults; errors?: typeof state.searchErrors; done?: boolean };
+      const m = msg as { token?: number; items?: typeof state.searchResults; errors?: typeof state.searchErrors; done?: boolean; skippedSources?: number };
       // 只有最后一次搜索的结果才落地(用户连续搜索时丢弃过期回包)
       if (m.token !== undefined && m.token !== state.searchToken) { break; }
       state.searchResults = m.items || [];
       state.searchErrors = m.errors || [];
+      state.searchSkipped = m.skippedSources || 0;
       state.searchDone = !!m.done;
       state.searching = false;
       break;

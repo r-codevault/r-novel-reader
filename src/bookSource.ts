@@ -8,7 +8,6 @@
  * 读-改-写走串行队列(照 notes.ts 的做法), 避免连点导入丢数据。
  */
 import * as crypto from 'crypto';
-import * as vscode from 'vscode';
 
 export interface RuleSearch {
     bookList?: string;
@@ -104,12 +103,19 @@ export function toSourceView(s: BookSource): BookSourceView {
     };
 }
 
-const BOOK_SOURCES_KEY = 'novelReader.bookSources';
-const MAX_SOURCES = 2000;
+/** 旧版存储键(globalState): 仅用于一次性迁移, 之后改存文件(合集可达 2000 条 / 10MB) */
+export const LEGACY_BOOK_SOURCES_KEY = 'novelReader.bookSources';
+const MAX_SOURCES = 5000;
 
 interface SourceFile {
     v: number;
     items: BookSource[];
+}
+
+/** 存储适配器: 扩展用文件, 测试用内存 */
+export interface BookSourceStorage {
+    read(): Promise<string | null>;
+    write(text: string): Promise<void>;
 }
 
 export interface ImportResult {
@@ -247,28 +253,69 @@ function isSource(v: unknown): v is BookSource {
 
 export class BookSourceStore {
     private _chain: Promise<unknown> = Promise.resolve();
+    private items: BookSource[] = [];
+    private loaded = false;
+    /** 首次 load 完成前, 写操作必须排队等待(否则会用空表覆盖磁盘) */
+    private _readyResolve: (() => void) | undefined;
+    private readonly _ready = new Promise<void>((resolve) => { this._readyResolve = resolve; });
 
-    constructor(private readonly state: vscode.Memento) {}
+    constructor(private readonly storage: BookSourceStorage) {}
+
+    /** 首启动加载(扩展 activate 时 await; 之后 list/get 均为内存读) */
+    async load(): Promise<void> {
+        if (this.loaded) { return; }
+        this.loaded = true;
+        try {
+            const text = await this.storage.read();
+            if (!text) { return; }
+            const parsed = JSON.parse(text) as SourceFile;
+            if (parsed && parsed.v === 1 && Array.isArray(parsed.items)) {
+                this.items = parsed.items.filter(isSource);
+            }
+        } catch {
+            // 文件损坏: 以空表启动, 不阻断扩展
+            this.items = [];
+        } finally {
+            this._readyResolve?.();
+        }
+    }
+
+    /** 从旧版 globalState 迁移(幂等; 迁移后由调用方清掉旧键) */
+    async migrateLegacy(raw: unknown): Promise<number> {
+        if (!raw || typeof raw !== 'object' || !Array.isArray((raw as SourceFile).items)) { return 0; }
+        if (this.items.length > 0) { return 0; }
+        const items = ((raw as SourceFile).items as unknown[]).filter(isSource) as BookSource[];
+        if (!items.length) { return 0; }
+        this.items = items.slice(0, MAX_SOURCES);
+        await this._persist();
+        return this.items.length;
+    }
 
     private _read(): BookSource[] {
-        const raw = this.state.get<SourceFile | undefined>(BOOK_SOURCES_KEY, undefined);
-        if (!raw || typeof raw !== 'object' || !Array.isArray((raw as SourceFile).items)) { return []; }
-        return (raw as SourceFile).items.filter(isSource);
+        return this.items;
+    }
+
+    private async _persist(): Promise<void> {
+        const doc: SourceFile = { v: 1, items: this.items.slice(0, MAX_SOURCES) };
+        await this.storage.write(JSON.stringify(doc));
     }
 
     private async _write(items: BookSource[]): Promise<void> {
-        // 上限保护: 用户可能一次导入几千条, 截断而不是撑爆 globalState
-        await this.state.update(BOOK_SOURCES_KEY, { v: 1, items: items.slice(0, MAX_SOURCES) } as SourceFile);
+        this.items = items.slice(0, MAX_SOURCES);
+        await this._persist();
     }
 
     private _enqueue<T>(fn: () => Promise<T>): Promise<T> {
-        const run = this._chain.then(fn, fn);
+        // 必须同步快照旧链: 若在回调里读 this._chain, 那时它已被本次任务覆盖, 会自我等待
+        const prev = this._chain;
+        const run = this._ready.then(() => prev).then(fn, fn);
+        // 失败不能污染后续队列
         this._chain = run.catch(() => undefined);
         return run;
     }
 
     list(): BookSource[] {
-        return this._read().sort((a, b) => {
+        return this._read().slice().sort((a, b) => {
             const oa = a.customOrder || 0;
             const ob = b.customOrder || 0;
             if (oa !== ob) { return oa - ob; }

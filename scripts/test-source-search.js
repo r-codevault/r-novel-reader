@@ -16,13 +16,16 @@ const { parseSearchPage, relevanceScore, resultKey } = require('../dist/online/r
 const { SearchService } = require('../dist/online/searchService');
 const fx = require('./fixtures-source');
 
-function memoryState() {
-  const mem = {};
-  return {
-    mem,
-    get: (k, fb) => (k in mem ? mem[k] : fb),
-    update: async (k, v) => { if (v === undefined) { delete mem[k]; } else { mem[k] = v; } },
-  };
+/** 内存存储适配器(书源存文件) */
+function memoryStore() {
+  const box = { text: null };
+  return { box, read: async () => box.text, write: async (t) => { box.text = t; } };
+}
+
+async function makeStore() {
+  const store = new BookSourceStore(memoryStore());
+  await store.load();
+  return store;
 }
 
 function makeResponse(status, body, contentType) {
@@ -98,6 +101,36 @@ const realFetch = globalThis.fetch;
     assert.strictEqual(split.options.method, 'GET');
   }
 
+  // 3b) 相对地址按 bookSourceUrl 补全
+  {
+    const req = await buildSearchRequest({
+      ...HTML_SOURCE,
+      searchUrl: '/search/?keyword={{key}}',
+    }, '斗', 1);
+    // 相对地址经 URL 解析, 中文关键词会被百分号编码
+    assert.strictEqual(req.url, 'https://www.example.com/search/?keyword=' + encodeURIComponent('斗'));
+  }
+
+  // 3c) `<js>` 标签缺闭合也能跑
+  {
+    const req = await buildSearchRequest({
+      ...HTML_SOURCE,
+      searchUrl: '<js>\nvar base = "https://www.example.com/s?q=";\nbase + key\n',
+    }, '斗', 1);
+    assert.strictEqual(req.url, 'https://www.example.com/s?q=斗');
+  }
+
+  // 3d) `[[js表达式]]` 内联求值
+  {
+    const req = await buildSearchRequest({
+      ...HTML_SOURCE,
+      searchUrl: '/s/?k=[[java.md5Encode(key)]]&q={{key}}',
+    }, '斗', 1);
+    assert.ok(req.url.indexOf('/s/?k=') >= 0, '应保留内联脚本生成的参数, 实际: ' + req.url);
+    assert.ok(req.url.indexOf(require('crypto').createHash('md5').update('斗').digest('hex')) >= 0,
+      '内联表达式应被求值, 实际: ' + req.url);
+  }
+
   // 4) 未配置 searchUrl -> unsupported
   {
     await assert.rejects(
@@ -146,7 +179,7 @@ const realFetch = globalThis.fetch;
 
   // 9) 多源聚合: 去重 + 排序 + 错误聚合
   {
-    const store = new BookSourceStore(memoryState());
+    const store = await makeStore();
     await store.importText(JSON.stringify([
       HTML_SOURCE,
       JSON_SOURCE,
@@ -176,7 +209,7 @@ const realFetch = globalThis.fetch;
 
   // 10) 超时不拖垮整轮
   {
-    const store = new BookSourceStore(memoryState());
+    const store = await makeStore();
     await store.importText(JSON.stringify([HTML_SOURCE, { ...JSON_SOURCE, bookSourceUrl: 'https://slow.example.com', searchUrl: 'https://slow.example.com/s?q={{key}}' }]));
     globalThis.fetch = async (url) => {
       if (String(url).indexOf('slow.example.com') >= 0) {
@@ -192,7 +225,7 @@ const realFetch = globalThis.fetch;
 
   // 11) 空关键词 -> 不发请求
   {
-    const store = new BookSourceStore(memoryState());
+    const store = await makeStore();
     await store.importText(JSON.stringify([HTML_SOURCE]));
     globalThis.fetch = async () => { throw new Error('不应发请求'); };
     const out = await new SearchService(store).search('   ');

@@ -3,15 +3,18 @@
  *
  * legado 的 searchUrl 有几种形态:
  *   1. 纯 URL 模板: `https://x.com/search?q={{key}}&p={{page}}`
- *   2. 带选项: `https://x.com/search, {"method":"POST","body":"q={{key}}","headers":{...}}`
- *   3. 脚本: `@js: ...` / `<js>...</js>`(可能返回上面两种之一)
- *   4. 空: 该源无法搜索 -> 抛 UnsupportedRuleError
+ *   2. 相对地址: `/search/?keyword={{key}}`(按 bookSourceUrl 补全)
+ *   3. 带选项: `https://x.com/search, {"method":"POST","body":"q={{key}}"}`
+ *   4. 脚本: `@js: ...` / `<js>...</js>`(部分源缺闭合标签), 返回上面任意一种
+ *   5. 内联脚本: `/s/?k=[[java.md5Encode(key)]]`
+ *   6. 空: 该源无法搜索 -> UnsupportedRuleError
  *
  * 查询串统一 UTF-8 编码; 书源声明的 charset 只用于响应解码。
  */
 import { BookSource } from '../bookSource';
 import { interpolate, UnsupportedRuleError } from '../rules/evalRule';
 import { runJsScript, SandboxHttp } from '../rules/jsSandbox';
+import { resolveUrl } from '../rules/url';
 
 export interface SearchRequest {
     url: string;
@@ -46,6 +49,34 @@ function withKeyQuery(url: string, key: string): string {
     return url + sep + 'key=' + encodeURIComponent(key);
 }
 
+/** legado 的 `[[js表达式]]` 内联脚本: 逐个就地求值 */
+async function expandInlineJs(
+    text: string,
+    source: BookSource,
+    key: string,
+    page: number,
+    http?: SandboxHttp
+): Promise<string> {
+    if (text.indexOf('[[') < 0) { return text; }
+    let out = text;
+    for (let i = 0; i < 5; i++) {
+        const start = out.indexOf('[[');
+        if (start < 0) { break; }
+        const end = out.indexOf(']]', start + 2);
+        if (end < 0) { break; }
+        const expr = out.slice(start + 2, end);
+        const value = await runJsScript(expr, {
+            baseUrl: source.bookSourceUrl,
+            key,
+            page,
+            sourceName: source.bookSourceName,
+            http,
+        });
+        out = out.slice(0, start) + value + out.slice(end + 2);
+    }
+    return out;
+}
+
 export async function buildSearchRequest(
     source: BookSource,
     key: string,
@@ -58,7 +89,10 @@ export async function buildSearchRequest(
     }
 
     let text = raw;
-    const jsMatch = /^@js:\s*([\s\S]*)$/.exec(raw) || /^<js>\s*([\s\S]*?)\s*<\/js>$/.exec(raw);
+    // `@js:` 与 `<js>…</js>`(部分书源的闭合标签缺失, 一并兼容)
+    const jsMatch = /^@js:\s*([\s\S]*)$/i.exec(raw)
+        || /^<js>\s*([\s\S]*?)(?:\s*<\/js>)?$/i.exec(raw);
+    const isJs = !!jsMatch;
     if (jsMatch) {
         text = await runJsScript(jsMatch[1], {
             baseUrl: source.bookSourceUrl,
@@ -74,13 +108,20 @@ export async function buildSearchRequest(
         text = interpolate(raw, { baseUrl: source.bookSourceUrl, key, page });
     }
 
+    // `[[...]]` 内联脚本(legado 支持, 常见于需要 cookie/签名的站点)
+    text = await expandInlineJs(text, source, key, page, http);
+
     const { url: basePart, options } = splitUrlOptions(text);
     let url = basePart.trim();
+    // 相对地址(如 `/tags-01/{{key}}.html`)按书源主地址补全
+    if (url && !/^https?:\/\//i.test(url)) {
+        url = resolveUrl(source.bookSourceUrl, url);
+    }
     if (!/^https?:\/\//i.test(url)) {
-        throw new UnsupportedRuleError('searchUrl 不是有效地址: ' + url.slice(0, 80));
+        throw new UnsupportedRuleError('searchUrl 不是有效地址: ' + basePart.slice(0, 80));
     }
     // 模板没有用到 key 时, 以 query 参数形式补上
-    if (raw.indexOf('{{key}}') < 0 && !jsMatch && url.indexOf('key=' + encodeURIComponent(key)) < 0) {
+    if (raw.indexOf('{{key}}') < 0 && !isJs && url.indexOf('key=' + encodeURIComponent(key)) < 0) {
         url = withKeyQuery(url, key);
     }
     return {

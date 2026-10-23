@@ -24,8 +24,10 @@ export interface SearchOutcome {
     errors: SourceSearchError[];
     /** 实际参与搜索的书源数 */
     sourceCount: number;
-    /** 命中上限被截断 */
+    /** 结果条数被截断 */
     truncated: boolean;
+    /** 因源上限未参与本次搜索的书源数 */
+    skippedSources: number;
 }
 
 export interface SearchOptions {
@@ -40,6 +42,11 @@ export interface SearchOptions {
 const CONCURRENCY = 6;
 const PER_SOURCE_TIMEOUT = 10000;
 const MAX_TOTAL = 300;
+/**
+ * 单次搜索的书源上限: 合集动辄上千个源, 全量并发既慢又容易被站点封。
+ * 按用户书源顺序取前 100 个, 超出部分在 UI 提示(可用选择弹窗缩小范围)。
+ */
+const MAX_SOURCES_PER_SEARCH = 100;
 
 function errorOf(err: unknown): { kind: string; message: string } {
     if (err instanceof UnsupportedRuleError) {
@@ -69,9 +76,11 @@ export class SearchService {
     async search(key: string, opts: SearchOptions = {}): Promise<SearchOutcome> {
         const keyword = (key || '').trim();
         if (!keyword) {
-            return { items: [], errors: [], sourceCount: 0, truncated: false };
+            return { items: [], errors: [], sourceCount: 0, truncated: false, skippedSources: 0 };
         }
-        const list = this.pickSources(opts.sourceIds);
+        const picked = this.pickSources(opts.sourceIds);
+        const list = picked.slice(0, MAX_SOURCES_PER_SEARCH);
+        const skippedSources = Math.max(0, picked.length - list.length);
         const errors: SourceSearchError[] = [];
         const perSource = opts.perSourceTimeoutMs || PER_SOURCE_TIMEOUT;
 
@@ -133,6 +142,6 @@ export class SearchService {
             return oa - ob;
         });
 
-        return { items: merged, errors, sourceCount: list.length, truncated };
+        return { items: merged, errors, sourceCount: list.length, truncated, skippedSources };
     }
 }

@@ -69,7 +69,10 @@ export function resultSummary(items: SearchBookItem[], errors: number): string {
 
 /** 选中书源的展示文案 */
 export function selectedSourcesText(selected: string[], sources: BookSourceView[]): string {
-  if (!selected.length) { return '全部已启用书源'; }
+  if (!selected.length) {
+    const total = enabledSources(sources).length;
+    return total ? '全部已启用书源（' + total + ' 个）' : '全部已启用书源';
+  }
   if (selected.length === 1) {
     const hit = sources.find(function (s) { return s.id === selected[0]; });
     return hit ? hit.name : '1 个书源';

@@ -11,10 +11,19 @@ import { filterSources, statusText } from '../composables/sourceView';
 
 const keyword = ref('');
 const pendingDeleteId = ref('');
+/** 增量渲染: 几千条书源一次全渲染会卡, 先渲染 60 行, 滚动到底再加载 */
+const PAGE = 60;
+const limit = ref(PAGE);
 const editName = ref('');
 const editSearchUrl = ref('');
 
-const list = computed(function () { return filterSources(state.sources, keyword.value); });
+const filtered = computed(function () { return filterSources(state.sources, keyword.value); });
+const list = computed(function () { return filtered.value.slice(0, limit.value); });
+const restCount = computed(function () { return Math.max(0, filtered.value.length - limit.value); });
+
+function loadMore(): void {
+  limit.value += PAGE;
+}
 
 function importBy(mode: 'url' | 'clipboard' | 'file'): void {
   send({ type: 'sourceImport', mode });
@@ -85,7 +94,7 @@ function exportAll(): void {
       </button>
       <div class="src-row-main">
         <div class="src-row-title">
-          {{ s.name }}
+          <span class="src-row-name" :title="s.name">{{ s.name }}</span>
           <span v-if="s.group" class="src-row-group">{{ s.group }}</span>
         </div>
         <div class="src-row-sub">
@@ -115,6 +124,9 @@ function exportAll(): void {
       </div>
     </div>
 
+    <button v-if="restCount > 0" class="popup-btn src-load-more" data-src-load-more @click="loadMore">
+      加载更多（还有 {{ restCount }} 个）
+    </button>
     <p class="src-risk">书源来自第三方, 可能失效或包含脚本。只导入你信任的书源。</p>
   </div>
 </template>

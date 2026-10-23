@@ -1339,6 +1339,67 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   document.querySelector('#sourcePopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
 
+  // 7) 大量书源: 内联只显示前 10 个 + 独立选择弹窗(全选/反选/清空)
+  const many = Array.from({ length: 70 }, (_, i) => ({
+    id: 'm' + i, name: '源' + i, url: 'https://s' + i + '.com', group: i % 2 ? 'G1' : 'G2',
+    enabled: true, searchUrl: 'https://s' + i + '.com/s?q={{key}}',
+  }));
+  sendMsg({ type: 'sources', items: many });
+  menuItem('source').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(40);
+  assert(document.querySelectorAll('#sourcePopup .src-chip').length === 11,
+    '内联应只显示「全部启用」+ 前 10 个, 实际 ' + document.querySelectorAll('#sourcePopup .src-chip').length);
+  assert(document.querySelector('#sourcePopup [data-src-picker]'), '应有「选择书源…」入口');
+
+  document.querySelector('#sourcePopup [data-src-picker]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(40);
+  assert(document.querySelector('[data-src-picker-modal]'), '应打开选择书源弹窗');
+  assert(document.querySelectorAll('[data-src-picker-row]').length === 70, '弹窗应列出全部启用书源');
+  document.querySelector('[data-src-picker-all]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(document.querySelector('.src-picker-count').textContent.includes('70'), '全选后计数应为 70');
+  document.querySelector('[data-src-picker-invert]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(document.querySelector('.src-picker-count').textContent.includes('0'), '反选后应为 0');
+  document.querySelector('[data-src-picker-all]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  document.querySelector('[data-src-picker-clear]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(document.querySelector('.src-picker-count').textContent.includes('0'), '清空后应为 0');
+  // 筛选 + 全选(只选中筛选结果)
+  document.querySelector('[data-src-picker-filter]').value = '源1';
+  document.querySelector('[data-src-picker-filter]').dispatchEvent(new win.Event('input', { bubbles: true }));
+  await sleep(20);
+  document.querySelector('[data-src-picker-all]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(document.querySelector('.src-picker-count').textContent.includes('11'),
+    '筛选「源1」应匹配 源1/源10..源19 共 11 个, 实际 ' + document.querySelector('.src-picker-count').textContent);
+  document.querySelector('[data-src-picker-ok]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(!document.querySelector('[data-src-picker-modal]'), '确定后应关闭弹窗');
+  assert(document.querySelector('#sourcePopup .src-picked').textContent.includes('11 个书源'),
+    '已选文案应显示 11 个书源');
+  posted.length = 0;
+  document.querySelector('#sourcePopup [data-src-input]').dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  await sleep(20);
+  const picked = posted.filter((m) => m.type === 'sourceSearch').pop();
+  assert(picked && Array.isArray(picked.sourceIds) && picked.sourceIds.length === 11,
+    '搜索应带 11 个选中书源');
+
+  // 8) 管理列表增量渲染: 70 条先渲染 60 + 加载更多
+  document.querySelector('#sourcePopup [data-src-tab="manage"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(40);
+  assert(document.querySelectorAll('#sourcePopup .src-row').length === 60,
+    '管理列表应先渲染 60 行, 实际 ' + document.querySelectorAll('#sourcePopup .src-row').length);
+  const moreBtn = document.querySelector('#sourcePopup [data-src-load-more]');
+  assert(moreBtn && moreBtn.textContent.includes('10'), '应有「加载更多（还有 10 个）」');
+  moreBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(40);
+  assert(document.querySelectorAll('#sourcePopup .src-row').length === 70, '加载更多后应渲染 70 行');
+
+  document.querySelector('#sourcePopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+
   // ================================================================ 阅读笔记
   console.log('[阅读笔记]');
   // 1) 空态

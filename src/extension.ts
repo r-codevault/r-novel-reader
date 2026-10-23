@@ -22,7 +22,7 @@ import { moveToTrash } from './trash';
 import { ReadingSettings, SettingsStore } from './settings';
 import { decodeBuffer } from './encoding';
 import { SlackerController } from './slacker';
-import { BookSourceStore, toSourceView } from './bookSource';
+import { BookSourceStore, LEGACY_BOOK_SOURCES_KEY, parseSourceText, toSourceView } from './bookSource';
 import { SearchService } from './online/searchService';
 import { buildSearchRequest } from './online/searchUrl';
 import { parseSearchPage } from './online/ruleApply';
@@ -288,9 +288,42 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ---------------------------------------------------------------- 网络书源(可选功能)
 
-    const bookSources = new BookSourceStore(context.globalState);
+    const sourcesFile = path.join(context.globalStorageUri.fsPath, 'book-sources.json');
+    const bookSources = new BookSourceStore({
+        read: async () => {
+            try { return await fs.promises.readFile(sourcesFile, 'utf8'); } catch { return null; }
+        },
+        write: async (text: string) => {
+            await fs.promises.mkdir(path.dirname(sourcesFile), { recursive: true });
+            await fs.promises.writeFile(sourcesFile, text, 'utf8');
+        },
+    });
     const sourcePool = new SourceHttpPool();
     const searchService = new SearchService(bookSources, sourcePool);
+    // 书源改存文件(合集可达数千条); 首次启动把旧版 globalState 数据迁移过来
+    void bookSources.load().then(async () => {
+        const legacy = context.globalState.get(LEGACY_BOOK_SOURCES_KEY);
+        if (legacy) {
+            const moved = await bookSources.migrateLegacy(legacy);
+            if (moved > 0) {
+                await context.globalState.update(LEGACY_BOOK_SOURCES_KEY, undefined);
+                ReaderPanel.current?.postSources();
+            }
+        }
+    });
+
+    /**
+     * 书源文本解码: **UTF-8 优先**。
+     * 合集 JSON 里本身就可能有少量 \uFFFD(源站数据坏字符), 用 decodeBuffer 的
+     * "发现替换字符就回退 GB18030" 会导致整表乱码 —— 这里以"能否解析出书源"为准。
+     */
+    function decodeSourceBytes(buf: Buffer): string {
+        const utf8 = new TextDecoder('utf-8').decode(buf);
+        if (utf8.indexOf('\uFFFD') < 0) { return utf8; }
+        if (parseSourceText(utf8).raws.length > 0) { return utf8; }
+        const gb = new TextDecoder('gb18030').decode(buf);
+        return parseSourceText(gb).raws.length > 0 ? gb : utf8;
+    }
 
     /** 导入交互: URL / 剪贴板 / 本地文件 -> 存库 -> 刷新面板 */
     async function importSourcesInteractive(mode: 'url' | 'clipboard' | 'file'): Promise<void> {
@@ -306,7 +339,7 @@ export function activate(context: vscode.ExtensionContext): void {
             try {
                 const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 r-novel-reader' } });
                 if (!res.ok) { throw new Error('HTTP ' + res.status); }
-                text = decodeBuffer(Buffer.from(await res.arrayBuffer())).text;
+                text = decodeSourceBytes(Buffer.from(await res.arrayBuffer()));
             } catch (err) {
                 void vscode.window.showErrorMessage('下载书源失败: ' + (err instanceof Error ? err.message : String(err)));
                 return;
@@ -326,7 +359,7 @@ export function activate(context: vscode.ExtensionContext): void {
             });
             if (!picked || !picked[0]) { return; }
             try {
-                text = decodeBuffer(fs.readFileSync(picked[0].fsPath)).text;
+                text = decodeSourceBytes(fs.readFileSync(picked[0].fsPath));
             } catch (err) {
                 void vscode.window.showErrorMessage('读取书源文件失败: ' + (err instanceof Error ? err.message : String(err)));
                 return;
@@ -394,7 +427,11 @@ export function activate(context: vscode.ExtensionContext): void {
             return toSourceView(next);
         },
         exportText: () => bookSources.exportText(),
-        search: (key, sourceIds) => searchService.search(key, { sourceIds }).then((out) => ({ items: out.items, errors: out.errors })),
+        search: (key, sourceIds) => searchService.search(key, { sourceIds }).then((out) => ({
+            items: out.items,
+            errors: out.errors,
+            skippedSources: out.skippedSources,
+        })),
         importInteractive: importSourcesInteractive,
     };
 

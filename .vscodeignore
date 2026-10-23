@@ -16,5 +16,7 @@ media/**/*.json
 media/**/*.json
 .playwright-cli
 .shots*
+.shots/**
+.shots/**
 .vite-dev.log
 media/icon.svg
