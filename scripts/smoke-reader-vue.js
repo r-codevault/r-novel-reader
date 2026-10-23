@@ -177,12 +177,22 @@ document.body.innerHTML = '<div id="app"></div>';
 
 // -- vscode API 桩 + 全局环境
 const posted = [];
+/** 结构化克隆失败记录: 用来抓「把 Vue Proxy 直接 postMessage」这类问题 */
+const cloneErrors = [];
 let themeOverride = null;
 const sandboxWindow = win;
 sandboxWindow.acquireVsCodeApi = function () {
   // 模拟真实 webview 行为: 只允许调用一次, 调用后全局函数即被删除
   const api = {
-    postMessage: (m) => { posted.push(m); return Promise.resolve(true); },
+    postMessage: (m) => {
+      try {
+        posted.push(structuredClone(m));
+      } catch (err) {
+        cloneErrors.push({ type: m && m.type, error: String(err) });
+        posted.push(m);
+      }
+      return Promise.resolve(true);
+    },
     getState: () => undefined,
     setState: () => undefined,
   };
@@ -1494,7 +1504,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#sourcePopup .src-result-title').textContent === '遮天', '结果标题应正确');
   assert(document.querySelector('#sourcePopup .src-result-meta').textContent.includes('635 万字'), '字数应折算为万字');
   assert(document.querySelector('#sourcePopup .src-badge').textContent === 'A站', '应显示来源书源');
-  // 加入在线书架: 按钮可用 -> 发消息 -> 标记已加入
+  // 加入在线书架: 按钮可用 -> pending -> 失败提示 -> 成功标记
   const addBtn = document.querySelector('#sourcePopup [data-src-pane="current"] .src-add');
   assert(addBtn && !addBtn.disabled, '搜索结果「加入书架」应可用');
   posted.length = 0;
@@ -1502,9 +1512,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(20);
   const onlineAddMsg = posted.filter((m) => m.type === 'addOnlineBook').pop();
   assert(onlineAddMsg && onlineAddMsg.item && onlineAddMsg.item.bookUrl === 'https://a.com/b/1', '点加入书架应发送 addOnlineBook');
+  assert(cloneErrors.length === 0, '消息必须可结构化克隆(不能直接发 Vue Proxy): ' + JSON.stringify(cloneErrors));
+  assert(addBtn.textContent.includes('加入中') && addBtn.disabled, '等待回包时应显示「加入中…」');
+  sendMsg({ type: 'onlineBookAdded', bookUrl: 'https://a.com/b/1', ok: false, message: '书源不存在或已被删除' });
+  await sleep(20);
+  assert(document.querySelector('#sourcePopup [data-src-op-error]').textContent.includes('书源不存在'),
+    '加入失败应显示原因');
+  assert(!addBtn.disabled && addBtn.textContent.includes('加入书架'), '失败后按钮应恢复可点');
   sendMsg({ type: 'onlineBookAdded', bookUrl: 'https://a.com/b/1', ok: true });
   await sleep(20);
   assert(addBtn.textContent.includes('已加入') && addBtn.disabled, '加入成功后按钮应显示已加入');
+  assert(!document.querySelector('#sourcePopup [data-src-op-error]'), '成功后应清除失败提示');
 
   // 结果列表限高 10 条: 外层容器 + 内滚
   assert(document.querySelector('#sourcePopup [data-src-results]'), '搜索结果应放在独立滚动容器里');
@@ -1838,7 +1856,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(20);
   const previewMsg = posted.filter((m) => m.type === 'previewOnlineBook').pop();
   assert(previewMsg && previewMsg.item && previewMsg.item.bookUrl, '点结果行应发送 previewOnlineBook');
+  assert(cloneErrors.length === 0, '预览消息必须可结构化克隆: ' + JSON.stringify(cloneErrors));
+  const saveIdx = posted.findIndex((m) => m.type === 'saveProgress');
+  const previewIdx = posted.findIndex((m) => m.type === 'previewOnlineBook');
+  assert(saveIdx >= 0 && saveIdx < previewIdx, '切书前应先发 saveProgress(旧书进度)');
   assert(!$('#sourcePopup').classList.contains('open'), '预览后应关闭书源弹窗');
+  sendMsg({ type: 'previewError', message: '目录解析结果为空' });
+  await sleep(30);
+  assert($('#sourcePopup').classList.contains('open'), '预览失败应重开搜索弹窗');
+  assert(document.querySelector('#sourcePopup [data-src-op-error]').textContent.includes('目录解析结果为空'),
+    '预览失败应显示原因');
 
   document.querySelector('#sourcePopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);

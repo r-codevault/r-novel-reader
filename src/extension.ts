@@ -388,13 +388,20 @@ export function activate(context: vscode.ExtensionContext): void {
             lastChapter: item.lastChapter,
             wordCount: item.wordCount,
         };
-        await shelf.upsert({
-            filePath: key,
-            title: item.title,
-            author: item.author || '',
-            totalChapters: existing?.totalChapters || 0,
-            online: ref,
-        });
+        try {
+            await shelf.upsert({
+                filePath: key,
+                title: item.title,
+                author: item.author || '',
+                totalChapters: existing?.totalChapters || 0,
+                online: ref,
+            });
+        } catch (err) {
+            return {
+                ok: false,
+                message: '写入书架失败: ' + (err instanceof Error ? err.message : String(err)),
+            };
+        }
         refreshShelfView();
         // 后台抓目录补总章数, 失败不影响已入库
         void (async function () {
@@ -421,13 +428,15 @@ export function activate(context: vscode.ExtensionContext): void {
     }): Promise<void> {
         const source = bookSources.get(item.sourceId);
         if (!source) {
+            ReaderPanel.current?.postPreviewError('书源不存在或已被删除');
             void vscode.window.showErrorMessage('预览失败: 书源不存在或已被删除');
             return;
         }
         const key = onlineKey(item.sourceId, item.bookUrl);
         // 已在书架: 直接按正常书打开(预览按钮不会出现)
         if (shelf.get(key)) {
-            await loadOnlineNovel(key, { openPanel: true });
+            const opened = await loadOnlineNovel(key, { openPanel: true });
+            if (!opened) { ReaderPanel.current?.postPreviewError('打开这本书失败'); }
             return;
         }
         try {
@@ -479,9 +488,9 @@ export function activate(context: vscode.ExtensionContext): void {
                 }
             );
         } catch (err) {
-            void vscode.window.showErrorMessage(
-                `预览失败: ${err instanceof Error ? err.message : String(err)}`
-            );
+            const message = err instanceof Error ? err.message : String(err);
+            ReaderPanel.current?.postPreviewError(message);
+            void vscode.window.showErrorMessage(`预览失败: ${message}`);
         }
     }
 

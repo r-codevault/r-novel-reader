@@ -5,8 +5,8 @@
  * 弹窗互斥: 任何时刻最多一个弹窗(目录/阅读设置/书架/存储)
  */
 import { onMounted, nextTick, ref, watch } from 'vue';
-import { state, vscode, gotoChapter, saveRestoreState, currentScrollRatio, type ChapterPayload, type DrawerTab, type NoteItem, type ShelfItemView } from './composables/vscode';
-import { applyThemeVars, DEFAULT_SETTINGS, persistSettings, sendProgress, setProgressSuppressed, setSuppressParaClick, type ReadingSettings } from './store';
+import { send, state, vscode, gotoChapter, saveRestoreState, currentScrollRatio, type ChapterPayload, type DrawerTab, type NoteItem, type ShelfItemView } from './composables/vscode';
+import { applyThemeVars, DEFAULT_SETTINGS, flushProgress, persistSettings, sendProgress, setProgressSuppressed, setSuppressParaClick, type ReadingSettings } from './store';
 import { resolveChapterIndex } from '../../src/noteAnchor';
 import { parseShortcut, matchShortcut } from './composables/shortcut';
 import CatalogPanel from './components/CatalogPanel.vue';
@@ -189,9 +189,22 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       break;
     case 'onlineBookAdded': {
       const m = msg as { bookUrl?: string; ok?: boolean; message?: string };
-      if (m.ok && m.bookUrl && state.onlineAdded.indexOf(m.bookUrl) < 0) {
-        state.onlineAdded.push(m.bookUrl);
+      if (m.bookUrl) {
+        const pending = state.onlineAddPending.indexOf(m.bookUrl);
+        if (pending >= 0) { state.onlineAddPending.splice(pending, 1); }
       }
+      if (m.ok && m.bookUrl) {
+        if (state.onlineAdded.indexOf(m.bookUrl) < 0) { state.onlineAdded.push(m.bookUrl); }
+        state.onlineError = '';
+      } else {
+        state.onlineError = m.message || '加入书架失败';
+      }
+      break;
+    }
+    case 'previewError': {
+      const m = msg as { message?: string };
+      state.onlineError = m.message || '预览失败';
+      state.sourceOpen = true;
       break;
     }
     case 'shelf':
@@ -377,7 +390,8 @@ function jumpToNote(note: NoteItem): void {
     state.noteComposer = null;
     state.pendingNoteJump = note;
     state.notesOpen = false;
-    vscode.postMessage({ type: 'openBook', filePath: note.bookPath });
+    flushProgress();
+    send({ type: 'openBook', filePath: note.bookPath });
     return;
   }
   const cur = state.chapter;

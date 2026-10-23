@@ -197,28 +197,45 @@ export function peekSuppressParaClick(): boolean {
 
 /** 进度上报(600ms 节流 / immediate 立即) */
 let progressTimer: ReturnType<typeof setTimeout> | null = null;
+function postProgressNow(): void {
+  // 定时器可能晚于抑制窗口结束才触发, 触发点再判一次
+  if (!state.chapter || progressSuppressed()) { return; }
+  const max = document.body.scrollHeight - window.innerHeight;
+  const ratio = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+  // 同步回state, 供切章时作为章内位置使用
+  state.chapter.scrollRatio = ratio;
+  send({ type: 'saveProgress', chapterIndex: state.chapter.index, scrollRatio: ratio });
+  // 同步写"窗口重开恢复信息"(webview state); 注意这只是辅助来源,
+  // 真正可靠的是扩展主进程按saveProgress 写入的书架进度(见 readerPanel.restore)
+  if (state.novel && state.novel.filePath) {
+    saveRestoreState({ filePath: state.novel.filePath, chapterIndex: state.chapter.index, scrollRatio: ratio });
+  }
+}
+
 export function sendProgress(immediate: boolean): void {
   if (progressSuppressed()) { return; }
-  const send2 = function (): void {
-    // 定时器可能晚于抑制窗口结束才触发, 触发点再判一次
-    if (!state.chapter || progressSuppressed()) { return; }
-    const max = document.body.scrollHeight - window.innerHeight;
-    const ratio = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
-    // 同步回state, 供切章时作为章内位置使用
-    state.chapter.scrollRatio = ratio;
-    send({ type: 'saveProgress', chapterIndex: state.chapter.index, scrollRatio: ratio });
-    // 同步写"窗口重开恢复信息"(webview state); 注意这只是辅助来源,
-    // 真正可靠的是扩展主进程按saveProgress 写入的书架进度(见 readerPanel.restore)
-    if (state.novel && state.novel.filePath) {
-      saveRestoreState({ filePath: state.novel.filePath, chapterIndex: state.chapter.index, scrollRatio: ratio });
-    }
-  };
+  if (progressTimer) { clearTimeout(progressTimer); progressTimer = null; }
   if (immediate) {
-    send2();
-  } else {
-    if (progressTimer) { clearTimeout(progressTimer); }
-    progressTimer = setTimeout(send2, 600);
+    postProgressNow();
+    return;
   }
+  const book = (state.novel && state.novel.filePath) || '';
+  progressTimer = setTimeout(function () {
+    progressTimer = null;
+    // 换书后旧定时器不能把旧坐标写给新书(未走 flush 的路径兜底)
+    if (((state.novel && state.novel.filePath) || '') !== book) { return; }
+    postProgressNow();
+  }, 600);
+}
+
+/**
+ * 立即落盘当前进度(切书/关面板前调用)。
+ * 必须在发送 openBook/previewOnlineBook 之前调用: postMessage 保序,
+ * 扩展先收到 saveProgress(此时面板仍指向旧书), 再处理换书。
+ */
+export function flushProgress(): void {
+  if (progressTimer) { clearTimeout(progressTimer); progressTimer = null; }
+  postProgressNow();
 }
 
 export type { ChapterPayload, ReadingSettings };

@@ -781,6 +781,7 @@
   .src-cancel:hover { border-color: var(--danger); color: var(--danger); }
   .src-hint { padding: 8px 18px 2px; font-size: var(--ui-font-sub); color: var(--fg-muted); }
   .src-found { flex: none; margin-left: auto; color: var(--fg-muted); white-space: nowrap; }
+  .src-op-error { padding: 6px 18px 2px; font-size: var(--ui-font-sub); color: var(--danger); }
   /* 进度行固定高度 + 源名省略: 避免每个源名字长短不同导致面板高度抖动 */
   .src-progress {
     display: flex; align-items: center; gap: 6px;

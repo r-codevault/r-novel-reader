@@ -267,6 +267,12 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
         if (ReaderPanel.current) {
             const cur = ReaderPanel.current;
             const sameFile = cur._novel.filePath === novel.filePath;
+            if (!sameFile) {
+                // 兜底: 换书前把旧书当前章/位置落盘(webview 已 flush, 这里防其它入口漏掉)
+                ReaderPanel.onProgress?.(cur._novel.filePath, cur._chapterIndex, cur._scrollRatio);
+                cur._ratios.clear();
+                cur._loadingChapters.clear();
+            }
             cur._novel = novel;
             cur._chapterIndex = Math.min(Math.max(0, chapterIndex), Math.max(0, novel.chapters.length - 1));
             cur._scrollRatio = scrollRatio;
@@ -515,7 +521,17 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
         return this._novel ? this._novel.chapters.length : 0;
     }
 
+    /** 预览失败: 通知 webview 重开搜索面板并显示原因 */
+    public postPreviewError(message: string): void {
+        if (!this._ready) { return; }
+        void this._panel.webview.postMessage({ type: 'previewError', message });
+    }
+
     dispose(): void {
+        // 关闭前尽力保存当前进度(在线预览书不在书架时会 no-op)
+        if (this._novel) {
+            ReaderPanel.onProgress?.(this._novel.filePath, this._chapterIndex, this._scrollRatio);
+        }
         ReaderPanel.current = undefined;
         // 面板关闭: 停掉还在跑(或暂停中)的搜索与批量检查, 避免后台挂着
         this._activeSearch?.control.cancel();
@@ -588,6 +604,10 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                     // 如实记录当前位置(含顶部 0): 滚回顶部后离开也应回到顶部;
                     // 切章瞬间的旧位置上报已由 webview 侧抑制, 不会污染新章
                     this._ratios.set(msg.chapterIndex, ratio);
+                    // 只接受当前章的进度: 迟到的旧章回包不能覆盖当前位置
+                    if (msg.chapterIndex === this._chapterIndex) {
+                        this._scrollRatio = ratio;
+                    }
                     ReaderPanel.onProgress?.(
                         this._novel.filePath,
                         msg.chapterIndex,
@@ -597,21 +617,47 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                 break;
             case 'addOnlineBook': {
                 const api = ReaderPanel.bookSources;
-                if (!api?.addOnlineBook) { break; }
+                if (!api?.addOnlineBook) {
+                    void this._panel.webview.postMessage({
+                        type: 'onlineBookAdded',
+                        bookUrl: msg.item.bookUrl,
+                        ok: false,
+                        message: '书源功能不可用',
+                    });
+                    break;
+                }
                 void api.addOnlineBook(msg.item).then((res) => {
+                    if (!res.ok) {
+                        void vscode.window.showErrorMessage('加入书架失败: ' + (res.message || '未知原因'));
+                    }
                     void this._panel.webview.postMessage({
                         type: 'onlineBookAdded',
                         bookUrl: msg.item.bookUrl,
                         ok: !!res.ok,
                         message: res.message || '',
                     });
+                }, (err: unknown) => {
+                    const message = err instanceof Error ? err.message : String(err);
+                    void vscode.window.showErrorMessage('加入书架失败: ' + message);
+                    void this._panel.webview.postMessage({
+                        type: 'onlineBookAdded',
+                        bookUrl: msg.item.bookUrl,
+                        ok: false,
+                        message,
+                    });
                 });
                 break;
             }
             case 'previewOnlineBook': {
                 const api = ReaderPanel.bookSources;
-                if (!api?.previewOnlineBook) { break; }
-                void api.previewOnlineBook(msg.item);
+                if (!api?.previewOnlineBook) {
+                    this.postPreviewError('书源功能不可用');
+                    break;
+                }
+                void api.previewOnlineBook(msg.item).then(undefined, (err: unknown) => {
+                    const message = err instanceof Error ? err.message : String(err);
+                    this.postPreviewError(message);
+                });
                 break;
             }
             case 'previewAddToShelf': {

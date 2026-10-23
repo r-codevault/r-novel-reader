@@ -139,6 +139,22 @@ export interface SearchBookItem {
 }
 
 /** 单源搜索错误 */
+/** 搜索结果去掉 Vue 响应式代理, 变成可结构化克隆的纯对象 */
+export function plainSearchBook(i: SearchBookItem): SearchBookItem {
+  return {
+    sourceId: i.sourceId,
+    sourceName: i.sourceName,
+    title: i.title,
+    author: i.author,
+    bookUrl: i.bookUrl,
+    coverUrl: i.coverUrl,
+    intro: i.intro,
+    kind: i.kind,
+    lastChapter: i.lastChapter,
+    wordCount: i.wordCount,
+  };
+}
+
 export interface SourceSearchError {
   sourceId: string;
   sourceName: string;
@@ -209,6 +225,10 @@ export const state = reactive({
   splitCurrentRows: null as null | number,
   /** 已加入在线书架的 bookUrl(搜索结果按钮状态) */
   onlineAdded: [] as string[],
+  /** 正在加入书架的 bookUrl */
+  onlineAddPending: [] as string[],
+  /** 加入书架/预览失败原因(搜索结果顶部提示) */
+  onlineError: '',
   /** 在线章节加载中 */
   chapterLoading: null as null | { index: number; title: string },
   /** 在线章节加载失败 */
@@ -230,7 +250,13 @@ export const state = reactive({
 
 /** 发消息给扩展(自由格式, 字段与协议一一对应) */
 export function send(msg: Record<string, unknown>): void {
-  vscode.postMessage(msg);
+  try {
+    vscode.postMessage(msg);
+  } catch (err) {
+    // 常见原因: 把 Vue reactive Proxy 直接发了出去(结构化克隆会抛 DataCloneError)
+    console.error('[reader] postMessage 失败(含不可克隆对象?)', msg && (msg as { type?: string }).type, err);
+    throw err;
+  }
 }
 
 /** 章节跳转请求(dir: 按钮方向; curRatio: 离开时的章内位置, 供扩展记住本章进度) */

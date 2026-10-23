@@ -5,6 +5,7 @@
  */
 import { computed, ref } from 'vue';
 import { state, send, type ShelfItemView } from '../composables/vscode';
+import { flushProgress } from '../store';
 
 const rootRef = ref<HTMLElement | null>(null);
 defineExpose({ el: rootRef });
@@ -27,6 +28,8 @@ function onBookClick(b: ShelfItemView, ev: MouseEvent): void {
     send({ type: 'removeBook', filePath: b.filePath });
     return;
   }
+  // 换书前先落盘当前进度, 避免最后 600ms 内的滚动丢失
+  flushProgress();
   send({ type: 'openBook', filePath: b.filePath });
   state.shelfOpen = false;
 }

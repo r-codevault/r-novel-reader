@@ -6,7 +6,8 @@
  * 结果区上下分栏：本次结果 / 历史搜索(上一次)；分隔条可按行拖动。
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { send, state } from '../composables/vscode';
+import { plainSearchBook, send, state } from '../composables/vscode';
+import { flushProgress } from '../store';
 import {
   allocResultRows, deadSources, failedNames, resultMeta, resultSummary,
   searchableSources, sourceLabel,
@@ -46,15 +47,25 @@ function isAdded(item: { bookUrl: string }): boolean {
   return state.onlineAdded.indexOf(item.bookUrl) >= 0;
 }
 
+function isPending(item: { bookUrl: string }): boolean {
+  return state.onlineAddPending.indexOf(item.bookUrl) >= 0;
+}
+
 /** 点击结果行: 临时预览阅读(不加入书架) */
-function previewBook(item: { sourceName?: string } & Record<string, unknown>): void {
-  send({ type: 'previewOnlineBook', item });
+function previewBook(item: { bookUrl: string } & Record<string, unknown>): void {
+  // 切书前先把上一本的章节/章内位置发给扩展(此时面板仍指向旧书)
+  flushProgress();
+  state.onlineError = '';
+  send({ type: 'previewOnlineBook', item: plainSearchBook(item as never) });
   state.sourceOpen = false;
 }
 
-function addOnline(item: { bookUrl: string }): void {
-  if (isAdded(item)) { return; }
-  send({ type: 'addOnlineBook', item });
+function addOnline(item: { bookUrl: string } & Record<string, unknown>): void {
+  if (isAdded(item) || isPending(item)) { return; }
+  state.onlineError = '';
+  state.onlineAddPending.push(item.bookUrl);
+  // 必须传纯对象: Vue 响应式 Proxy 无法被 postMessage 结构化克隆
+  send({ type: 'addOnlineBook', item: plainSearchBook(item as never) });
 }
 
 function doSearch(): void {
@@ -81,6 +92,7 @@ function doSearch(): void {
   state.searchProgress = null;
   state.searchPaused = false;
   state.splitCurrentRows = null;
+  state.onlineError = '';
   state.searchToken += 1;
   send({ type: 'sourceSearch', key, token: state.searchToken });
 }
@@ -228,6 +240,7 @@ function goDead(): void {
     </div>
 
     <template v-else>
+      <div v-if="state.onlineError" class="src-op-error" data-src-op-error>{{ state.onlineError }}</div>
       <div v-if="state.searching" class="src-hint src-progress" data-src-progress>
         <template v-if="state.searchProgress">
           <span class="src-progress-prefix">{{ state.searchPaused ? '已暂停' : '正在搜索' }}</span>
@@ -268,9 +281,10 @@ function goDead(): void {
             </div>
             <div class="src-result-side">
               <span class="src-badge">{{ sourceLabel(item) }}</span>
-              <button class="popup-btn src-add" :class="{ added: isAdded(item) }" :disabled="isAdded(item)"
+              <button class="popup-btn src-add" :class="{ added: isAdded(item) }"
+                :disabled="isAdded(item) || isPending(item)"
                 :title="isAdded(item) ? '已在书架' : '加入在线书架'" @click.stop="addOnline(item)">
-                {{ isAdded(item) ? '已加入' : '加入书架' }}
+                {{ isAdded(item) ? '已加入' : (isPending(item) ? '加入中…' : '加入书架') }}
               </button>
             </div>
           </div>
