@@ -22,9 +22,9 @@ function toggleStatusBar(): void {
 }
 
 interface MenuItem {
-  id: 'shelf' | 'catalog' | 'notes' | 'settings' | 'storage' | 'source';
+  id: 'shelf' | 'history' | 'catalog' | 'notes' | 'settings' | 'storage' | 'source';
   name: string;
-  key: 'shelfOpen' | 'catalogOpen' | 'notesOpen' | 'settingsOpen' | 'storageOpen' | 'sourceOpen';
+  key: 'shelfOpen' | 'historyOpen' | 'catalogOpen' | 'notesOpen' | 'settingsOpen' | 'storageOpen' | 'sourceOpen';
   /** 完整内联 SVG(fill/stroke 由各自定义, 颜色统一用 currentColor 跟随主题) */
   svg: string;
 }
@@ -37,6 +37,14 @@ const SVG_SHELF =
   '<rect x="260" y="80" width="90" height="420" rx="12" fill="var(--sp-accent)"/>' +
   '<rect x="410" y="140" width="90" height="360" rx="12" fill="currentColor"/>' +
   '<path d="M70 560 H640 M150 583 V660 M560 583 V660" fill="none" stroke="currentColor" stroke-width="46" stroke-linecap="round"/>' +
+  '</svg>';
+
+/** 历史记录: 时钟 + 回拨箭头 */
+const SVG_HISTORY =
+  '<svg viewBox="0 0 707 704" aria-hidden="true">' +
+  '<circle cx="353" cy="352" r="270" fill="none" stroke="currentColor" stroke-width="46"/>' +
+  '<path d="M353 190 V352 L470 420" fill="none" stroke="currentColor" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/>' +
+  '<path d="M120 250 L96 130 L216 154" fill="none" stroke="var(--sp-accent)" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>' +
   '</svg>';
 
 /** 目录: 列表方框 + 三个圆点(首点强调色) + 三条线 —— 设计稿矢量版 */
@@ -98,6 +106,7 @@ const SVG_STORAGE =
 
 const items: MenuItem[] = [
   { id: 'shelf', name: '书架', key: 'shelfOpen', svg: SVG_SHELF },
+  { id: 'history', name: '历史记录', key: 'historyOpen', svg: SVG_HISTORY },
   { id: 'catalog', name: '目录', key: 'catalogOpen', svg: SVG_CATALOG },
   { id: 'notes', name: '笔记', key: 'notesOpen', svg: SVG_NOTES },
   { id: 'settings', name: '阅读设置', key: 'settingsOpen', svg: SVG_SETTINGS },
@@ -119,6 +128,7 @@ function toggle(item: MenuItem): void {
   state.catalogOpen = false;
   state.settingsOpen = false;
   state.shelfOpen = false;
+  state.historyOpen = false;
   state.storageOpen = false;
   state.notesOpen = false;
   state.sourceOpen = false;
@@ -143,7 +153,7 @@ function startSlacker(): void {
     <!-- 菜单分隔线(位于折叠按钮与菜单项之间) -->
     <div class="menu-divider"></div>
 
-    <button v-for="it in items.filter(function (x) { return x.id === 'shelf' || x.id === 'catalog' || x.id === 'notes'; })"
+    <button v-for="it in items.filter(function (x) { return x.id === 'shelf' || x.id === 'history' || x.id === 'catalog' || x.id === 'notes'; })"
       :key="it.id" class="menu-item" :class="{ active: state[it.key] }" :data-menu="it.id"
       :title="it.name" @click="toggle(it)">
       <span class="menu-ico" v-html="it.svg"></span>
@@ -174,7 +184,7 @@ function startSlacker(): void {
       <span class="menu-label">状态栏</span>
     </button>
 
-    <button v-for="it in items.filter(function (x) { return x.id !== 'shelf' && x.id !== 'catalog' && x.id !== 'notes'; })"
+    <button v-for="it in items.filter(function (x) { return x.id !== 'shelf' && x.id !== 'history' && x.id !== 'catalog' && x.id !== 'notes'; })"
       :key="it.id" class="menu-item" :class="{ active: state[it.key] }" :data-menu="it.id"
       :title="it.name" @click="toggle(it)">
       <span class="menu-ico" v-html="it.svg"></span>

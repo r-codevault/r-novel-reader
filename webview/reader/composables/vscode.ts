@@ -155,6 +155,17 @@ export function plainSearchBook(i: SearchBookItem): SearchBookItem {
   };
 }
 
+export interface HistoryItemView {
+  kind: 'local' | 'online';
+  filePath: string;
+  title: string;
+  author: string;
+  chapterIndex: number;
+  totalChapters: number;
+  lastReadAt: number;
+  sourceName?: string;
+}
+
 export interface SourceSearchError {
   sourceId: string;
   sourceName: string;
@@ -231,6 +242,10 @@ export const state = reactive({
   onlineError: '',
   /** 当前打开/预览中的在线书地址(搜索结果高亮用) */
   previewBookUrl: '',
+  /** 历史记录弹窗 */
+  historyOpen: false,
+  historyTab: 'local' as 'local' | 'online',
+  history: { local: [] as HistoryItemView[], online: [] as HistoryItemView[] },
   /** 预览解析中(全局: 切 Tab/关闭弹窗都保留) */
   previewPending: null as null | {
     bookUrl: string;

@@ -18,6 +18,7 @@ import { readWebviewAsset } from './webviewAssets';
 import { ReadingSettings, SettingsStore, THEMES, fontStackById, themeById } from './settings';
 import type { NoteDraft, NoteItem } from './notes';
 import type { BookSourceView, ImportResult } from './bookSource';
+import type { HistoryPayload } from './history';
 import type { SearchBookItem } from './online/ruleApply';
 import type { SearchBatch, SearchProgress, SourceSearchError } from './online/searchService';
 import { SearchControl } from './online/searchService';
@@ -84,6 +85,7 @@ type WebviewMessage =
     | { type: 'requestNotes' }
     // 网络书源
     | { type: 'requestSources' }
+    | { type: 'requestHistory' }
     | { type: 'sourceSearch'; key: string; sourceIds?: string[]; token: number }
     | { type: 'sourceSearchPause'; token: number; paused: boolean }
     | { type: 'sourceSearchCancel'; token: number }
@@ -206,6 +208,8 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
     public static getShelf?: () => ShelfItemView[];
     /** 书库目录提供者(插件入口注入) */
     public static getLibrary?: () => string;
+    /** 阅读历史提供者(插件入口注入) */
+    public static historyProvider?: () => HistoryPayload;
     /** 章节位置记忆查询(书架 chapterRatios): 返回 undefined = 该章没有记忆, 从顶部读 */
     public static getChapterRatio?: (filePath: string, chapterIndex: number) => number | undefined;
     /** 笔记存储(插件入口注入): init 时下发全量, 增删改后回推增量 */
@@ -819,6 +823,11 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             case 'requestSources':
                 this.postSources();
                 break;
+            case 'requestHistory': {
+                const payload = ReaderPanel.historyProvider?.() || { local: [], online: [] };
+                void this._panel.webview.postMessage({ type: 'history', payload });
+                break;
+            }
             case 'sourceSearch': {
                 const api = ReaderPanel.bookSources;
                 if (!api) { break; }

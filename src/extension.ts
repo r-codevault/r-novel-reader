@@ -15,6 +15,7 @@ import * as vscode from 'vscode';
 import { parseNovel, deriveTitleAuthor, Novel } from './novelParser';
 import { ReaderPanel, ShelfItemView, DrawerTab, ReaderPanelState } from './readerPanel';
 import { ShelfStore } from './shelf';
+import { HistoryStore } from './history';
 import { NotesStore } from './notes';
 import { ensureInLibrary, isInsideDir } from './library';
 import { shelfBookKey, planDuplicateRemoval } from './shelfMaintenance';
@@ -41,9 +42,15 @@ interface LoadOptions {
     onError?: (err: unknown) => void;
 }
 
+let historyStore: HistoryStore | undefined;
+
 export function activate(context: vscode.ExtensionContext): void {
     const store = new SettingsStore(context.globalState);
     const shelf = new ShelfStore(context.globalState);
+    const history = new HistoryStore(context.globalState);
+    history.load();
+    historyStore = history;
+    ReaderPanel.historyProvider = () => history.list();
     const notes = new NotesStore(context.globalState);
     // 书架/目录/存储 已并入阅读面板左抽屉; 面板未打开时用状态栏按钮或命令面板进入
     ReaderPanel.getShelf = () => shelfItems();
@@ -138,6 +145,24 @@ export function activate(context: vscode.ExtensionContext): void {
     // ---------------------------------------------------------------- 加载小说
 
     /** 加载小说: 解析 -> 登记书架 -> 刷新视图 -> (可选)打开阅读面板 */
+    /** 记录本地/在线阅读历史(预览书不在书架时不记) */
+    function recordHistory(filePath: string, chapterIndex: number, totalOverride?: number): void {
+        const entry = shelf.get(filePath);
+        if (!entry) { return; }
+        history.record({
+            kind: entry.online ? 'online' : 'local',
+            filePath,
+            title: entry.title || path.basename(filePath),
+            author: entry.author,
+            chapterIndex,
+            totalChapters: totalOverride || entry.totalChapters || 0,
+            lastReadAt: Date.now(),
+            sourceId: entry.online?.sourceId,
+            sourceName: entry.online?.sourceName,
+            bookUrl: entry.online?.bookUrl,
+        });
+    }
+
     async function loadNovel(filePath: string, opts: LoadOptions = {}): Promise<Novel | undefined> {
         if (isOnlinePath(filePath)) { return loadOnlineNovel(filePath, opts); }
         try {
@@ -355,6 +380,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     vscode.ViewColumn.One,
                     opts.openSettings
                 );
+                recordHistory(filePath, chapterIndex, novel.chapters.length);
             }
             return novel;
         } catch (err) {
@@ -1328,6 +1354,7 @@ export function activate(context: vscode.ExtensionContext): void {
         // 用消息里带的 filePath, 而不是 currentNovel ——
         // 窗口恢复出来的面板不会经过 loadNovel, currentNovel 可能为空或指向别的书
         void shelf.updateProgress(filePath, chapterIndex, scrollRatio).then(refreshShelfView);
+        recordHistory(filePath, chapterIndex);
     };
 
     // ---------------------------------------------------------------- 摸鱼模式会话
@@ -1388,5 +1415,6 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
+    void historyStore?.flush();
     ReaderPanel.current?.dispose();
 }

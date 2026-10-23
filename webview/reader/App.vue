@@ -15,6 +15,7 @@ import ReaderArea from './components/ReaderArea.vue';
 import StatusBar from './components/StatusBar.vue';
 import SideMenu from './components/SideMenu.vue';
 import ShelfPopup from './components/ShelfPopup.vue';
+import HistoryPopup from './components/HistoryPopup.vue';
 import StoragePopup from './components/StoragePopup.vue';
 import NotesPopup from './components/NotesPopup.vue';
 import NoteComposer from './components/NoteComposer.vue';
@@ -24,6 +25,7 @@ import './reader.css';
 const catalogRef = ref<InstanceType<typeof CatalogPanel> | null>(null);
 const settingsRef = ref<InstanceType<typeof SettingsPanel> | null>(null);
 const shelfRef = ref<InstanceType<typeof ShelfPopup> | null>(null);
+const historyRef = ref<InstanceType<typeof HistoryPopup> | null>(null);
 const sourceRef = ref<InstanceType<typeof SourcePopup> | null>(null);
 const storageRef = ref<InstanceType<typeof StoragePopup> | null>(null);
 const notesRef = ref<InstanceType<typeof NotesPopup> | null>(null);
@@ -44,7 +46,7 @@ watch(function () { return state.menuExpanded; }, function (expanded) {
 }, { immediate: true });
 
 // ---------------------------------------------------------------- 弹窗互斥(同一时刻只允许一个)
-const popupKeys = ['catalogOpen', 'settingsOpen', 'shelfOpen', 'storageOpen', 'notesOpen', 'sourceOpen'] as const;
+const popupKeys = ['catalogOpen', 'settingsOpen', 'shelfOpen', 'storageOpen', 'notesOpen', 'sourceOpen', 'historyOpen'] as const;
 
 /** 状态栏是否显示(设置项, 默认显示) */
 function statusBarVisible(): boolean {
@@ -52,7 +54,8 @@ function statusBarVisible(): boolean {
 }
 
 function anyPopupOpen(): boolean {
-  return state.catalogOpen || state.settingsOpen || state.shelfOpen || state.storageOpen || state.notesOpen || state.sourceOpen;
+  return state.catalogOpen || state.settingsOpen || state.shelfOpen || state.storageOpen
+    || state.notesOpen || state.sourceOpen || state.historyOpen;
 }
 
 /** 关闭全部弹窗(点击弹窗外任意处/按 Esc 时调用) */
@@ -63,6 +66,7 @@ function closeAllPopups(): void {
   state.storageOpen = false;
   state.notesOpen = false;
   state.sourceOpen = false;
+  state.historyOpen = false;
 }
 
 function openOnly(key: typeof popupKeys[number]): void {
@@ -272,6 +276,14 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
         state.sourceView = 'search';
         state.sourceOpen = true;
       }
+      break;
+    }
+    case 'history': {
+      const p = msg.payload as { local?: unknown[]; online?: unknown[] } | undefined;
+      state.history = {
+        local: (p && Array.isArray(p.local) ? p.local : []) as typeof state.history.local,
+        online: (p && Array.isArray(p.online) ? p.online : []) as typeof state.history.online,
+      };
       break;
     }
     case 'shelf':
@@ -532,6 +544,7 @@ function onDocMouseDown(e: MouseEvent): void {
     (storageRef.value?.el && storageRef.value.el.contains(target)) ||
     (notesRef.value?.el && notesRef.value.el.contains(target)) ||
     (sourceRef.value?.el && sourceRef.value.el.contains(target)) ||
+    (historyRef.value?.el && historyRef.value.el.contains(target)) ||
     (el.closest ? !!el.closest('.menu') : false);
   if (!inside) { closeAllPopups(); }
 }
@@ -658,6 +671,7 @@ onMounted(function () {
       <CatalogPanel ref="catalogRef" />
       <SettingsPanel ref="settingsRef" />
       <ShelfPopup ref="shelfRef" />
+      <HistoryPopup ref="historyRef" />
       <StoragePopup ref="storageRef" />
       <NotesPopup ref="notesRef" @jump="jumpToNote" />
       <SourcePopup ref="sourceRef" />

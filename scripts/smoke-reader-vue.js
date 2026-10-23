@@ -506,18 +506,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!menuEl.classList.contains('expanded'), '点菜单按钮应收起');
   assert(document.documentElement.style.getPropertyValue('--menu-w') === '48px', '收起时 --menu-w 应为 48px');
   assert(
-    document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not([data-menu="slacker"])').length === 6,
-    '菜单应有 6 个弹窗功能项, 实际: ' + document.querySelectorAll('.menu-item').length + ' (含状态栏/摸鱼) / ' + document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not([data-menu="slacker"])').length + ' (弹窗项)'
+    document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not([data-menu="slacker"])').length === 7,
+    '菜单应有 7 个弹窗功能项, 实际: ' + document.querySelectorAll('.menu-item').length + ' (含状态栏/摸鱼) / ' + document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not([data-menu="slacker"])').length + ' (弹窗项)'
   );
-  assert(document.querySelectorAll('.menu-item[data-menu]').length === 8, '菜单共 8 项(状态栏开关 + 摸鱼入口 + 书源)');
+  assert(document.querySelectorAll('.menu-item[data-menu]').length === 9, '菜单共 9 项(状态栏开关 + 摸鱼入口 + 书源)');
   assert(document.querySelector('.menu-item[data-menu="statusbar"]'), '菜单应有「状态栏」显隐开关');
   assert(document.querySelector('.menu-item[data-menu="slacker"]'), '菜单应有「摸鱼模式」入口');
   // 顺序: 书架 → 目录 → 状态栏 → 阅读设置 → 存储位置 → 摸鱼模式, 分割线在最下方
   const order = Array.from(document.querySelector('.menu').children).map((el) =>
     el.classList.contains('menu-divider') ? 'divider' : el.getAttribute('data-menu'));
   assert(
-    JSON.stringify(order) === JSON.stringify([null, 'divider', 'shelf', 'catalog', 'notes', 'statusbar', 'settings', 'storage', 'source', 'slacker']),
-    '菜单顺序应为 折叠按钮 + 分割线 + 书架/目录/笔记/状态栏/阅读设置/存储位置/书源/摸鱼模式, 实际: ' + JSON.stringify(order)
+    JSON.stringify(order) === JSON.stringify([null, 'divider', 'shelf', 'history', 'catalog', 'notes', 'statusbar', 'settings', 'storage', 'source', 'slacker']),
+    '菜单顺序应为 折叠按钮 + 分割线 + 书架/历史/目录/笔记/状态栏/阅读设置/存储位置/书源/摸鱼模式, 实际: ' + JSON.stringify(order)
   );
   // 摸鱼入口点击 -> postMessage slackerStart(转发到 novelReader.slackerStart 命令)
   {
@@ -930,6 +930,33 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(tag.getAttribute('title') === '测试站', '徽标应带来源名');
 
   console.log('书架弹窗(渲染/打开/移除/添加): 通过');
+
+  // 历史记录弹窗: 本地/在线分栏、点击打开、15 行滚动
+  sendMsg({ type: 'history', payload: {
+    local: [
+      { kind: 'local', filePath: 'D:/h1.txt', title: '本地历史1', author: '甲', chapterIndex: 2, totalChapters: 10, lastReadAt: Date.now() },
+      { kind: 'local', filePath: 'D:/h2.txt', title: '本地历史2', author: '', chapterIndex: 0, totalChapters: 3, lastReadAt: Date.now() },
+    ],
+    online: [
+      { kind: 'online', filePath: 'online://s1/h', title: '在线历史', author: '乙', chapterIndex: 1, totalChapters: 20, lastReadAt: Date.now(), sourceName: '测试站' },
+    ],
+  } });
+  menuItem('history').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(40);
+  assert($('#historyPopup').classList.contains('open'), '点「历史记录」应打开弹窗');
+  assert(posted.some((m) => m.type === 'requestHistory'), '打开历史弹窗应请求历史数据');
+  assert(document.querySelectorAll('#historyPopup .hist-row').length === 2, '本地 Tab 应显示 2 条');
+  assert(document.querySelector('#historyPopup .hist-row .bk-tag').textContent.includes('本地'), '本地记录应显示「本地」标签');
+  document.querySelector('#historyPopup [data-hist-tab="online"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(document.querySelectorAll('#historyPopup .hist-row').length === 1, '在线 Tab 应显示 1 条');
+  assert(document.querySelector('#historyPopup .hist-row .bk-tag').textContent.includes('在线'), '在线记录应显示「在线」标签');
+  posted.length = 0;
+  document.querySelector('#historyPopup .hist-row').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'openBook' && m.filePath === 'online://s1/h'), '点历史记录应发 openBook');
+  assert(!$('#historyPopup').classList.contains('open'), '打开后历史弹窗应关闭');
+  assert(/\.hist-list\s*\{[^}]*max-height:\s*660px/.test(capturedHtml), '历史列表应限制 15 行高度');
 
   // 目录弹窗(菜单打开) + 章节跳转
   menuItem('catalog').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
