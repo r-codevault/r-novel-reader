@@ -36,6 +36,20 @@ export interface SearchOutcome {
     revived: string[];
 }
 
+/** 搜索进度(每完成一个源推一次) */
+export interface SearchProgress {
+    /** 已完成源数 */
+    done: number;
+    /** 本次参与搜索的源总数 */
+    total: number;
+    /** 刚完成的源名 */
+    sourceName: string;
+    /** 该源是否成功 */
+    ok: boolean;
+    /** 累计失败源数 */
+    failed: number;
+}
+
 export interface SearchOptions {
     /** 只搜这些书源; 不传 = 全部启用 */
     sourceIds?: string[];
@@ -43,6 +57,8 @@ export interface SearchOptions {
     signal?: AbortSignal;
     /** 单源超时(默认 10s) */
     perSourceTimeoutMs?: number;
+    /** 进度回调(每完成一个源调用一次) */
+    onProgress?: (p: SearchProgress) => void;
 }
 
 const CONCURRENCY = 6;
@@ -90,6 +106,15 @@ export class SearchService {
         const errors: SourceSearchError[] = [];
         const outcomes: SourceResult[] = [];
         const perSource = opts.perSourceTimeoutMs || PER_SOURCE_TIMEOUT;
+        const total = list.length;
+        let done = 0;
+        let failed = 0;
+        /** 每完成一个源: 累加并回报进度 */
+        const report = (source: BookSource, ok: boolean): void => {
+            done += 1;
+            if (!ok) { failed += 1; }
+            opts.onProgress?.({ done, total, sourceName: source.bookSourceName, ok, failed });
+        };
 
         const batches = await mapLimit(list, CONCURRENCY, async (source) => {
             if (opts.signal?.aborted) {
@@ -109,6 +134,7 @@ export class SearchService {
             if (result.timedOut) {
                 const message = '搜索超时(' + Math.round(perSource / 1000) + 's)';
                 outcomes.push({ id: source.id, ok: false, message });
+                report(source, false);
                 return {
                     source,
                     items: [] as SearchBookItem[],
@@ -119,6 +145,7 @@ export class SearchService {
                 const e = errorOf(result.error);
                 // 用户取消(abort)不算书源失败
                 if (e.kind !== 'abort') { outcomes.push({ id: source.id, ok: false, message: e.message }); }
+                report(source, e.kind === 'abort');
                 return {
                     source,
                     items: [] as SearchBookItem[],
@@ -127,6 +154,7 @@ export class SearchService {
             }
             const items = result.value as SearchBookItem[];
             outcomes.push({ id: source.id, ok: true, message: items.length ? '命中 ' + items.length + ' 条' : '可请求, 但未命中结果' });
+            report(source, true);
             return { source, items, error: null };
         });
 

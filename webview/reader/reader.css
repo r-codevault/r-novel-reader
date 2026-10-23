@@ -277,33 +277,33 @@
   /* ---------- 滚动条: 跟随阅读主题(默认 Chromium 深色滚动条会与浅色主题格格不入) ---------- */
   /* ---------- 滚动条: 与底部状态栏进度条同风格(细 + 高亮色 --sp-accent) ---------- */
   .cat-body, #settingsPanel, #catalogPanel,
-  #shelfPopup .popup-body, #storagePopup .popup-body, #notesPopup .popup-body, #sourcePopup .src-list, .note-preview {
+  #shelfPopup .popup-body, #storagePopup .popup-body, #notesPopup .popup-body, #sourcePopup .src-list, #sourcePopup .src-results, .note-preview {
     scrollbar-width: thin;
     scrollbar-color: var(--sp-accent) transparent; /* Firefox */
   }
   .cat-body::-webkit-scrollbar, #settingsPanel::-webkit-scrollbar,
   #catalogPanel::-webkit-scrollbar,
   #shelfPopup .popup-body::-webkit-scrollbar, #storagePopup .popup-body::-webkit-scrollbar,
-  #notesPopup .popup-body::-webkit-scrollbar, #sourcePopup .src-list::-webkit-scrollbar, .note-preview::-webkit-scrollbar {
+  #notesPopup .popup-body::-webkit-scrollbar, #sourcePopup .src-list::-webkit-scrollbar, #sourcePopup .src-results::-webkit-scrollbar, .note-preview::-webkit-scrollbar {
     width: 6px; height: 6px;
   }
   .cat-body::-webkit-scrollbar-track, #settingsPanel::-webkit-scrollbar-track,
   #catalogPanel::-webkit-scrollbar-track,
   #shelfPopup .popup-body::-webkit-scrollbar-track, #storagePopup .popup-body::-webkit-scrollbar-track,
-  #notesPopup .popup-body::-webkit-scrollbar-track, #sourcePopup .src-list::-webkit-scrollbar-track, .note-preview::-webkit-scrollbar-track {
+  #notesPopup .popup-body::-webkit-scrollbar-track, #sourcePopup .src-list::-webkit-scrollbar-track, #sourcePopup .src-results::-webkit-scrollbar-track, .note-preview::-webkit-scrollbar-track {
     background: transparent;
   }
   .cat-body::-webkit-scrollbar-thumb, #settingsPanel::-webkit-scrollbar-thumb,
   #catalogPanel::-webkit-scrollbar-thumb,
   #shelfPopup .popup-body::-webkit-scrollbar-thumb, #storagePopup .popup-body::-webkit-scrollbar-thumb,
-  #notesPopup .popup-body::-webkit-scrollbar-thumb, #sourcePopup .src-list::-webkit-scrollbar-thumb, .note-preview::-webkit-scrollbar-thumb {
+  #notesPopup .popup-body::-webkit-scrollbar-thumb, #sourcePopup .src-list::-webkit-scrollbar-thumb, #sourcePopup .src-results::-webkit-scrollbar-thumb, .note-preview::-webkit-scrollbar-thumb {
     background: var(--sp-accent); /* 与状态栏进度条填充同色: 浅色红 / 黑夜金 */
     border-radius: 3px;
   }
   .cat-body::-webkit-scrollbar-thumb:hover, #settingsPanel::-webkit-scrollbar-thumb:hover,
   #catalogPanel::-webkit-scrollbar-thumb:hover,
   #shelfPopup .popup-body::-webkit-scrollbar-thumb:hover, #storagePopup .popup-body::-webkit-scrollbar-thumb:hover,
-  #notesPopup .popup-body::-webkit-scrollbar-thumb:hover, #sourcePopup .src-list::-webkit-scrollbar-thumb:hover, .note-preview::-webkit-scrollbar-thumb:hover {
+  #notesPopup .popup-body::-webkit-scrollbar-thumb:hover, #sourcePopup .src-list::-webkit-scrollbar-thumb:hover, #sourcePopup .src-results::-webkit-scrollbar-thumb:hover, .note-preview::-webkit-scrollbar-thumb:hover {
     background: var(--accent);
   }
   /* 阅读页整体滚动条(同样风格, 稍宽便于拖拽)
@@ -697,6 +697,8 @@
     min-width: 360px;
     /* 单行固定高度: 15 行 = 480px, 便于精确限高 */
     --src-row-h: 32px;
+    /* 搜索结果行高: 10 条 = 440px */
+    --src-result-h: 44px;
   }
   #sourcePopup .popup-body { padding-bottom: 6px; }
 
@@ -730,7 +732,24 @@
   }
   .src-go:disabled { opacity: .55; cursor: default; }
 
+  #sourcePopup .src-search-body { display: flex; flex-direction: column; overflow: hidden; }
+  .src-search-body > .src-search,
+  .src-search-body > .src-hint,
+  .src-search-body > .src-bar,
+  .src-search-body > .src-errors,
+  .src-search-body > .popup-empty { flex: none; }
+  .src-results {
+    flex: 1 1 auto; min-height: 0;
+    max-height: calc(var(--src-result-h) * 10);   /* 最多 10 条, 超出内滚 */
+    overflow-y: auto;
+    overscroll-behavior: auto;
+  }
   .src-hint { padding: 8px 18px 2px; font-size: var(--ui-font-sub); color: var(--fg-muted); }
+  .src-hint b { font-weight: 600; color: var(--fg); }
+  .src-ok { color: var(--charts-green, #2ea043); }
+  .src-bad { color: var(--danger); }
+  .src-bar { height: 2px; margin: 2px 18px 4px; background: var(--sp-border); border-radius: 1px; overflow: hidden; }
+  .src-bar i { display: block; height: 100%; background: var(--accent); transition: width .15s linear; }
   .src-skip { color: var(--danger); }
   .src-empty { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
   .src-empty .popup-primary { width: auto; padding: 6px 14px; }
@@ -748,7 +767,8 @@
   /* 搜索结果行 */
   .src-result {
     display: flex; align-items: center; gap: 12px;
-    padding: 9px 18px; border-left: 3px solid transparent;
+    height: var(--src-result-h); padding: 0 18px;
+    border-left: 3px solid transparent;
   }
   .src-result:hover { background: var(--sp-hover); }
   .src-result-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }

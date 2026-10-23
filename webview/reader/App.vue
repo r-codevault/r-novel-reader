@@ -194,6 +194,18 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.notes = state.notes.filter(function (n) { return n.id !== id; });
       break;
     }
+    case 'searchProgress': {
+      const m = msg as { token?: number; done?: number; total?: number; sourceName?: string; ok?: boolean; failed?: number };
+      if (m.token !== undefined && m.token !== state.searchToken) { break; }
+      state.searchProgress = {
+        done: m.done || 0,
+        total: m.total || 0,
+        sourceName: m.sourceName || '',
+        ok: !!m.ok,
+        failed: m.failed || 0,
+      };
+      break;
+    }
     case 'sources':
       state.sources = (msg as { items?: typeof state.sources }).items || [];
       break;
@@ -205,6 +217,7 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.searchErrors = m.errors || [];
       state.searchSkipped = m.skippedSources || 0;
       state.searchDeadAdded = (m.deadAdded || []).length;
+      state.searchProgress = null;
       state.searchDone = !!m.done;
       state.searching = false;
       break;

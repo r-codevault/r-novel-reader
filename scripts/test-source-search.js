@@ -354,6 +354,31 @@ const realFetch = globalThis.fetch;
     assert.strictEqual(out['User-Agent'], 'x');
   }
 
+  // 18) 进度回调: 每个源一次, done 递增, total 为参与数, 失败计数正确
+  {
+    const store = await makeStore();
+    const BAD = {
+      bookSourceName: '坏源', bookSourceUrl: 'https://bad2.example.com',
+      searchUrl: 'https://bad2.example.com/s?q={{key}}',
+      ruleSearch: { bookList: '.item', name: '.name@text', bookUrl: 'a@href' },
+    };
+    await store.importText(JSON.stringify([HTML_SOURCE, BAD]));
+    globalThis.fetch = async (url) => {
+      if (String(url).indexOf('bad2.example.com') >= 0) { return makeResponse(500, 'err'); }
+      return makeResponse(200, fx.SEARCH_HTML);
+    };
+    const events = [];
+    const out = await new SearchService(store).search('遮天', { onProgress: (p) => events.push(p) });
+    assert.strictEqual(events.length, 2, '每个源应回报一次进度, 实际 ' + events.length);
+    assert.strictEqual(events[0].total, 2, 'total 应为参与搜索的源数');
+    assert.deepStrictEqual(events.map((e) => e.done), [1, 2], 'done 应递增');
+    const bad = events.find((e) => e.sourceName === '坏源');
+    assert.ok(bad && bad.ok === false && bad.failed === 1, '失败源应标记 ok=false 并累计 failed');
+    const good = events.find((e) => e.sourceName === 'HTML站');
+    assert.ok(good && good.ok === true, '成功源应标记 ok=true');
+    assert.strictEqual(out.sourceCount, 2);
+  }
+
   console.log('书源搜索测试全部通过 ✔');
 })().catch((err) => {
   globalThis.fetch = realFetch;

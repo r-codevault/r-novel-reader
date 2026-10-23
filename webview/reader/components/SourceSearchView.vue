@@ -16,6 +16,11 @@ const searchable = computed(function () { return searchableSources(state.sources
 const deadCount = computed(function () { return deadSources(state.sources).length; });
 const noSource = computed(function () { return state.sources.length === 0; });
 const noSearchable = computed(function () { return state.sources.length > 0 && searchable.value.length === 0; });
+const progressPercent = computed(function () {
+  const p = state.searchProgress;
+  if (!p || !p.total) { return 0; }
+  return Math.min(100, Math.round((p.done / p.total) * 100));
+});
 const errorNames = computed(function () {
   return failedNames(state.searchErrors.map(function (e) { return e.sourceName; }));
 });
@@ -29,6 +34,7 @@ function doSearch(): void {
   state.searchErrors = [];
   state.searchSkipped = 0;
   state.searchDeadAdded = 0;
+  state.searchProgress = null;
   state.searchToken += 1;
   send({ type: 'sourceSearch', key, token: state.searchToken });
 }
@@ -43,7 +49,7 @@ function goDead(): void {
 </script>
 
 <template>
-  <div class="popup-body">
+  <div class="popup-body src-search-body">
     <div class="src-search">
       <input ref="inputRef" v-model="state.searchKeyword" class="src-input" type="text"
         placeholder="输入书名或作者, 回车搜索" data-src-input @keydown.enter="doSearch" />
@@ -66,7 +72,18 @@ function goDead(): void {
     </div>
 
     <template v-else>
-      <div v-if="state.searching" class="src-hint">正在搜索 {{ searchable.length }} 个书源…</div>
+      <div v-if="state.searching" class="src-hint" data-src-progress>
+        <template v-if="state.searchProgress">
+          正在搜索 {{ state.searchProgress.done }}/{{ state.searchProgress.total }}
+          · 刚完成 <b>{{ state.searchProgress.sourceName }}</b>
+          <span :class="state.searchProgress.ok ? 'src-ok' : 'src-bad'">{{ state.searchProgress.ok ? '✓' : '✗' }}</span>
+          <span v-if="state.searchProgress.failed > 0" class="src-skip"> · 失败 {{ state.searchProgress.failed }}</span>
+        </template>
+        <template v-else>正在准备搜索…</template>
+      </div>
+      <div v-if="state.searching && state.searchProgress" class="src-bar" data-src-bar>
+        <i :style="{ width: progressPercent + '%' }"></i>
+      </div>
       <div v-else-if="state.searchDone" class="src-hint">
         {{ resultSummary(state.searchResults, state.searchErrors.length) }}
         <span v-if="state.searchDeadAdded > 0" class="src-skip">· {{ state.searchDeadAdded }} 个源失败已移入失效</span>
@@ -80,6 +97,7 @@ function goDead(): void {
         <button class="src-link" data-src-error-dead @click="goDead">查看失效书源</button>
       </div>
 
+      <div class="src-results" data-src-results>
       <div v-for="(item, i) in state.searchResults" :key="item.bookUrl + i" class="src-result" :data-src-result="i">
         <div class="src-result-main">
           <div class="src-result-title">{{ item.title }}</div>
@@ -89,6 +107,7 @@ function goDead(): void {
           <span class="src-badge">{{ sourceLabel(item) }}</span>
           <button class="popup-btn src-add" disabled title="在线阅读将在下一版本接入">加入书架</button>
         </div>
+      </div>
       </div>
     </template>
   </div>

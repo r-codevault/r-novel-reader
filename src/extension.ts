@@ -445,7 +445,7 @@ export function activate(context: vscode.ExtensionContext): void {
         clearDead: () => bookSources.clearDead(),
         deadCount: () => bookSources.deadList().length,
         setEnabledMany: (patches) => bookSources.setEnabledMany(patches),
-        search: (key, sourceIds) => searchService.search(key, { sourceIds }).then((out) => {
+        search: (key, sourceIds, onProgress) => searchService.search(key, { sourceIds, onProgress }).then((out) => {
             // 失效/恢复有变化时立刻刷新列表(避免用户还要手动刷新)
             if (out.recorded > 0) { ReaderPanel.current?.postSources(); }
             return {

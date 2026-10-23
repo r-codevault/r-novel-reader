@@ -1336,8 +1336,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(searchMsg && searchMsg.key === '遮天', '回车应发送 sourceSearch');
   assert(typeof searchMsg.token === 'number', 'sourceSearch 应带 token');
   assert(searchMsg.sourceIds === undefined, '搜索不应再带 sourceIds(范围由「书源」Tab 勾选)');
-  assert(document.querySelector('#sourcePopup .src-hint').textContent.includes('正在搜索 2 个书源'),
-    '搜索中应显示参与的书源数');
+  assert(document.querySelector('#sourcePopup [data-src-progress]').textContent.includes('正在准备搜索'),
+    '未收到进度前应显示准备中');
+
+  // 7b) 搜索进度: 第几个源 / 源名 / 成败 / 失败数
+  sendMsg({ type: 'searchProgress', token: searchMsg.token, done: 1, total: 2, sourceName: 'A站', ok: true, failed: 0 });
+  await sleep(20);
+  let hint = document.querySelector('#sourcePopup [data-src-progress]').textContent;
+  assert(hint.includes('1/2'), '应显示已完成/总数, 实际: ' + hint);
+  assert(hint.includes('A站') && hint.includes('✓'), '应显示刚完成的源与成功标记');
+  assert(document.querySelector('#sourcePopup [data-src-bar]'), '应有进度条');
+
+  sendMsg({ type: 'searchProgress', token: searchMsg.token, done: 2, total: 2, sourceName: 'B站', ok: false, failed: 1 });
+  await sleep(20);
+  hint = document.querySelector('#sourcePopup [data-src-progress]').textContent;
+  assert(hint.includes('2/2') && hint.includes('B站') && hint.includes('✗'), '应显示失败源与失败标记');
+  assert(hint.includes('失败 1'), '应显示累计失败数');
 
   sendMsg({ type: 'searchResults', token: searchMsg.token, done: true, deadAdded: ['s2'], errors: [
     { sourceId: 's2', sourceName: 'B站', kind: 'timeout', message: '搜索超时(10s)' },
@@ -1350,6 +1364,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#sourcePopup .src-result-title').textContent === '遮天', '结果标题应正确');
   assert(document.querySelector('#sourcePopup .src-result-meta').textContent.includes('635 万字'), '字数应折算为万字');
   assert(document.querySelector('#sourcePopup .src-badge').textContent === 'A站', '应显示来源书源');
+  // 结果列表限高 10 条: 外层容器 + 内滚
+  assert(document.querySelector('#sourcePopup [data-src-results]'), '搜索结果应放在独立滚动容器里');
+  assert(document.querySelectorAll('[data-src-results] .src-result').length === 2,
+    '结果行应位于滚动容器内');
+  // 构建后的 CSS 是压缩的: `.src-results{...}` 无空格, 属性间也无空格
+  assert(/\.src-results\{[^}]*max-height:\s*calc\(var\(--src-result-h\)\s*\*\s*10\)/.test(capturedHtml),
+    '结果列表应限制为 10 条高度');
+  assert(/\.src-results\{[^}]*overflow-y:\s*auto/.test(capturedHtml),
+    '结果列表应内部滚动');
+
   assert(document.querySelector('#sourcePopup [data-src-errors]').textContent.includes('1 个书源搜索失败'),
     '搜索报错应折叠成一行摘要');
   assert(document.querySelector('#sourcePopup [data-src-errors]').textContent.includes('已移入失效'),

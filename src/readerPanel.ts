@@ -18,7 +18,7 @@ import { ReadingSettings, SettingsStore, THEMES, fontStackById, themeById } from
 import type { NoteDraft, NoteItem } from './notes';
 import type { BookSourceView, ImportResult } from './bookSource';
 import type { SearchBookItem } from './online/ruleApply';
-import type { SourceSearchError } from './online/searchService';
+import type { SearchProgress, SourceSearchError } from './online/searchService';
 
 interface InitPayload {
     filePath: string;
@@ -132,7 +132,7 @@ export interface BookSourceApi {
     /** 批量启停(全选/反选/全部停用) */
     setEnabledMany(patches: { id: string; enabled: boolean }[]): Promise<number>;
     /** 搜索; token 原样回传, 供 webview 丢弃过期结果 */
-    search(key: string, sourceIds: string[] | undefined): Promise<{
+    search(key: string, sourceIds: string[] | undefined, onProgress?: (p: SearchProgress) => void): Promise<{
         items: SearchBookItem[];
         errors: SourceSearchError[];
         skippedSources: number;
@@ -646,7 +646,17 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             case 'sourceSearch': {
                 const api = ReaderPanel.bookSources;
                 if (!api) { break; }
-                void api.search(msg.key, msg.sourceIds).then((out) => {
+                void api.search(msg.key, msg.sourceIds, (p) => {
+                    void this._panel.webview.postMessage({
+                        type: 'searchProgress',
+                        token: msg.token,
+                        done: p.done,
+                        total: p.total,
+                        sourceName: p.sourceName,
+                        ok: p.ok,
+                        failed: p.failed,
+                    });
+                }).then((out) => {
                     void this._panel.webview.postMessage({
                         type: 'searchResults',
                         token: msg.token,
