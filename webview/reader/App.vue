@@ -198,12 +198,13 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.sources = (msg as { items?: typeof state.sources }).items || [];
       break;
     case 'searchResults': {
-      const m = msg as { token?: number; items?: typeof state.searchResults; errors?: typeof state.searchErrors; done?: boolean; skippedSources?: number };
+      const m = msg as { token?: number; items?: typeof state.searchResults; errors?: typeof state.searchErrors; done?: boolean; skippedSources?: number; deadAdded?: string[] };
       // 只有最后一次搜索的结果才落地(用户连续搜索时丢弃过期回包)
       if (m.token !== undefined && m.token !== state.searchToken) { break; }
       state.searchResults = m.items || [];
       state.searchErrors = m.errors || [];
       state.searchSkipped = m.skippedSources || 0;
+      state.searchDeadAdded = (m.deadAdded || []).length;
       state.searchDone = !!m.done;
       state.searching = false;
       break;
@@ -428,40 +429,30 @@ function onWheel(e: WheelEvent): void {
 
 // 弹窗/浮层根节点: 命中即认为滚轮发生在浮层内
 const OVERLAY_SEL = '.popup, #catalogPanel, #settingsPanel, .note-preview, .note-composer';
-/** 已登记的纵向滚动容器(新增浮层时记得补) */
-const SCROLLER_SEL = '.popup-body, .cat-body, #settingsPanel, .note-preview';
 
-function isScrollableY(el: HTMLElement | null): boolean {
-  if (!el) { return false; }
+/** 该元素在当前滚动方向上是否还能滚 */
+function canScrollY(el: HTMLElement, deltaY: number): boolean {
   if (el.scrollHeight <= el.clientHeight + 1) { return false; }
-  let oy = '';
-  try { oy = getComputedStyle(el).overflowY || ''; } catch { oy = ''; }
-  // happy-dom 无布局/无计算样式时 oy 为空 -> 只看几何, 便于冒烟断言
-  return oy === '' || oy === 'auto' || oy === 'scroll' || oy === 'overlay';
-}
-
-function nearestScroller(start: HTMLElement | null): HTMLElement | null {
-  for (let el: HTMLElement | null = start; el && el !== document.body; el = el.parentElement) {
-    if (el.matches && el.matches(SCROLLER_SEL)) { return isScrollableY(el) ? el : null; }
-    if (isScrollableY(el)) { return el; } // 兜底: 未登记的滚动容器
-  }
-  return null;
+  const top = el.scrollTop;
+  return deltaY < 0 ? top > 0 : top + el.clientHeight < el.scrollHeight - 1;
 }
 
 /**
- * 阻止滚动穿透: 浮层内滚不动/已到边界时吞掉滚轮, 背后正文不再跟着滚。
- * CSS 的 overscroll-behavior 只能挡"容器内到底", 挡不住"容器根本不可滚"。
+ * 阻止滚动穿透: 在浮层内从目标向上找, 任意一层还能滚就放行;
+ * 到浮层根都没人能接住, 才吞掉滚轮(正文不再跟着滚)。
+ * 这样列表与外层面板两层滚动都能正常接力。
  */
 function onWheelGuard(e: WheelEvent): void {
   if (e.defaultPrevented || e.ctrlKey || e.metaKey) { return; } // Ctrl+滚轮交给字号缩放
+  if (Math.abs(e.deltaY) < 1) { return; }                       // 横向/惯性尾帧
   const target = e.target as HTMLElement | null;
-  if (!target || !target.closest || !target.closest(OVERLAY_SEL)) { return; }
-  const scroller = nearestScroller(target);
-  if (!scroller) { e.preventDefault(); return; }
-  if (e.deltaY === 0) { return; }
-  const atTop = scroller.scrollTop <= 0;
-  const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
-  if ((e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) { e.preventDefault(); }
+  const overlay = target && target.closest ? target.closest(OVERLAY_SEL) : null;
+  if (!target || !overlay) { return; }                          // 正文区域不干预
+  for (let el: HTMLElement | null = target; el; el = el.parentElement) {
+    if (canScrollY(el, e.deltaY)) { return; }
+    if (el === overlay) { break; }                              // 只在浮层内部找, 不到 body/html
+  }
+  e.preventDefault();
 }
 
 // ---------------------------------------------------------------- 生命周期

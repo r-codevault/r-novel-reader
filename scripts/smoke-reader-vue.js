@@ -1242,7 +1242,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   sendMsg({ type: 'sources', items: [
     { id: 's1', name: 'A站', url: 'https://a.com', group: '玄幻', enabled: true, searchUrl: 'https://a.com/s?q={{key}}', lastCheckOk: true, lastCheckMessage: '命中 3 条', failStreak: 0 },
     { id: 's2', name: 'B站', url: 'https://b.com', group: '', enabled: true, searchUrl: 'https://b.com/s?q={{key}}', failStreak: 0 },
-    { id: 's3', name: 'C站', url: 'https://c.com', group: '', enabled: true, searchUrl: 'https://c.com/s?q={{key}}', lastCheckOk: false, lastCheckMessage: '网络错误', failStreak: 2, deadAt: Date.now() - 1000, deadReason: '网络错误: fetch failed (c.com)' },
+    { id: 's3', name: 'C站', url: 'https://c.com', group: '', enabled: true, searchUrl: 'https://c.com/s?q={{key}}', lastCheckOk: false, lastCheckMessage: '网络错误', failStreak: 1, deadAt: Date.now() - 1000, deadReason: '网络错误: fetch failed (c.com)' },
   ] });
   await sleep(40);
   assert(document.querySelectorAll('#sourcePopup [data-src-tab]').length === 3, '应有 3 个 Tab(搜索/书源/失效)');
@@ -1268,7 +1268,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const baseItems = [
     { id: 's1', name: 'A站', url: 'https://a.com', group: '玄幻', enabled: true, searchUrl: 'https://a.com/s?q={{key}}', lastCheckOk: true, lastCheckMessage: '命中 3 条', failStreak: 0 },
     { id: 's2', name: 'B站', url: 'https://b.com', group: '', enabled: false, searchUrl: 'https://b.com/s?q={{key}}', failStreak: 0 },
-    { id: 's3', name: 'C站', url: 'https://c.com', group: '', enabled: true, searchUrl: 'https://c.com/s?q={{key}}', lastCheckOk: false, failStreak: 2, deadAt: Date.now() - 1000, deadReason: '网络错误: fetch failed (c.com)' },
+    { id: 's3', name: 'C站', url: 'https://c.com', group: '', enabled: true, searchUrl: 'https://c.com/s?q={{key}}', lastCheckOk: false, failStreak: 1, deadAt: Date.now() - 1000, deadReason: '网络错误: fetch failed (c.com)' },
   ];
   sendMsg({ type: 'sources', items: baseItems });
   await sleep(30);
@@ -1339,7 +1339,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#sourcePopup .src-hint').textContent.includes('正在搜索 2 个书源'),
     '搜索中应显示参与的书源数');
 
-  sendMsg({ type: 'searchResults', token: searchMsg.token, done: true, errors: [
+  sendMsg({ type: 'searchResults', token: searchMsg.token, done: true, deadAdded: ['s2'], errors: [
     { sourceId: 's2', sourceName: 'B站', kind: 'timeout', message: '搜索超时(10s)' },
   ], items: [
     { sourceId: 's1', sourceName: 'A站', title: '遮天', author: '辰东', bookUrl: 'https://a.com/b/1', kind: '玄幻', wordCount: 6350000, lastChapter: '第1888章 完美世界' },
@@ -1352,6 +1352,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#sourcePopup .src-badge').textContent === 'A站', '应显示来源书源');
   assert(document.querySelector('#sourcePopup [data-src-errors]').textContent.includes('1 个书源搜索失败'),
     '搜索报错应折叠成一行摘要');
+  assert(document.querySelector('#sourcePopup [data-src-errors]').textContent.includes('已移入失效'),
+    '摘要应说明失败源已移入失效');
+  assert(document.querySelector('#sourcePopup .src-hint').textContent.includes('1 个源失败已移入失效'),
+    '结果行应提示新移入失效的数量');
   assert(document.querySelector('#sourcePopup [data-src-error-dead]'), '摘要旁应有「查看失效书源」');
 
   // 8) 点摘要里的链接 -> 跳到失效 Tab
@@ -1360,6 +1364,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#sourcePopup [data-dead-id="s3"]'), '应跳到失效 Tab 并显示失效源');
   assert(document.querySelector('#sourcePopup .src-dead-reason').textContent.includes('网络错误'),
     '失效行应展示失败原因');
+  assert(!document.querySelector('#sourcePopup .src-risk').textContent.includes('连续 2 次'),
+    '失效说明不应再写「连续 2 次」');
+  assert(document.querySelector('#sourcePopup .src-risk').textContent.includes('任意一次失败'),
+    '失效说明应改为「任意一次失败」');
 
   posted.length = 0;
   document.querySelector('#sourcePopup [data-src-recheck="s3"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
@@ -1414,31 +1422,63 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '管理列表应先渲染 60 行, 实际 ' + document.querySelectorAll('#sourcePopup .src-row[data-source-id]').length);
   const moreBtn = document.querySelector('#sourcePopup [data-src-load-more]');
   assert(moreBtn && moreBtn.textContent.includes('10'), '应有「加载更多（还有 10 个）」');
+  assert(!moreBtn.closest('[data-src-list]'), '「加载更多」应放在滚动列表之外(不占 15 行名额)');
   moreBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(40);
   assert(document.querySelectorAll('#sourcePopup .src-row[data-source-id]').length === 70, '加载更多后应渲染 70 行');
 
-  // 12) 滚动守卫: 弹窗内到底后吞掉滚轮, 正文不受影响
+  // 11b) 列表限高 15 行: 行都在 list 内, 列表自身滚动
+  assert(document.querySelector('[data-src-list]'), '管理列表应有独立滚动容器 [data-src-list]');
+  assert(document.querySelectorAll('[data-src-list] .src-row[data-source-id]').length === 70,
+    '所有行都应在滚动容器内');
+  assert(/\.src-list\s*\{[^}]*max-height:\s*calc\(var\(--src-row-h\)\s*\*\s*15\)[^}]*overflow-y:\s*auto/.test(capturedHtml),
+    '列表应限制为 15 行高度并内部滚动');
+  assert(/\.src-row\s*\{[^}]*height:\s*var\(--src-row-h\)/.test(capturedHtml),
+    '行高应固定为 --src-row-h, 便于精确限高');
+  assert(/--src-row-h:\s*32px/.test(capturedHtml), '行高变量应为 32px');
+
+  // 12) 滚动守卫: 列表与外层面板接力; 都到底才阻断
   assert(/\.popup-body\s*\{[^}]*overscroll-behavior:\s*contain/.test(capturedHtml),
     '弹窗体应有 overscroll-behavior: contain');
   {
+    const listEl = document.querySelector('#sourcePopup .src-list');
     const bodyEl = document.querySelector('#sourcePopup .popup-body');
+    const rowEl = document.querySelector('#sourcePopup .src-row[data-source-id]');
+    let listTop = 100;
+    let bodyTop = 100;
+    Object.defineProperty(listEl, 'scrollHeight', { configurable: true, value: 600 });
+    Object.defineProperty(listEl, 'clientHeight', { configurable: true, value: 200 });
+    Object.defineProperty(listEl, 'scrollTop', { configurable: true, get: () => listTop, set: () => {} });
     Object.defineProperty(bodyEl, 'scrollHeight', { configurable: true, value: 600 });
     Object.defineProperty(bodyEl, 'clientHeight', { configurable: true, value: 200 });
-    let fakeTop = 400;
-    Object.defineProperty(bodyEl, 'scrollTop', { configurable: true, get: () => fakeTop, set: () => {} });
-    const atBottom = new win.WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true });
-    bodyEl.dispatchEvent(atBottom);
-    assert(atBottom.defaultPrevented, '列表已到底时滚轮应被阻断(不带动正文)');
+    Object.defineProperty(bodyEl, 'scrollTop', { configurable: true, get: () => bodyTop, set: () => {} });
 
-    fakeTop = 100;
-    const inMiddle = new win.WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true });
-    bodyEl.dispatchEvent(inMiddle);
-    assert(!inMiddle.defaultPrevented, '容器内仍可正常滚动');
+    // a) 列表未到底 -> 放行
+    let ev = new win.WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true });
+    rowEl.dispatchEvent(ev);
+    assert(!ev.defaultPrevented, '列表未到底时应正常滚动列表');
 
-    const onReader = new win.WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true });
-    (document.querySelector('#reader') || document.body).dispatchEvent(onReader);
-    assert(!onReader.defaultPrevented, '正文区域的滚轮不应被拦截');
+    // b) 列表到底, 外层面板仍可滚 -> 放行(接力给面板)
+    listTop = 400;
+    ev = new win.WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true });
+    rowEl.dispatchEvent(ev);
+    assert(!ev.defaultPrevented, '列表到底但面板还能滚时应放行');
+
+    // c) 两层都到底 -> 阻断, 不带动正文
+    bodyTop = 400;
+    ev = new win.WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true });
+    rowEl.dispatchEvent(ev);
+    assert(ev.defaultPrevented, '列表与面板都到底时应阻断滚轮');
+
+    // d) 横向/惯性 deltaY=0 -> 不干预
+    ev = new win.WheelEvent('wheel', { deltaY: 0, bubbles: true, cancelable: true });
+    rowEl.dispatchEvent(ev);
+    assert(!ev.defaultPrevented, 'deltaY=0 不应拦截');
+
+    // e) 正文区域 -> 不干预
+    ev = new win.WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true });
+    (document.querySelector('#reader') || document.body).dispatchEvent(ev);
+    assert(!ev.defaultPrevented, '正文区域的滚轮不应被拦截');
   }
 
   document.querySelector('#sourcePopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));

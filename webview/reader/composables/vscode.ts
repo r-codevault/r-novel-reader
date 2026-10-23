@@ -193,6 +193,8 @@ export const state = reactive({
   searchDone: false,
   /** 本次因源上限(100)未参与搜索的书源数 */
   searchSkipped: 0,
+  /** 本次搜索新移入失效的书源数 */
+  searchDeadAdded: 0,
   /** 书源管理: 正在编辑的 sourceId(空 = 无) */
   sourceEditingId: '',
 });

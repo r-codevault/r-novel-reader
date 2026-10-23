@@ -4,7 +4,7 @@
  *
  * 勾选框 = 是否启用(参与搜索)。失效书源不在这里出现, 统一去「失效」Tab。
  */
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { send, state } from '../composables/vscode';
 import type { BookSourceView } from '../composables/vscode';
 import { aliveSources, checkStatus, filterSources, statusText } from '../composables/sourceView';
@@ -77,6 +77,13 @@ function startEdit(s: BookSourceView): void {
   state.sourceEditingId = s.id;
   editName.value = s.name;
   editSearchUrl.value = s.searchUrl;
+  // 编辑最后几行时表单可能在滚动区外
+  void nextTick(function () {
+    const root = document.querySelector('#sourcePopup [data-src-edit-name]') as HTMLElement | null;
+    if (root && typeof root.scrollIntoView === 'function') {
+      root.scrollIntoView({ block: 'nearest' });
+    }
+  });
 }
 
 function cancelEdit(): void {
@@ -106,7 +113,7 @@ function loadMore(): void {
 </script>
 
 <template>
-  <div class="popup-body">
+  <div class="popup-body src-manage-body">
     <div class="src-tools">
       <button class="popup-secondary" data-src-import="url" @click="importBy('url')">从 URL 导入</button>
       <button class="popup-secondary" data-src-import="clipboard" @click="importBy('clipboard')">粘贴 JSON</button>
@@ -134,6 +141,7 @@ function loadMore(): void {
     </div>
     <div v-else-if="!filtered.length" class="popup-empty src-empty">没有匹配的书源</div>
 
+    <div class="src-list" data-src-list>
     <template v-for="s in list" :key="s.id">
       <div class="src-row" :data-source-id="s.id">
         <input type="checkbox" class="src-check" :checked="s.enabled" :data-src-toggle="s.id"
@@ -164,10 +172,11 @@ function loadMore(): void {
         </div>
       </div>
     </template>
+    </div>
 
     <button v-if="restCount > 0" class="popup-btn src-load-more" data-src-load-more @click="loadMore">
       加载更多（还有 {{ restCount }} 个）
     </button>
-    <p class="src-risk">勾选 = 启用并参与搜索；连续 2 次失败的书源会自动移到「失效」Tab。书源来自第三方，只导入你信任的。</p>
+    <p class="src-risk">勾选 = 启用并参与搜索；失败一次的书源会自动移到「失效」Tab（可重查恢复）。书源来自第三方，只导入你信任的。</p>
   </div>
 </template>

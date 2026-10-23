@@ -277,33 +277,33 @@
   /* ---------- 滚动条: 跟随阅读主题(默认 Chromium 深色滚动条会与浅色主题格格不入) ---------- */
   /* ---------- 滚动条: 与底部状态栏进度条同风格(细 + 高亮色 --sp-accent) ---------- */
   .cat-body, #settingsPanel, #catalogPanel,
-  #shelfPopup .popup-body, #storagePopup .popup-body, #notesPopup .popup-body, .note-preview {
+  #shelfPopup .popup-body, #storagePopup .popup-body, #notesPopup .popup-body, #sourcePopup .src-list, .note-preview {
     scrollbar-width: thin;
     scrollbar-color: var(--sp-accent) transparent; /* Firefox */
   }
   .cat-body::-webkit-scrollbar, #settingsPanel::-webkit-scrollbar,
   #catalogPanel::-webkit-scrollbar,
   #shelfPopup .popup-body::-webkit-scrollbar, #storagePopup .popup-body::-webkit-scrollbar,
-  #notesPopup .popup-body::-webkit-scrollbar, .note-preview::-webkit-scrollbar {
+  #notesPopup .popup-body::-webkit-scrollbar, #sourcePopup .src-list::-webkit-scrollbar, .note-preview::-webkit-scrollbar {
     width: 6px; height: 6px;
   }
   .cat-body::-webkit-scrollbar-track, #settingsPanel::-webkit-scrollbar-track,
   #catalogPanel::-webkit-scrollbar-track,
   #shelfPopup .popup-body::-webkit-scrollbar-track, #storagePopup .popup-body::-webkit-scrollbar-track,
-  #notesPopup .popup-body::-webkit-scrollbar-track, .note-preview::-webkit-scrollbar-track {
+  #notesPopup .popup-body::-webkit-scrollbar-track, #sourcePopup .src-list::-webkit-scrollbar-track, .note-preview::-webkit-scrollbar-track {
     background: transparent;
   }
   .cat-body::-webkit-scrollbar-thumb, #settingsPanel::-webkit-scrollbar-thumb,
   #catalogPanel::-webkit-scrollbar-thumb,
   #shelfPopup .popup-body::-webkit-scrollbar-thumb, #storagePopup .popup-body::-webkit-scrollbar-thumb,
-  #notesPopup .popup-body::-webkit-scrollbar-thumb, .note-preview::-webkit-scrollbar-thumb {
+  #notesPopup .popup-body::-webkit-scrollbar-thumb, #sourcePopup .src-list::-webkit-scrollbar-thumb, .note-preview::-webkit-scrollbar-thumb {
     background: var(--sp-accent); /* 与状态栏进度条填充同色: 浅色红 / 黑夜金 */
     border-radius: 3px;
   }
   .cat-body::-webkit-scrollbar-thumb:hover, #settingsPanel::-webkit-scrollbar-thumb:hover,
   #catalogPanel::-webkit-scrollbar-thumb:hover,
   #shelfPopup .popup-body::-webkit-scrollbar-thumb:hover, #storagePopup .popup-body::-webkit-scrollbar-thumb:hover,
-  #notesPopup .popup-body::-webkit-scrollbar-thumb:hover, .note-preview::-webkit-scrollbar-thumb:hover {
+  #notesPopup .popup-body::-webkit-scrollbar-thumb:hover, #sourcePopup .src-list::-webkit-scrollbar-thumb:hover, .note-preview::-webkit-scrollbar-thumb:hover {
     background: var(--accent);
   }
   /* 阅读页整体滚动条(同样风格, 稍宽便于拖拽)
@@ -695,6 +695,8 @@
   #sourcePopup {
     width: min(560px, calc(100vw - var(--menu-w, 48px) - 24px));
     min-width: 360px;
+    /* 单行固定高度: 15 行 = 480px, 便于精确限高 */
+    --src-row-h: 32px;
   }
   #sourcePopup .popup-body { padding-bottom: 6px; }
 
@@ -778,10 +780,28 @@
   }
   .src-bulk-btn:hover { border-color: var(--accent); color: var(--accent); }
 
+  /* manage 视图: 工具条/批量条/筛选/底部固定, 只有列表滚 */
+  #sourcePopup .src-manage-body { display: flex; flex-direction: column; overflow: hidden; }
+  .src-manage-body > .src-tools,
+  .src-manage-body > .src-bulk,
+  .src-manage-body > .src-filter,
+  .src-manage-body > .src-load-more,
+  .src-manage-body > .src-risk,
+  .src-manage-body > .popup-empty { flex: none; }
+  .src-list {
+    flex: 1 1 auto; min-height: 0;
+    max-height: calc(var(--src-row-h) * 15);   /* 恰好 15 行, 超出内滚 */
+    overflow-y: auto;
+    /* 用 auto 才能把滚轮链到外层 .popup-body; 外层已有 contain 挡正文 */
+    overscroll-behavior: auto;
+    border-top: 1px solid var(--sp-border);
+  }
+
   /* 紧凑单行: 勾选 + 名称 + 状态 + 分组 + 常驻图标 */
   .src-row {
     display: flex; align-items: center; gap: 8px;
-    padding: 5px 18px; border-top: 1px solid var(--sp-border);
+    height: var(--src-row-h); padding: 0 18px; line-height: 1.4;
+    border-top: 1px solid var(--sp-border);
   }
   .src-row:first-of-type { border-top: none; }
   .src-row:hover { background: var(--sp-hover); }

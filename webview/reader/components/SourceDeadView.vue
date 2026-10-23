@@ -2,7 +2,7 @@
 /**
  * SourceDeadView.vue — 失效书源
  *
- * 连续 2 次失败(检查或搜索)自动进入这里, 同时退出搜索与「书源」列表。
+ * 任意一次失败(检查或搜索)自动进入这里, 同时退出搜索与「书源」列表。
  * 重查成功会自动恢复; 「恢复」只清失效标记不检查; 清除会真正删除数据。
  */
 import { computed, ref } from 'vue';
@@ -57,7 +57,7 @@ function loadMore(): void {
       <button class="popup-btn" data-src-recheck-all :disabled="!dead.length" @click="recheckAll">全部重查</button>
       <button class="popup-btn src-del" data-src-clear-dead :disabled="!dead.length" @click="clearAll">清除全部</button>
     </div>
-    <p class="src-risk">连续 2 次失败(检查或搜索)会判定失效并自动退出搜索。重查成功后会自动恢复。</p>
+    <p class="src-risk">任意一次失败(检查或搜索)即判定失效并退出搜索；成功一次自动恢复。</p>
 
     <div v-if="!dead.length" class="popup-empty src-empty">没有失效的书源。</div>
 

@@ -28,6 +28,7 @@ function doSearch(): void {
   state.searchResults = [];
   state.searchErrors = [];
   state.searchSkipped = 0;
+  state.searchDeadAdded = 0;
   state.searchToken += 1;
   send({ type: 'sourceSearch', key, token: state.searchToken });
 }
@@ -68,12 +69,13 @@ function goDead(): void {
       <div v-if="state.searching" class="src-hint">正在搜索 {{ searchable.length }} 个书源…</div>
       <div v-else-if="state.searchDone" class="src-hint">
         {{ resultSummary(state.searchResults, state.searchErrors.length) }}
+        <span v-if="state.searchDeadAdded > 0" class="src-skip">· {{ state.searchDeadAdded }} 个源失败已移入失效</span>
         <span v-if="state.searchSkipped > 0" class="src-skip">（另有 {{ state.searchSkipped }} 个书源未参与: 单次最多搜 100 个）</span>
       </div>
 
       <div v-if="state.searchErrors.length" class="src-errors" data-src-errors>
         <span class="src-error-line">
-          {{ state.searchErrors.length }} 个书源搜索失败{{ errorNames }}；连续 2 次失败将标记失效
+          {{ state.searchErrors.length }} 个书源搜索失败{{ errorNames }}；失败的源已移入失效
         </span>
         <button class="src-link" data-src-error-dead @click="goDead">查看失效书源</button>
       </div>

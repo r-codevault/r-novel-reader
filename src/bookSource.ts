@@ -9,8 +9,8 @@
  */
 import * as crypto from 'crypto';
 
-/** 连续失败多少次判定失效 */
-export const FAIL_THRESHOLD = 2;
+/** 连续失败多少次判定失效(1 = 失败一次即移入失效, 成功一次自动恢复) */
+export const FAIL_THRESHOLD = 1;
 
 /** 失效判定: deadAt 是唯一事实源 */
 export function isDead(s: { deadAt?: number }): boolean {
@@ -296,14 +296,28 @@ function isSource(v: unknown): v is BookSource {
     return typeof o.id === 'string' && typeof o.bookSourceUrl === 'string' && typeof o.bookSourceName === 'string';
 }
 
-/** 旧文件没有失效字段: 只在内存补默认值, 不回写磁盘 */
+/**
+ * 旧文件补默认值:
+ *  - 没有失效字段 -> failStreak 0 / 未失效
+ *  - v1.46.2 的「不可用」(1 次失败但未到旧阈值 2) -> 派生 deadAt, 与新口径一致
+ * 只补内存; 之后任意写盘会顺带落盘。
+ */
 function hydrate(items: BookSource[]): BookSource[] {
-    return items.map((s) => ({
-        ...s,
-        failStreak: failStreakOf(s),
-        deadAt: isDead(s) ? s.deadAt : undefined,
-        deadReason: typeof s.deadReason === 'string' && s.deadReason ? s.deadReason : undefined,
-    }));
+    return items.map((s) => {
+        const streak = failStreakOf(s);
+        const dead = isDead(s);
+        const legacyDead = !dead && s.lastCheckOk === false && streak >= 1;
+        return {
+            ...s,
+            failStreak: streak,
+            deadAt: dead ? s.deadAt : legacyDead ? (s.lastCheck ?? s.addedAt ?? 1) : undefined,
+            deadReason: dead
+                ? (typeof s.deadReason === 'string' && s.deadReason ? s.deadReason : undefined)
+                : legacyDead
+                    ? (typeof s.deadReason === 'string' && s.deadReason ? s.deadReason : '升级前已判定不可用，可重查恢复')
+                    : undefined,
+        };
+    });
 }
 
 export class BookSourceStore {
