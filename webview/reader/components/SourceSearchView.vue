@@ -46,6 +46,12 @@ function isAdded(item: { bookUrl: string }): boolean {
   return state.onlineAdded.indexOf(item.bookUrl) >= 0;
 }
 
+/** 点击结果行: 临时预览阅读(不加入书架) */
+function previewBook(item: { sourceName?: string } & Record<string, unknown>): void {
+  send({ type: 'previewOnlineBook', item });
+  state.sourceOpen = false;
+}
+
 function addOnline(item: { bookUrl: string }): void {
   if (isAdded(item)) { return; }
   send({ type: 'addOnlineBook', item });
@@ -254,7 +260,8 @@ function goDead(): void {
       <div class="src-results" data-src-results>
         <div class="src-pane src-pane-current" data-src-pane="current"
           :style="{ maxHeight: alloc.curRender * 44 + 'px' }">
-          <div v-for="(item, i) in state.searchResults" :key="item.bookUrl + i" class="src-result" :data-src-result="i">
+          <div v-for="(item, i) in state.searchResults" :key="item.bookUrl + i" class="src-result"
+            :data-src-result="i" :title="'点击预览: ' + item.title" @click="previewBook(item)">
             <div class="src-result-main">
               <div class="src-result-title">{{ item.title }}</div>
               <div class="src-result-meta">{{ resultMeta(item) }}</div>

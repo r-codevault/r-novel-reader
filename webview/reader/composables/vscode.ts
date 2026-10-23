@@ -20,7 +20,7 @@ export interface ChapterPayload {
 
 export interface NovelInfo {
     /** 在线书来源(本地书为空) */
-    online?: { sourceName: string; bookUrl: string };
+    online?: { sourceName: string; bookUrl: string; preview?: boolean };
   /** 实际读取路径(笔记分组键与"当前书"判定都用它) */
   filePath?: string;
   totalChapters: number;

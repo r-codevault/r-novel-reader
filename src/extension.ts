@@ -413,10 +413,121 @@ export function activate(context: vscode.ExtensionContext): void {
         return { ok: true, message: existing ? '已在书架' : '' };
     }
 
+    /** 临时预览: 抓目录与首章后直接打开阅读页, 不写入书架 */
+    async function previewOnlineBook(item: {
+        sourceId: string; sourceName: string; title: string; author?: string;
+        bookUrl: string; coverUrl?: string; intro?: string; kind?: string;
+        lastChapter?: string; wordCount?: number;
+    }): Promise<void> {
+        const source = bookSources.get(item.sourceId);
+        if (!source) {
+            void vscode.window.showErrorMessage('预览失败: 书源不存在或已被删除');
+            return;
+        }
+        const key = onlineKey(item.sourceId, item.bookUrl);
+        // 已在书架: 直接按正常书打开(预览按钮不会出现)
+        if (shelf.get(key)) {
+            await loadOnlineNovel(key, { openPanel: true });
+            return;
+        }
+        try {
+            await vscode.window.withProgress(
+                { location: vscode.ProgressLocation.Notification, title: '正在加载预览', cancellable: false },
+                async function () {
+                    const ref: OnlineRef = {
+                        sourceId: item.sourceId,
+                        sourceName: source.bookSourceName || item.sourceName,
+                        bookUrl: item.bookUrl,
+                        coverUrl: item.coverUrl,
+                        intro: item.intro,
+                        kind: item.kind,
+                        lastChapter: item.lastChapter,
+                        wordCount: item.wordCount,
+                    };
+                    const toc = await resolveOnlineToc(ref, true);
+                    const chapters = toc.chapters.map(function (c) {
+                        return { index: c.index, title: c.title, content: '', url: c.url, wordCount: 0 };
+                    });
+                    const novel: Novel = {
+                        filePath: key,
+                        bookTitle: item.title,
+                        author: item.author || '',
+                        chapters,
+                        preface: '',
+                        encoding: 'utf-8',
+                        totalWords: item.wordCount || 0,
+                        online: {
+                            sourceId: ref.sourceId,
+                            sourceName: ref.sourceName,
+                            bookUrl: ref.bookUrl,
+                            tocUrl: toc.tocUrl,
+                            preview: true,
+                        },
+                    };
+                    // 首章预取(失败也不阻塞, 阅读页会显示重试)
+                    try {
+                        const first = chapters[0];
+                        if (first?.url) {
+                            const paragraphs = await onlineChapterParagraphs(ref, 0, first.url);
+                            first.content = paragraphs.join('\n');
+                            first.wordCount = first.content.length;
+                        }
+                    } catch { /* 预览页内重试 */ }
+
+                    currentNovel = novel;
+                    ReaderPanel.createOrShow(novel, 0, 0, store, vscode.ViewColumn.One);
+                }
+            );
+        } catch (err) {
+            void vscode.window.showErrorMessage(
+                `预览失败: ${err instanceof Error ? err.message : String(err)}`
+            );
+        }
+    }
+
+    /** 把当前预览的书转为正式书架条目 */
+    async function savePreview(): Promise<{ ok: boolean; message?: string }> {
+        const novel = currentNovel;
+        if (!novel?.online || !novel.online.preview) {
+            return { ok: false, message: '当前不是预览书籍' };
+        }
+        const res = await addOnlineBook({
+            sourceId: novel.online.sourceId,
+            sourceName: novel.online.sourceName,
+            title: novel.bookTitle,
+            author: novel.author,
+            bookUrl: novel.online.bookUrl,
+            wordCount: novel.totalWords,
+        });
+        if (!res.ok) { return res; }
+        await shelf.upsert({
+            filePath: novel.filePath,
+            title: novel.bookTitle,
+            author: novel.author,
+            totalChapters: novel.chapters.length,
+            online: {
+                sourceId: novel.online.sourceId,
+                sourceName: novel.online.sourceName,
+                bookUrl: novel.online.bookUrl,
+                tocUrl: novel.online.tocUrl,
+            },
+        });
+        novel.online.preview = false;
+        refreshShelfView();
+        return { ok: true };
+    }
+
     /** 阅读面板: 在线章按需加载 */
     ReaderPanel.onlineChapterLoader = async function (novel: Novel, index: number): Promise<string[]> {
-        const entry = shelf.get(novel.filePath);
-        const ref = entry?.online;
+        // 预览书还没进书架, 用 novel.online 兜底
+        const ref: OnlineRef | undefined = novel.online
+            ? {
+                sourceId: novel.online.sourceId,
+                sourceName: novel.online.sourceName,
+                bookUrl: novel.online.bookUrl,
+                tocUrl: novel.online.tocUrl,
+            }
+            : shelf.get(novel.filePath)?.online;
         const chapter = novel.chapters[index];
         if (!ref || !chapter || !chapter.url) { throw new Error('在线章节信息缺失'); }
         return onlineChapterParagraphs(ref, index, chapter.url);
@@ -684,6 +795,8 @@ export function activate(context: vscode.ExtensionContext): void {
             return toSourceView(next);
         },
         addOnlineBook: (item) => addOnlineBook(item),
+        previewOnlineBook: (item) => previewOnlineBook(item),
+        savePreview: () => savePreview(),
         exportText: () => bookSources.exportText(),
         revive: (id) => bookSources.revive(id),
         clearDead: () => bookSources.clearDead(),

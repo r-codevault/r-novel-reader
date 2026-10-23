@@ -31,6 +31,15 @@ const chapterLoading = computed(function () {
   return !!loading && loading.index === idx;
 });
 
+/** 预览中的书: 一键转为正式书架 */
+const previewing = computed(function () {
+  return !!(state.novel && state.novel.online && state.novel.online.preview);
+});
+
+function savePreview(): void {
+  send({ type: 'previewAddToShelf' });
+}
+
 function retryChapter(): void {
   const idx = state.chapter ? state.chapter.index : -1;
   if (idx >= 0) { send({ type: 'retryChapter', index: idx }); }
@@ -233,6 +242,8 @@ defineExpose({ positionHandles, scrollToParagraph });
 
 <template>
   <main id="reader" ref="readerRef" :class="{ 'resizing-width': resizingWidth }">
+    <button v-if="previewing" class="preview-add" data-preview-add title="把这本书加入书架"
+      @click.stop="savePreview">＋ 加入书架</button>
     <article id="content" ref="contentRef">
       <h2 class="chapter-title">{{ chapter ? chapter.title : '' }}</h2>
       <div v-if="chapterError" class="empty-tip reader-error" data-chapter-error>

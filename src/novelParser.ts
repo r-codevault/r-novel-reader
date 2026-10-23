@@ -33,6 +33,8 @@ export interface Novel {
         sourceName: string;
         bookUrl: string;
         tocUrl?: string;
+        /** 临时预览: 尚未加入书架 */
+        preview?: boolean;
     };
     /** 来源文件绝对路径(在线书为 online:// 伪路径) */
     filePath: string;

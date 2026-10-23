@@ -109,6 +109,7 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
         totalWords: p.totalWords as number,
         bookTitle: p.bookTitle as string,
         author: p.author as string | undefined,
+        online: p.online,
       };
       document.title = (p.bookTitle as string) + ' - 小说阅读';
       state.chapters = (p.chapters as { index: number; title: string }[]) || [];
@@ -181,6 +182,11 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.chapterError = { index: p.index, message: p.message || '加载失败' };
       break;
     }
+    case 'previewSaved':
+      if (state.novel && state.novel.online) {
+        state.novel = { ...state.novel, online: { ...state.novel.online, preview: false } };
+      }
+      break;
     case 'onlineBookAdded': {
       const m = msg as { bookUrl?: string; ok?: boolean; message?: string };
       if (m.ok && m.bookUrl && state.onlineAdded.indexOf(m.bookUrl) < 0) {

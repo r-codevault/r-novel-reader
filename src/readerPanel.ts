@@ -48,7 +48,7 @@ interface InitPayload {
     /** 书源列表(精简视图) */
     sources: BookSourceView[];
     /** 在线书元信息(本地书为空) */
-    online?: { sourceName: string; bookUrl: string };
+    online?: { sourceName: string; bookUrl: string; preview?: boolean };
 }
 
 interface ChapterPayload {
@@ -88,6 +88,8 @@ type WebviewMessage =
     | { type: 'sourceSearchPause'; token: number; paused: boolean }
     | { type: 'sourceSearchCancel'; token: number }
     | { type: 'addOnlineBook'; item: SearchBookItem }
+    | { type: 'previewOnlineBook'; item: SearchBookItem }
+    | { type: 'previewAddToShelf' }
     | { type: 'retryChapter'; index: number }
     | { type: 'sourceImport'; mode: 'url' | 'clipboard' | 'file' }
     | { type: 'sourceToggle'; id: string; enabled: boolean }
@@ -151,6 +153,10 @@ export interface BookSourceApi {
     cancelCheck?(scope: 'active' | 'dead', runId?: number): void;
     /** 把搜索结果加入在线书架 */
     addOnlineBook?(item: SearchBookItem): Promise<{ ok: boolean; message?: string }>;
+    /** 临时预览搜索结果(不加入书架) */
+    previewOnlineBook?(item: SearchBookItem): Promise<void>;
+    /** 把当前预览的书加入书架 */
+    savePreview?(): Promise<{ ok: boolean; message?: string }>;
     /** 搜索; token 原样回传, 供 webview 丢弃过期结果 */
     search(key: string, sourceIds: string[] | undefined, hooks?: {
         control?: SearchControl;
@@ -602,6 +608,27 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                 });
                 break;
             }
+            case 'previewOnlineBook': {
+                const api = ReaderPanel.bookSources;
+                if (!api?.previewOnlineBook) { break; }
+                void api.previewOnlineBook(msg.item);
+                break;
+            }
+            case 'previewAddToShelf': {
+                const api = ReaderPanel.bookSources;
+                if (!api?.savePreview) { break; }
+                void api.savePreview().then((res) => {
+                    if (!res.ok) {
+                        void vscode.window.showErrorMessage('加入书架失败: ' + (res.message || '未知原因'));
+                        return;
+                    }
+                    if (this._novel.online) { this._novel.online.preview = false; }
+                    // 预览期间的阅读位置在加入书架时补写(之前没有书架记录)
+                    ReaderPanel.onProgress?.(this._novel.filePath, this._chapterIndex, this._scrollRatio);
+                    void this._panel.webview.postMessage({ type: 'previewSaved' });
+                });
+                break;
+            }
             case 'retryChapter':
                 this._retryChapter(msg.index);
                 break;
@@ -910,7 +937,11 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             notes: ReaderPanel.notes ? ReaderPanel.notes.list() : [],
             sources: ReaderPanel.bookSources ? ReaderPanel.bookSources.list() : [],
             online: this._novel.online
-                ? { sourceName: this._novel.online.sourceName, bookUrl: this._novel.online.bookUrl }
+                ? {
+                    sourceName: this._novel.online.sourceName,
+                    bookUrl: this._novel.online.bookUrl,
+                    preview: !!this._novel.online.preview,
+                }
                 : undefined,
         };
         this._openSettingsOnLoad = false;

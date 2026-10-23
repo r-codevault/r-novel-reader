@@ -1832,6 +1832,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!document.querySelector('#sourcePopup [data-src-history-result]'),
     '历史收起后不渲染历史行');
 
+  // 19) 点击结果行 -> 临时预览(不加入书架)
+  posted.length = 0;
+  document.querySelector('#sourcePopup [data-src-result="0"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  const previewMsg = posted.filter((m) => m.type === 'previewOnlineBook').pop();
+  assert(previewMsg && previewMsg.item && previewMsg.item.bookUrl, '点结果行应发送 previewOnlineBook');
+  assert(!$('#sourcePopup').classList.contains('open'), '预览后应关闭书源弹窗');
+
   document.querySelector('#sourcePopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
 
@@ -2298,6 +2306,26 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log('书/章分组批量删除(两步确认/removeNoteGroup): 通过');
 
   console.log('笔记补充(空内容保存/空笔记不显示正文/编辑清空/分组默认态/会话保留): 通过');
+
+  // 预览模式: 正文右上角「加入书架」 -> 转正式书架后隐藏
+  sendMsg({ type: 'init', payload: {
+    filePath: 'online://s1/preview1', bookTitle: '预览书', author: '作者',
+    chapters: [{ index: 0, title: '第1章' }], chapterIndex: 0, chapterTitle: '第1章',
+    paragraphs: ['预览正文'], totalChapters: 1, totalWords: 0, scrollRatio: 0, chapterWords: 4,
+    settings: { ...defaults }, shelf: [], libraryPath: '', notes: [], sources: [],
+    online: { sourceName: '测试站', bookUrl: 'https://x.com/book/1', preview: true },
+  } });
+  await sleep(40);
+  const previewBtn = document.querySelector('[data-preview-add]');
+  assert(previewBtn && previewBtn.textContent.includes('加入书架'), '预览书应显示「加入书架」按钮');
+  posted.length = 0;
+  previewBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'previewAddToShelf'), '点按钮应发送 previewAddToShelf');
+  sendMsg({ type: 'previewSaved' });
+  await sleep(30);
+  assert(!document.querySelector('[data-preview-add]'), '加入成功后预览按钮应消失');
+  console.log('在线书预览(结果行/正文按钮): 通过');
 
   console.log('\n阅读面板 Vue 冒烟测试全部通过 ✔');
   process.exit(0);
