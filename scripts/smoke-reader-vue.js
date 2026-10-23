@@ -257,6 +257,29 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert($('#content .chapter-title').textContent.includes('标题3'), '应渲染第 3 章标题');
   const pCount = document.querySelectorAll('#content p').length;
   assert(pCount >= 2, '正文段落应渲染(实际 ' + pCount + ')');
+  // 在线章节: 切到未加载的章 -> 加载中 -> 失败 -> 重试
+  sendMsg({ type: 'chapter', payload: { index: 3, title: '标题4', paragraphs: [], totalChapters: 5, chapterWords: 0, scrollRatio: 0 } });
+  await sleep(20);
+  sendMsg({ type: 'chapterLoading', payload: { index: 3, title: '标题4' } });
+  await sleep(20);
+  assert(document.querySelector('#content [data-chapter-loading]'), '加载中应显示提示');
+  sendMsg({ type: 'chapterError', payload: { index: 3, message: '正文解析结果为空' } });
+  await sleep(20);
+  assert(document.querySelector('#content [data-chapter-error]'), '失败应显示错误态');
+  assert(document.querySelector('#content [data-chapter-error]').textContent.includes('正文解析结果为空'),
+    '错误态应显示原因');
+  posted.length = 0;
+  document.querySelector('#content [data-chapter-retry]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'retryChapter' && m.index === 3), '点重试应发送 retryChapter');
+  sendMsg({ type: 'chapter', payload: { index: 3, title: '标题4', paragraphs: ['一', '二'], totalChapters: 5, chapterWords: 6, scrollRatio: 0 } });
+  await sleep(60);
+  assert(!document.querySelector('#content [data-chapter-error]'), '拿到正文后应清除错误态');
+  // 还原到第 3 章, 不影响后续状态栏断言
+  sendMsg({ type: 'chapter', payload: { index: 2, title: '标题3', paragraphs: ['一', '二'], totalChapters: 5, chapterWords: 6, scrollRatio: 0 } });
+  await sleep(40);
+  console.log('在线章节加载态(加载/失败/重试): 通过');
+
   console.log('正文渲染(标题/段落): 通过');
 
   // 状态栏
@@ -885,6 +908,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   refreshBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   assert(posted.some((m) => m.type === 'refreshLibrary'), '点「刷新书架」应发 refreshLibrary');
+  // 在线书徽标
+  sendMsg({ type: 'shelf', items: [
+    { filePath: 'online://s1/abc123', title: '在线书', author: '作者', chapterIndex: 0, totalChapters: 10, current: false, online: true, sourceName: '测试站' },
+  ] });
+  await sleep(30);
+  const tag = document.querySelector('#shelfPopup .bk-tag');
+  assert(tag && tag.textContent.includes('在线'), '在线书应显示「在线」徽标');
+  assert(tag.getAttribute('title') === '测试站', '徽标应带来源名');
+
   console.log('书架弹窗(渲染/打开/移除/添加): 通过');
 
   // 目录弹窗(菜单打开) + 章节跳转
@@ -1462,6 +1494,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#sourcePopup .src-result-title').textContent === '遮天', '结果标题应正确');
   assert(document.querySelector('#sourcePopup .src-result-meta').textContent.includes('635 万字'), '字数应折算为万字');
   assert(document.querySelector('#sourcePopup .src-badge').textContent === 'A站', '应显示来源书源');
+  // 加入在线书架: 按钮可用 -> 发消息 -> 标记已加入
+  const addBtn = document.querySelector('#sourcePopup [data-src-pane="current"] .src-add');
+  assert(addBtn && !addBtn.disabled, '搜索结果「加入书架」应可用');
+  posted.length = 0;
+  addBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  const onlineAddMsg = posted.filter((m) => m.type === 'addOnlineBook').pop();
+  assert(onlineAddMsg && onlineAddMsg.item && onlineAddMsg.item.bookUrl === 'https://a.com/b/1', '点加入书架应发送 addOnlineBook');
+  sendMsg({ type: 'onlineBookAdded', bookUrl: 'https://a.com/b/1', ok: true });
+  await sleep(20);
+  assert(addBtn.textContent.includes('已加入') && addBtn.disabled, '加入成功后按钮应显示已加入');
+
   // 结果列表限高 10 条: 外层容器 + 内滚
   assert(document.querySelector('#sourcePopup [data-src-results]'), '搜索结果应放在独立滚动容器里');
   assert(document.querySelectorAll('[data-src-results] .src-result').length === 2,

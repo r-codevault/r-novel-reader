@@ -33,6 +33,8 @@ export class UnsupportedRuleError extends RuleError {
 }
 
 export interface RuleContext {
+    /** 当前书籍地址(详情/目录/正文页规则会用到) */
+    bookUrl?: string;
     /** 页面文本(HTML/JSON 均可) */
     html?: string;
     /** 已解析的 JSON(内容像 JSON 时由调用方传入) */
@@ -95,6 +97,8 @@ export function interpolate(tpl: string, ctx: RuleContext): string {
         const expr = exprRaw.trim();
         if (expr === 'key') { return ctx.key || ''; }
         if (expr === 'page') { return String(ctx.page === undefined ? 1 : ctx.page); }
+        if (expr === 'baseUrl') { return ctx.baseUrl || ''; }
+        if (expr === 'bookUrl') { return ctx.book ? toStr(ctx.book['bookUrl']) : (ctx.bookUrl || ''); }
         if (expr.startsWith('$')) {
             const values = queryJson(ctx.json, expr);
             return values.length ? toStr(values[0]) : '';
@@ -237,6 +241,21 @@ async function evalAlternative(raw: string, ctx: RuleContext, depth = 0): Promis
     }
 
     let values: string[] = [];
+    // legado 的 `text`: 取当前节点文本(不是标签选择器)
+    if (rule.trim().toLowerCase() === 'text') {
+        const target = ctx.node || (ctx.html ? parseHtml(ctx.html) : null);
+        const text = target ? nodeText(target) : '';
+        values = text ? [text] : [];
+        if (regex) { values = values.map((v) => applyRegex(v, regex!.pattern, regex!.repl)); }
+        return values.map((v) => v.trim()).filter((v) => v !== '');
+    }
+    // `@text` / `@href` 这类"不写选择器"的规则: 直接取当前节点
+    if (spec && !rule.trim()) {
+        const target = ctx.node || (ctx.html ? parseHtml(ctx.html) : null);
+        if (target) { values = [extractFromNode(target, spec, ctx.baseUrl)]; }
+        if (regex) { values = values.map((v) => applyRegex(v, regex!.pattern, regex!.repl)); }
+        return values.map((v) => v.trim()).filter((v) => v !== '');
+    }
     const cssPrefix = /^@css:\s*([\s\S]*)$/.exec(rule);
     const jsonPrefix = /^@json:\s*([\s\S]*)$/.exec(rule);
 

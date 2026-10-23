@@ -226,6 +226,8 @@
     font-size: 1.35em; font-weight: 600;
     margin: .4em 0 1.2em; letter-spacing: .05em;
   }
+  .reader-error { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .reader-error .popup-primary { width: auto; padding: 4px 16px; }
   .empty-tip { text-align: center; padding: 60px 0; color: var(--fg-muted); }
 
   /* ---------- 正文宽度拖拽手柄(左右边缘) ---------- */
@@ -462,6 +464,11 @@
   .bk-title { font-size: var(--ui-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bk.cur .bk-title { font-weight: 600; }
   .bk-sub { font-size: var(--ui-font-sub); color: var(--fg-muted); white-space: nowrap; }
+  .bk-tag {
+    display: inline-block; margin-right: 4px; padding: 0 5px;
+    font-size: calc(var(--ui-font-sub) - 1px); line-height: 1.5;
+    color: var(--accent); border: 1px solid var(--accent); border-radius: 3px;
+  }
   .bp-del {
     flex: none; opacity: 0; padding: 2px 6px; border-radius: 5px; font-size: 12px;
     transition: opacity .12s ease;
@@ -825,7 +832,8 @@
     padding: 2px 8px; border: 1px solid var(--sp-border); border-radius: 999px;
     max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .src-add { opacity: .55; cursor: not-allowed; }
+  .src-add { opacity: .9; }
+  .src-add.added { opacity: .6; cursor: default; }
 
   /* 工具条 / 批量条 */
   .src-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 12px 18px 0; }

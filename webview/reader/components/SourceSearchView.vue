@@ -41,6 +41,16 @@ const alloc = computed(function () {
   );
 });
 
+/** 是否已加入在线书架(本次会话内) */
+function isAdded(item: { bookUrl: string }): boolean {
+  return state.onlineAdded.indexOf(item.bookUrl) >= 0;
+}
+
+function addOnline(item: { bookUrl: string }): void {
+  if (isAdded(item)) { return; }
+  send({ type: 'addOnlineBook', item });
+}
+
 function doSearch(): void {
   const key = state.searchKeyword.trim();
   if (!key || state.searching) { return; }
@@ -251,7 +261,10 @@ function goDead(): void {
             </div>
             <div class="src-result-side">
               <span class="src-badge">{{ sourceLabel(item) }}</span>
-              <button class="popup-btn src-add" disabled title="在线阅读将在下一版本接入">加入书架</button>
+              <button class="popup-btn src-add" :class="{ added: isAdded(item) }" :disabled="isAdded(item)"
+                :title="isAdded(item) ? '已在书架' : '加入在线书架'" @click.stop="addOnline(item)">
+                {{ isAdded(item) ? '已加入' : '加入书架' }}
+              </button>
             </div>
           </div>
         </div>

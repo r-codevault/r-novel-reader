@@ -9,7 +9,7 @@
  *
  * 不支持(抛 CssSyntaxError, 由上层标为「暂不支持」): XPath、`:has()`、属性正则等。
  */
-import { HNode, childElements } from './html';
+import { HNode, childElements, nodeText } from './html';
 
 export class CssSyntaxError extends Error {
     constructor(message: string) {
@@ -285,7 +285,8 @@ function matchCompound(node: HNode, c: Compound): boolean {
             }
         } else if (name === 'contains') {
             const needle = arg.replace(/^['"]|['"]$/g, '');
-            if (needle && (node.attrs['text'] || '').indexOf(needle) >= 0) { return false; }
+            // 命中才保留(此前条件写反, 导致 text./:contains 全部匹配失败)
+            if (needle && nodeText(node).indexOf(needle) < 0) { return false; }
         }
     }
     return true;
@@ -352,6 +353,18 @@ function runGroup(root: HNode, group: Group): HNode[] {
     return cur;
 }
 
+/** 文档序索引: 逗号分组各自追加会打乱顺序(目录多卷时会乱章) */
+function documentOrder(root: HNode): Map<HNode, number> {
+    const order = new Map<HNode, number>();
+    let seq = 0;
+    const walk = function (node: HNode): void {
+        order.set(node, seq++);
+        for (const child of node.children) { walk(child); }
+    };
+    walk(root);
+    return order;
+}
+
 /** 选择全部匹配节点(文档顺序, 去重) */
 export function selectAll(root: HNode, selector: string): HNode[] {
     const groups = parseSelector(selector);
@@ -363,6 +376,10 @@ export function selectAll(root: HNode, selector: string): HNode[] {
             seen.add(node);
             out.push(node);
         }
+    }
+    if (groups.length > 1) {
+        const order = documentOrder(root);
+        out.sort(function (a, b) { return (order.get(a) ?? 0) - (order.get(b) ?? 0); });
     }
     return out;
 }

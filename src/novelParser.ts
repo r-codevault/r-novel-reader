@@ -18,14 +18,23 @@ export interface NovelChapter {
     index: number;
     /** 章节标题, 如 "第3章 初临起源大陆" */
     title: string;
-    /** 章节正文(段落以 \n 分隔) */
+    /** 章节正文(段落以 \n 分隔); 在线书未加载时为空串 */
     content: string;
+    /** 在线章节地址(本地书为空) */
+    url?: string;
     /** 正文净字数(不含空白) */
     wordCount: number;
 }
 
 export interface Novel {
-    /** 来源文件绝对路径 */
+    /** 在线书元信息(本地书为空) */
+    online?: {
+        sourceId: string;
+        sourceName: string;
+        bookUrl: string;
+        tocUrl?: string;
+    };
+    /** 来源文件绝对路径(在线书为 online:// 伪路径) */
     filePath: string;
     /** 书名(优先从正文元信息《...》识别, 否则取文件名) */
     bookTitle: string;

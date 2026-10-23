@@ -56,7 +56,10 @@ function refreshFromLibrary(): void {
         :title="b.title" @click="onBookClick(b, $event)">
         <span class="bk-main">
           <span class="bk-title">{{ b.title }}</span>
-          <span class="bk-sub">{{ progress(b) }}{{ b.author ? ' · ' + b.author : '' }}</span>
+          <span class="bk-sub">
+            <span v-if="b.online" class="bk-tag" :title="b.sourceName || '在线书'">在线</span>
+            {{ progress(b) }}{{ b.author ? ' · ' + b.author : '' }}
+          </span>
         </span>
         <span class="bp-del" title="从书架移除">✕</span>
       </div>

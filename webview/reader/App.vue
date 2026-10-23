@@ -101,6 +101,8 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
   switch (msg.type) {
     case 'init': {
       const p = msg.payload as Record<string, unknown>;
+      state.chapterLoading = null;
+      state.chapterError = null;
       state.novel = {
         filePath: (p.filePath as string) || '',
         totalChapters: p.totalChapters as number,
@@ -157,6 +159,8 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       break;
     }
     case 'chapter':
+      state.chapterLoading = null;
+      state.chapterError = null;
       state.chapter = msg.payload as unknown as ChapterPayload;
       break;
     case 'settings':
@@ -165,6 +169,25 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
     case 'openSettings':
       openOnly('settingsOpen');
       break;
+    case 'chapterLoading': {
+      const p = msg.payload as { index: number; title?: string };
+      state.chapterLoading = { index: p.index, title: p.title || '' };
+      state.chapterError = null;
+      break;
+    }
+    case 'chapterError': {
+      const p = msg.payload as { index: number; message: string };
+      state.chapterLoading = null;
+      state.chapterError = { index: p.index, message: p.message || '加载失败' };
+      break;
+    }
+    case 'onlineBookAdded': {
+      const m = msg as { bookUrl?: string; ok?: boolean; message?: string };
+      if (m.ok && m.bookUrl && state.onlineAdded.indexOf(m.bookUrl) < 0) {
+        state.onlineAdded.push(m.bookUrl);
+      }
+      break;
+    }
     case 'shelf':
       state.shelf = (msg as { items?: ShelfItemView[] }).items || [];
       break;

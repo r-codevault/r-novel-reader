@@ -4,7 +4,7 @@
  * 宽度拖拽与手柄定位自包含; resize 对齐由 App 调用 positionHandles()
  */
 import { computed, onMounted, reactive, ref } from 'vue';
-import { state, gotoChapter, type NoteItem } from '../composables/vscode';
+import { send, state, gotoChapter, type NoteItem } from '../composables/vscode';
 import { findParagraph } from '../../../src/noteAnchor';
 import { persistSettings, CONTENT_WIDTH, peekSuppressParaClick, setSuppressParaClick } from '../store';
 
@@ -18,6 +18,23 @@ const handleLeftRef = ref<HTMLElement | null>(null);
 const handleRightRef = ref<HTMLElement | null>(null);
 const handleLeftStyle = reactive({ left: 'auto', right: 'auto' });
 const handleRightStyle = reactive({ left: 'auto', right: 'auto' });
+
+/** 只显示当前章的错误/加载态(切章后旧状态不残留) */
+const chapterError = computed(function () {
+  const err = state.chapterError;
+  const idx = state.chapter ? state.chapter.index : -1;
+  return err && err.index === idx ? err : null;
+});
+const chapterLoading = computed(function () {
+  const loading = state.chapterLoading;
+  const idx = state.chapter ? state.chapter.index : -1;
+  return !!loading && loading.index === idx;
+});
+
+function retryChapter(): void {
+  const idx = state.chapter ? state.chapter.index : -1;
+  if (idx >= 0) { send({ type: 'retryChapter', index: idx }); }
+}
 /** 两侧章节箭头: 跟随正文(纸面)左右边缘, 而非窗口边缘 */
 const sidePrevStyle = reactive({ left: 'auto', right: 'auto' });
 const sideNextStyle = reactive({ left: 'auto', right: 'auto' });
@@ -218,7 +235,12 @@ defineExpose({ positionHandles, scrollToParagraph });
   <main id="reader" ref="readerRef" :class="{ 'resizing-width': resizingWidth }">
     <article id="content" ref="contentRef">
       <h2 class="chapter-title">{{ chapter ? chapter.title : '' }}</h2>
-      <p v-if="paras.length === 0" class="empty-tip">(本章无内容)</p>
+      <div v-if="chapterError" class="empty-tip reader-error" data-chapter-error>
+        <span>章节加载失败：{{ chapterError.message }}</span>
+        <button class="popup-primary" data-chapter-retry @click="retryChapter">重试</button>
+      </div>
+      <p v-else-if="chapterLoading && paras.length === 0" class="empty-tip" data-chapter-loading>正在加载章节…</p>
+      <p v-else-if="paras.length === 0" class="empty-tip">(本章无内容)</p>
       <p v-for="(p, i) in paras" :key="i" class="rd-para" :data-p="i"
         :class="{ 'rd-para-noted': paraNotes.has(i), 'rd-para-active': composerPara === i }"
         @mousedown="onParaMouseDown" @click="onParaClick(i, $event)">{{ p }}</p>

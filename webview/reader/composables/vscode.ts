@@ -19,6 +19,8 @@ export interface ChapterPayload {
 }
 
 export interface NovelInfo {
+    /** 在线书来源(本地书为空) */
+    online?: { sourceName: string; bookUrl: string };
   /** 实际读取路径(笔记分组键与"当前书"判定都用它) */
   filePath?: string;
   totalChapters: number;
@@ -205,6 +207,12 @@ export const state = reactive({
   searchCancelled: false,
   /** 拖动分隔条后的当前区行数; null = 自动分配 */
   splitCurrentRows: null as null | number,
+  /** 已加入在线书架的 bookUrl(搜索结果按钮状态) */
+  onlineAdded: [] as string[],
+  /** 在线章节加载中 */
+  chapterLoading: null as null | { index: number; title: string },
+  /** 在线章节加载失败 */
+  chapterError: null as null | { index: number; message: string },
   /** 上一次搜索的结果(只保留一份) */
   searchHistory: null as null | {
     key: string;

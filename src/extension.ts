@@ -27,6 +27,9 @@ import { SearchControl, SearchService } from './online/searchService';
 import { buildSearchRequest } from './online/searchUrl';
 import { parseSearchPage } from './online/ruleApply';
 import { fetchForSource, sandboxHttpFor, SourceHttpPool } from './online/sourceHttp';
+import { fetchChapter, fetchToc, OnlineChapter } from './online/onlineBook';
+import { OnlineCache } from './onlineCache';
+import { isOnlinePath, onlineKey, OnlineRef } from './onlinePath';
 
 interface LoadOptions {
     chapterIndex?: number;
@@ -105,11 +108,13 @@ export function activate(context: vscode.ExtensionContext): void {
     function shelfItems(): ShelfItemView[] {
         return shelf.list().map((b) => ({
             filePath: b.filePath,
-            title: b.title || path.basename(b.filePath),
+            title: b.title || (b.online ? b.online.sourceName + ' · 在线书' : path.basename(b.filePath)),
             author: b.author,
             chapterIndex: b.chapterIndex,
             totalChapters: b.totalChapters,
             current: !!currentNovel && currentNovel.filePath === b.filePath,
+            online: !!b.online,
+            sourceName: b.online?.sourceName,
         }));
     }
 
@@ -132,6 +137,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     /** 加载小说: 解析 -> 登记书架 -> 刷新视图 -> (可选)打开阅读面板 */
     async function loadNovel(filePath: string, opts: LoadOptions = {}): Promise<Novel | undefined> {
+        if (isOnlinePath(filePath)) { return loadOnlineNovel(filePath, opts); }
         try {
             if (!fs.existsSync(filePath)) {
                 throw new Error('文件不存在');
@@ -231,11 +237,212 @@ export function activate(context: vscode.ExtensionContext): void {
             return currentNovel;
         }
         const last = shelf.last();
-        if (last && fs.existsSync(last.filePath)) {
+        if (last && (isOnlinePath(last.filePath) || fs.existsSync(last.filePath))) {
             await loadNovel(last.filePath, { openPanel: false, silent: true });
         }
         return currentNovel;
     }
+
+    // ---------------------------------------------------------------- 在线书
+
+    /** 目录: 缓存优先, 过期/强制时抓取(失败回退旧缓存) */
+    async function resolveOnlineToc(
+        ref: OnlineRef,
+        force = false
+    ): Promise<{ chapters: OnlineChapter[]; tocUrl: string; fetchedAt: number }> {
+        const key = onlineKey(ref.sourceId, ref.bookUrl);
+        const cached = await onlineCache.readToc(key);
+        const fresh = cached && Date.now() - cached.fetchedAt < TOC_TTL;
+        if (!force && fresh) { return cached; }
+        const source = bookSources.get(ref.sourceId);
+        if (!source) { throw new Error('书源已被删除, 无法加载在线书'); }
+        try {
+            const toc = await fetchToc(source, ref.bookUrl, { pool: sourcePool });
+            await onlineCache.writeToc(key, {
+                v: 1,
+                fetchedAt: toc.fetchedAt,
+                tocUrl: toc.tocUrl,
+                chapters: toc.chapters,
+            });
+            return toc;
+        } catch (err) {
+            if (cached) { return cached; }
+            throw err;
+        }
+    }
+
+    /** 正文: 缓存优先, 未命中则抓取并写缓存 */
+    async function onlineChapterParagraphs(ref: OnlineRef, index: number, url: string): Promise<string[]> {
+        const key = onlineKey(ref.sourceId, ref.bookUrl);
+        const cached = await onlineCache.readChapter(key, index);
+        if (cached) { return cached; }
+        const source = bookSources.get(ref.sourceId);
+        if (!source) { throw new Error('书源已被删除, 无法加载正文'); }
+        const res = await fetchChapter(source, url, { pool: sourcePool, referer: ref.bookUrl });
+        await onlineCache.writeChapter(key, index, res.paragraphs);
+        return res.paragraphs;
+    }
+
+    /** 用书架里的 online 元信息重建 Novel(不含正文) */
+    async function buildOnlineNovel(filePath: string): Promise<Novel> {
+        const entry = shelf.get(filePath);
+        const ref = entry?.online;
+        if (!entry || !ref) { throw new Error('书架中找不到这本在线书'); }
+        const toc = await resolveOnlineToc(ref);
+        const chapters = toc.chapters.map(function (c) {
+            return { index: c.index, title: c.title, content: '', url: c.url, wordCount: 0 };
+        });
+        const nextRef: OnlineRef = { ...ref, tocUrl: toc.tocUrl, tocFetchedAt: toc.fetchedAt };
+        await shelf.upsert({
+            filePath,
+            title: entry.title,
+            author: entry.author,
+            totalChapters: chapters.length,
+            online: nextRef,
+        });
+        return {
+            filePath,
+            bookTitle: entry.title,
+            author: entry.author,
+            chapters,
+            preface: '',
+            encoding: 'utf-8',
+            totalWords: ref.wordCount || 0,
+            online: {
+                sourceId: ref.sourceId,
+                sourceName: ref.sourceName,
+                bookUrl: ref.bookUrl,
+                tocUrl: toc.tocUrl,
+            },
+        };
+    }
+
+    /** 打开在线书: 目录(缓存优先) + 当前章正文预取 */
+    async function loadOnlineNovel(filePath: string, opts: LoadOptions = {}): Promise<Novel | undefined> {
+        try {
+            const entry = shelf.get(filePath);
+            if (!entry || !entry.online) { throw new Error('书架中找不到这本在线书'); }
+            const ref = entry.online;
+            const novel = await buildOnlineNovel(filePath);
+            if (!novel.chapters.length) { throw new Error('目录为空'); }
+
+            const hasProgress = entry.chapterIndex >= 0;
+            const chapterIndex = opts.chapterIndex ??
+                (hasProgress ? Math.min(entry.chapterIndex, novel.chapters.length - 1) : 0);
+            const scrollRatio = opts.scrollRatio ?? (hasProgress ? entry.scrollRatio : 0);
+
+            // 预取当前章(失败不阻塞打开: 面板会显示错误与重试)
+            const chapter = novel.chapters[chapterIndex];
+            if (chapter && chapter.url) {
+                try {
+                    const paragraphs = await onlineChapterParagraphs(ref, chapterIndex, chapter.url);
+                    chapter.content = paragraphs.join('\n');
+                    chapter.wordCount = chapter.content.length;
+                } catch { /* 面板内再加载/重试 */ }
+            }
+
+            currentNovel = novel;
+            void vscode.commands.executeCommand('setContext', 'novelReader.hasNovel', true);
+            refreshShelfView();
+            if (opts.openPanel !== false) {
+                ReaderPanel.createOrShow(
+                    novel,
+                    chapterIndex,
+                    scrollRatio,
+                    store,
+                    vscode.ViewColumn.One,
+                    opts.openSettings
+                );
+            }
+            return novel;
+        } catch (err) {
+            if (!opts.silent) {
+                void vscode.window.showErrorMessage(
+                    `打开在线书失败: ${err instanceof Error ? err.message : String(err)}`
+                );
+            }
+            return undefined;
+        }
+    }
+
+    /** 把搜索结果加入在线书架(目录在后台补全) */
+    async function addOnlineBook(item: {
+        sourceId: string; sourceName: string; title: string; author?: string;
+        bookUrl: string; coverUrl?: string; intro?: string; kind?: string;
+        lastChapter?: string; wordCount?: number;
+    }): Promise<{ ok: boolean; message?: string }> {
+        const source = bookSources.get(item.sourceId);
+        if (!source) { return { ok: false, message: '书源不存在或已被删除' }; }
+        if (!item.bookUrl || !/^https?:\/\//i.test(item.bookUrl)) {
+            return { ok: false, message: '书籍地址无效' };
+        }
+        const key = onlineKey(item.sourceId, item.bookUrl);
+        const existing = shelf.get(key);
+        const ref: OnlineRef = {
+            sourceId: item.sourceId,
+            sourceName: source.bookSourceName || item.sourceName,
+            bookUrl: item.bookUrl,
+            coverUrl: item.coverUrl,
+            intro: item.intro,
+            kind: item.kind,
+            lastChapter: item.lastChapter,
+            wordCount: item.wordCount,
+        };
+        await shelf.upsert({
+            filePath: key,
+            title: item.title,
+            author: item.author || '',
+            totalChapters: existing?.totalChapters || 0,
+            online: ref,
+        });
+        refreshShelfView();
+        // 后台抓目录补总章数, 失败不影响已入库
+        void (async function () {
+            try {
+                const toc = await resolveOnlineToc(ref, !existing);
+                await shelf.upsert({
+                    filePath: key,
+                    title: item.title,
+                    author: item.author || '',
+                    totalChapters: toc.chapters.length,
+                    online: { ...ref, tocUrl: toc.tocUrl, tocFetchedAt: toc.fetchedAt },
+                });
+                refreshShelfView();
+            } catch { /* 打开时再提示 */ }
+        })();
+        return { ok: true, message: existing ? '已在书架' : '' };
+    }
+
+    /** 阅读面板: 在线章按需加载 */
+    ReaderPanel.onlineChapterLoader = async function (novel: Novel, index: number): Promise<string[]> {
+        const entry = shelf.get(novel.filePath);
+        const ref = entry?.online;
+        const chapter = novel.chapters[index];
+        if (!ref || !chapter || !chapter.url) { throw new Error('在线章节信息缺失'); }
+        return onlineChapterParagraphs(ref, index, chapter.url);
+    };
+    /** 窗口恢复: 用缓存/重新抓取重建在线书 */
+    ReaderPanel.onlineRestore = async function (filePath: string): Promise<Novel | null> {
+        try {
+            const entry = shelf.get(filePath);
+            if (!entry?.online) { return null; }
+            const novel = await buildOnlineNovel(filePath);
+            const index = entry.chapterIndex >= 0
+                ? Math.min(entry.chapterIndex, novel.chapters.length - 1)
+                : 0;
+            const chapter = novel.chapters[index];
+            if (chapter?.url) {
+                try {
+                    const paragraphs = await onlineChapterParagraphs(entry.online, index, chapter.url);
+                    chapter.content = paragraphs.join('\n');
+                    chapter.wordCount = chapter.content.length;
+                } catch { /* 恢复后重试 */ }
+            }
+            return novel;
+        } catch {
+            return null;
+        }
+    };
 
     // ---------------------------------------------------------------- 命令
 
@@ -300,6 +507,9 @@ export function activate(context: vscode.ExtensionContext): void {
     });
     const sourcePool = new SourceHttpPool();
     const searchService = new SearchService(bookSources, sourcePool);
+    const onlineCache = new OnlineCache(path.join(context.globalStorageUri.fsPath, 'online-cache'));
+    /** 目录缓存有效期: 6 小时; 过期后重新抓, 失败则回退旧缓存 */
+    const TOC_TTL = 6 * 60 * 60 * 1000;
     // 书源改存文件(合集可达数千条); 首次启动把旧版 globalState 数据迁移过来
     void bookSources.load().then(async () => {
         const legacy = context.globalState.get(LEGACY_BOOK_SOURCES_KEY);
@@ -473,6 +683,7 @@ export function activate(context: vscode.ExtensionContext): void {
             await bookSources.upsert(next);
             return toSourceView(next);
         },
+        addOnlineBook: (item) => addOnlineBook(item),
         exportText: () => bookSources.exportText(),
         revive: (id) => bookSources.revive(id),
         clearDead: () => bookSources.clearDead(),
@@ -572,6 +783,11 @@ export function activate(context: vscode.ExtensionContext): void {
             if (!filePath) {
                 return;
             }
+            // 在线书没有本地文件, 直接按 online:// 打开
+            if (isOnlinePath(filePath)) {
+                await loadNovel(filePath, { openPanel: true });
+                return;
+            }
             // 文件被移动/改名/删除: 提供重新定位(保留进度)或移除
             if (!fs.existsSync(filePath)) {
                 const book = shelf.get(filePath);
@@ -630,16 +846,19 @@ export function activate(context: vscode.ExtensionContext): void {
             }
             const book = shelf.get(filePath);
             const name = book?.title || path.basename(filePath);
+            const online = isOnlinePath(filePath);
             const libPath = getLibraryPath();
-            const inLibrary = !!libPath && isInsideDir(filePath, libPath);
-            const fileExists = fs.existsSync(filePath);
+            const inLibrary = !online && !!libPath && isInsideDir(filePath, libPath);
+            const fileExists = !online && fs.existsSync(filePath);
             const willTrash = inLibrary && fileExists;
             // 未删除文件时说明原因, 避免"设了书库目录却提示不删文件"的困惑
-            const whyNotTrash = !libPath
-                ? '未设置书库目录'
-                : !inLibrary
-                  ? '该书文件不在书库目录内'
-                  : '文件不存在';
+            const whyNotTrash = online
+                ? '在线书没有本地文件'
+                : !libPath
+                  ? '未设置书库目录'
+                  : !inLibrary
+                    ? '该书文件不在书库目录内'
+                    : '文件不存在';
             const confirmText = willTrash
                 ? `从书架移除「${name}」并把文件移入回收站？\n文件：${filePath}`
                 : `从书架移除「${name}」？仅移除书架记录，不删除文件。\n原因：${whyNotTrash}\n文件：${filePath}`;
@@ -660,6 +879,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 }
             }
             await shelf.remove(filePath);
+            if (online) { await onlineCache.clear(filePath); }
             refreshShelfView();
             vscode.window.setStatusBarMessage(
                 willTrash ? `已移除「${name}」并移入回收站` : `已从书架移除「${name}」`,
@@ -1015,7 +1235,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const last = shelf.last();
         // 只把上次那本预载到内存(供书架/章节/设置抽屉使用), 绝不自动弹出阅读面板;
         // 想继续读请点状态栏「小说阅读」或执行 novelReader.resumeCurrent
-        if (!last || !fs.existsSync(last.filePath)) {
+        if (!last || (!isOnlinePath(last.filePath) && !fs.existsSync(last.filePath))) {
             return;
         }
         await loadNovel(last.filePath, { openPanel: false, silent: true });

@@ -8,6 +8,7 @@
  */
 
 import * as vscode from 'vscode';
+import type { OnlineRef } from './onlinePath';
 
 export interface ShelfBook {
     /** 小说文件绝对路径(唯一键) */
@@ -23,6 +24,8 @@ export interface ShelfBook {
     chapterRatios?: Record<number, number>;
     addedAt: number;
     updatedAt: number;
+    /** 在线书元信息(filePath 为 online://... 时存在) */
+    online?: OnlineRef;
 }
 
 const SHELF_KEY = 'novelReader.shelf';
@@ -64,12 +67,13 @@ export class ShelfStore {
         title: string;
         author: string;
         totalChapters: number;
+        online?: OnlineRef;
     }): Promise<ShelfBook> {
         const books = this.state.get<ShelfBook[]>(SHELF_KEY, []);
         const now = Date.now();
         const existing = books.find((b) => b.filePath === book.filePath);
         const next: ShelfBook = existing
-            ? { ...existing, ...book, updatedAt: now }
+            ? { ...existing, ...book, online: book.online || existing.online, updatedAt: now }
             : {
                   ...book,
                   chapterIndex: -1,

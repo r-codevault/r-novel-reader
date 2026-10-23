@@ -9,6 +9,7 @@
  */
 
 import * as vscode from 'vscode';
+import { isOnlinePath } from './onlinePath';
 import * as crypto from 'crypto';
 import { Novel, parseNovel } from './novelParser';
 import { decodeBuffer } from './encoding';
@@ -46,6 +47,8 @@ interface InitPayload {
     notes: NoteItem[];
     /** 书源列表(精简视图) */
     sources: BookSourceView[];
+    /** 在线书元信息(本地书为空) */
+    online?: { sourceName: string; bookUrl: string };
 }
 
 interface ChapterPayload {
@@ -84,6 +87,8 @@ type WebviewMessage =
     | { type: 'sourceSearch'; key: string; sourceIds?: string[]; token: number }
     | { type: 'sourceSearchPause'; token: number; paused: boolean }
     | { type: 'sourceSearchCancel'; token: number }
+    | { type: 'addOnlineBook'; item: SearchBookItem }
+    | { type: 'retryChapter'; index: number }
     | { type: 'sourceImport'; mode: 'url' | 'clipboard' | 'file' }
     | { type: 'sourceToggle'; id: string; enabled: boolean }
     | { type: 'sourceRemove'; id: string }
@@ -109,6 +114,10 @@ export interface ShelfItemView {
     filePath: string;
     title: string;
     author: string;
+    /** 是否在线书 */
+    online?: boolean;
+    /** 在线书来源名 */
+    sourceName?: string;
     /** 最后阅读章节序号, -1 表示未开始 */
     chapterIndex: number;
     totalChapters: number;
@@ -140,6 +149,8 @@ export interface BookSourceApi {
     pauseCheck?(scope: 'active' | 'dead', paused: boolean, runId?: number): void;
     /** 取消批量检查(runId 用于忽略过期请求) */
     cancelCheck?(scope: 'active' | 'dead', runId?: number): void;
+    /** 把搜索结果加入在线书架 */
+    addOnlineBook?(item: SearchBookItem): Promise<{ ok: boolean; message?: string }>;
     /** 搜索; token 原样回传, 供 webview 丢弃过期结果 */
     search(key: string, sourceIds: string[] | undefined, hooks?: {
         control?: SearchControl;
@@ -191,6 +202,10 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
     public static bookSources?: BookSourceApi;
     /** 面板关闭时取消正在跑的批量检查 */
     public static cancelSourceCheck?: () => void;
+    /** 在线章节按需加载(由插件入口注入) */
+    public static onlineChapterLoader?: (novel: Novel, index: number) => Promise<string[]>;
+    /** 窗口恢复时重建在线书(由插件入口注入) */
+    public static onlineRestore?: (filePath: string) => Promise<Novel | null>;
     /** 视图就绪前的抽屉打开请求 */
     private static _pendingDrawer: DrawerTab | null = null;
 
@@ -203,6 +218,8 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
     /** 本会话内的章节位置记忆(章节序号 -> 0~1), 切走再切回时恢复原位置 */
     private readonly _ratios = new Map<number, number>();
     private _ready = false;
+    /** 正在加载的在线章节序号 */
+    private readonly _loadingChapters = new Set<number>();
     /** 当前运行中的搜索(暂停/取消用) */
     private _activeSearch: { token: number; control: SearchControl } | undefined;
     private _openSettingsOnLoad = false;
@@ -336,10 +353,20 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
             return false;
         }
         try {
-            const raw = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.file(state.filePath)));
-            // 必须走编码识别: 站点下载的 txt 常为 GB18030, 硬解UTF-8 会乱码
-            const { text, encoding } = decodeBuffer(raw);
-            const novel = parseNovel(text, state.filePath, encoding);
+            let novel: Novel;
+            if (isOnlinePath(state.filePath)) {
+                const loaded = await ReaderPanel.onlineRestore?.(state.filePath);
+                if (!loaded || loaded.chapters.length === 0) {
+                    panel.dispose();
+                    return false;
+                }
+                novel = loaded;
+            } else {
+                const raw = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.file(state.filePath)));
+                // 必须走编码识别: 站点下载的 txt 常为 GB18030, 硬解UTF-8 会乱码
+                const { text, encoding } = decodeBuffer(raw);
+                novel = parseNovel(text, state.filePath, encoding);
+            }
             if (novel.chapters.length === 0) {
                 panel.dispose();
                 return false;
@@ -561,6 +588,22 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                         ratio
                     );
                 }
+                break;
+            case 'addOnlineBook': {
+                const api = ReaderPanel.bookSources;
+                if (!api?.addOnlineBook) { break; }
+                void api.addOnlineBook(msg.item).then((res) => {
+                    void this._panel.webview.postMessage({
+                        type: 'onlineBookAdded',
+                        bookUrl: msg.item.bookUrl,
+                        ok: !!res.ok,
+                        message: res.message || '',
+                    });
+                });
+                break;
+            }
+            case 'retryChapter':
+                this._retryChapter(msg.index);
                 break;
             case 'openFile':
                 void vscode.commands.executeCommand('novelReader.openFile');
@@ -866,9 +909,16 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             libraryPath: ReaderPanel.getLibrary ? ReaderPanel.getLibrary() : '',
             notes: ReaderPanel.notes ? ReaderPanel.notes.list() : [],
             sources: ReaderPanel.bookSources ? ReaderPanel.bookSources.list() : [],
+            online: this._novel.online
+                ? { sourceName: this._novel.online.sourceName, bookUrl: this._novel.online.bookUrl }
+                : undefined,
         };
         this._openSettingsOnLoad = false;
         this._panel.webview.postMessage({ type: 'init', payload });
+        // 在线书首章若尚未取到正文(预取失败), 打开后立刻走一次懒加载/错误提示
+        if (this._novel.online && !this._novel.chapters[this._chapterIndex]?.content) {
+            this._postChapter();
+        }
         // 摸鱼会话状态补发: webview 是新实例(state.slackerActive 初始 false),
         // 若会话早已开启(先摸鱼后开阅读器), 不补发会导致侧边栏高亮丢失
         this._panel.webview.postMessage({
@@ -881,6 +931,62 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
         if (!this._ready) {
             return;
         }
+        const index = this._chapterIndex;
+        const chapter = this._novel.chapters[index];
+        const needLoad = !!this._novel.online && !!chapter && !chapter.content && !!ReaderPanel.onlineChapterLoader;
+        if (!needLoad) {
+            this._postChapterPayload();
+            return;
+        }
+        if (this._loadingChapters.has(index)) { return; }
+        this._loadingChapters.add(index);
+        this._panel.webview.postMessage({
+            type: 'chapterLoading',
+            payload: { index, title: chapter.title },
+        });
+        void this._loadOnlineChapter(index);
+    }
+
+    /** 在线章: 加载正文(缓存优先由 loader 处理) */
+    private async _loadOnlineChapter(index: number): Promise<void> {
+        const loader = ReaderPanel.onlineChapterLoader;
+        if (!loader) { return; }
+        try {
+            const paragraphs = await loader(this._novel, index);
+            const chapter = this._novel.chapters[index];
+            if (chapter) {
+                chapter.content = paragraphs.join('\n');
+                chapter.wordCount = chapter.content.length;
+            }
+            if (ReaderPanel.current === this && this._chapterIndex === index) {
+                this._postChapterPayload();
+            }
+        } catch (err) {
+            if (ReaderPanel.current === this && this._chapterIndex === index) {
+                this._panel.webview.postMessage({
+                    type: 'chapterError',
+                    payload: {
+                        index,
+                        message: err instanceof Error ? err.message : String(err),
+                    },
+                });
+            }
+        } finally {
+            this._loadingChapters.delete(index);
+        }
+    }
+
+    /** 重试当前章(清掉空正文后重新走加载) */
+    private _retryChapter(index: number): void {
+        if (index !== this._chapterIndex) { return; }
+        const chapter = this._novel.chapters[index];
+        if (chapter && !chapter.content) {
+            this._loadingChapters.delete(index);
+        }
+        this._postChapter();
+    }
+
+    private _postChapterPayload(): void {
         this._panel.webview.postMessage({ type: 'chapter', payload: this._chapterPayload() });
     }
 
