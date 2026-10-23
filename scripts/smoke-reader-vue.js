@@ -1317,18 +1317,32 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#sourcePopup [data-src-check-progress]').textContent.includes('已暂停'),
     '进度行应显示已暂停');
 
-  sendMsg({ type: 'sourceCheckProgress', scope: 'active', done: 1, total: 10, sourceName: 'A站', paused: true });
+  // 暂停前的在途进度回包(paused=false)不能把「继续」改回「暂停」
+  sendMsg({ type: 'sourceCheckProgress', scope: 'active', done: 2, total: 10, sourceName: 'A站', paused: false });
   await sleep(20);
+  assert(checkAllBtn.textContent.includes('继续'), '进度回包不应覆盖本地暂停状态');
+
   posted.length = 0;
   checkAllBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   assert(posted.some((m) => m.type === 'sourceCheckPause' && m.paused === false),
     '点继续应发送 sourceCheckPause(false)');
 
+  // 暂停后出现「取消」
+  checkAllBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  const checkCancelBtn = document.querySelector('#sourcePopup [data-src-check-cancel]');
+  assert(checkCancelBtn && checkCancelBtn.textContent.includes('取消'), '暂停后应出现取消按钮');
+  posted.length = 0;
+  checkCancelBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceCheckCancel'), '点取消应发送 sourceCheckCancel');
+  assert(checkAllBtn.textContent.includes('检查全部'), '取消后按钮应恢复为检查全部');
+  assert(!document.querySelector('#sourcePopup [data-src-check-progress]'), '取消后进度行应消失');
+
   sendMsg({ type: 'sourceCheckDone' });
   await sleep(20);
   assert(checkAllBtn.textContent.includes('检查全部'), '检查结束后按钮应恢复');
-  assert(!document.querySelector('#sourcePopup [data-src-check-progress]'), '结束后进度行应消失');
 
   // 6) 编辑 / 两步删除 / 导入
   document.querySelector('#sourcePopup [data-src-edit="s1"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
@@ -1478,6 +1492,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(posted.some((m) => m.type === 'sourceCheckPause' && m.paused === true),
     '重查中暂停应发送 sourceCheckPause(true)');
   assert(recheckAllBtn.textContent.includes('继续'), '暂停后按钮应变「继续」');
+
+  const recheckCancel = document.querySelector('#sourcePopup [data-src-check-cancel]');
+  assert(recheckCancel && recheckCancel.textContent.includes('取消'), '重查暂停后应出现取消按钮');
+  posted.length = 0;
+  recheckCancel.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceCheckCancel'), '点取消应发送 sourceCheckCancel');
+  assert(recheckAllBtn.textContent.includes('全部重查'), '取消后按钮应恢复为全部重查');
 
   sendMsg({ type: 'sourceCheckDone' });
   await sleep(20);

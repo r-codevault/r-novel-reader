@@ -196,12 +196,14 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
     }
     case 'sourceCheckProgress': {
       const m = msg as { scope?: typeof state.checkScope; done?: number; total?: number; sourceName?: string; paused?: boolean };
+      const first = !state.checkRunning;
       state.checkRunning = true;
       state.checkScope = m.scope || 'active';
       state.checkDone = m.done || 0;
       state.checkTotal = m.total || 0;
       state.checkSource = m.sourceName || '';
-      state.checkPaused = !!m.paused;
+      // 暂停状态以用户点击为准: 进度回包可能是在暂停前发出的, 不能把「继续」改回「暂停」
+      if (first) { state.checkPaused = !!m.paused; }
       break;
     }
     case 'sourceCheckDone':

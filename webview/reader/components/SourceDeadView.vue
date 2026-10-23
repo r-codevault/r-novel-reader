@@ -33,6 +33,14 @@ const recheckAllLabel = computed(function () {
   return state.checkPaused ? '继续' : '暂停';
 });
 
+/** 取消重查(已完成的结果保留) */
+function cancelRecheckAll(): void {
+  send({ type: 'sourceCheckCancel' });
+  state.checkRunning = false;
+  state.checkPaused = false;
+  state.checkScope = '';
+}
+
 function toggleRecheckAll(): void {
   if (recheckAllRunning.value) {
     state.checkPaused = !state.checkPaused;
@@ -71,6 +79,8 @@ function loadMore(): void {
       <span class="src-dead-title">共 {{ dead.length }} 个失效书源</span>
       <span class="spacer"></span>
       <button class="popup-btn" data-src-recheck-all :disabled="!dead.length" @click="toggleRecheckAll">{{ recheckAllLabel }}</button>
+      <button v-if="recheckAllRunning && state.checkPaused" class="popup-btn" data-src-check-cancel
+        @click="cancelRecheckAll">取消</button>
       <button class="popup-btn src-del" data-src-clear-dead :disabled="!dead.length" @click="clearAll">清除全部</button>
     </div>
     <div v-if="recheckAllRunning" class="src-hint src-progress" data-src-check-progress>

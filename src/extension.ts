@@ -477,6 +477,9 @@ export function activate(context: vscode.ExtensionContext): void {
             if (!activeCheck) { return; }
             if (paused) { activeCheck.pause(); } else { activeCheck.resume(); }
         },
+        cancelCheck: () => {
+            activeCheck?.cancel();
+        },
         search: (key, sourceIds, hooks) => searchService.search(key, { sourceIds, ...(hooks || {}) }).then((out) => {
             // 失效/恢复有变化时立刻刷新列表(避免用户还要手动刷新)
             if (out.recorded > 0) { ReaderPanel.current?.postSources(); }

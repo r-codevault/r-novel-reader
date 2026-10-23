@@ -57,6 +57,14 @@ const checkAllLabel = computed(function () {
   return state.checkPaused ? '继续' : '暂停';
 });
 
+/** 取消本次检查(已完成的结果保留) */
+function cancelCheckAll(): void {
+  send({ type: 'sourceCheckCancel' });
+  state.checkRunning = false;
+  state.checkPaused = false;
+  state.checkScope = '';
+}
+
 function toggleCheckAll(): void {
   if (checkAllRunning.value) {
     state.checkPaused = !state.checkPaused;
@@ -144,6 +152,8 @@ function loadMore(): void {
       <button class="popup-secondary" data-src-import="file" @click="importBy('file')">本地文件</button>
       <span class="spacer"></span>
       <button class="popup-btn" data-src-check-all @click="toggleCheckAll">{{ checkAllLabel }}</button>
+      <button v-if="checkAllRunning && state.checkPaused" class="popup-btn" data-src-check-cancel
+        @click="cancelCheckAll">取消</button>
       <button class="popup-btn" data-src-export @click="exportAll">导出</button>
     </div>
 

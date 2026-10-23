@@ -90,6 +90,7 @@ type WebviewMessage =
     | { type: 'sourceExport' }
     | { type: 'sourceCheck'; id?: string; scope?: 'active' | 'dead' | 'all' }
     | { type: 'sourceCheckPause'; paused: boolean }
+    | { type: 'sourceCheckCancel' }
     | { type: 'sourceRevive'; id: string }
     | { type: 'sourceClearDead' }
     | { type: 'sourceSetEnabled'; patches: { id: string; enabled: boolean }[] };
@@ -136,6 +137,8 @@ export interface BookSourceApi {
     setEnabledMany(patches: { id: string; enabled: boolean }[]): Promise<number>;
     /** 暂停/继续批量检查 */
     pauseCheck?(paused: boolean): void;
+    /** 取消批量检查 */
+    cancelCheck?(): void;
     /** 搜索; token 原样回传, 供 webview 丢弃过期结果 */
     search(key: string, sourceIds: string[] | undefined, hooks?: {
         control?: SearchControl;
@@ -735,6 +738,9 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                 break;
             case 'sourceCheckPause':
                 ReaderPanel.bookSources?.pauseCheck?.(msg.paused);
+                break;
+            case 'sourceCheckCancel':
+                ReaderPanel.bookSources?.cancelCheck?.();
                 break;
             case 'sourceCheck':
                 // 兼容旧调用: 只传 id 时按单源检查
