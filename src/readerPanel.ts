@@ -83,6 +83,7 @@ type WebviewMessage =
     | { type: 'requestSources' }
     | { type: 'sourceSearch'; key: string; sourceIds?: string[]; token: number }
     | { type: 'sourceSearchPause'; token: number; paused: boolean }
+    | { type: 'sourceSearchCancel'; token: number }
     | { type: 'sourceImport'; mode: 'url' | 'clipboard' | 'file' }
     | { type: 'sourceToggle'; id: string; enabled: boolean }
     | { type: 'sourceRemove'; id: string }
@@ -711,6 +712,13 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                         done: true,
                     });
                 });
+                break;
+            }
+            case 'sourceSearchCancel': {
+                const active = this._activeSearch;
+                if (!active || (msg.token !== undefined && active.token !== msg.token)) { break; }
+                active.control.cancel();
+                this._activeSearch = undefined;
                 break;
             }
             case 'sourceSearchPause': {

@@ -191,7 +191,7 @@ export const state = reactive({
   searchResults: [] as SearchBookItem[],
   searchErrors: [] as SourceSearchError[],
   searchDone: false,
-  /** 本次因源上限(100)未参与搜索的书源数 */
+  /** 因源上限未参与搜索的书源数(已无上限, 保留兼容) */
   searchSkipped: 0,
   /** 本次搜索新移入失效的书源数 */
   searchDeadAdded: 0,
@@ -199,6 +199,18 @@ export const state = reactive({
   searchProgress: null as null | { done: number; total: number; sourceName: string; ok: boolean; failed: number },
   /** 用户暂停中的搜索 */
   searchPaused: false,
+  /** 本轮已确认的关键词(输入框可能已被改写) */
+  searchKey: '',
+  /** 本轮是否被取消 */
+  searchCancelled: false,
+  /** 拖动分隔条后的当前区行数; null = 自动分配 */
+  splitCurrentRows: null as null | number,
+  /** 上一次搜索的结果(只保留一份) */
+  searchHistory: null as null | {
+    key: string;
+    items: SearchBookItem[];
+    errors: SourceSearchError[];
+  },
   // ---- 批量检查: 两个 Tab 各自独立(检查全部 / 全部重查互不影响)
   checkStates: {
     active: { running: false, paused: false, done: 0, total: 0, sourceName: '', runId: 0 },

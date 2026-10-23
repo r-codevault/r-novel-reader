@@ -1431,6 +1431,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(pauseBtn.textContent.includes('继续'), '暂停后按钮应变「继续」');
   assert(document.querySelector('#sourcePopup [data-src-progress]').textContent.includes('已暂停'),
     '进度行应显示已暂停');
+  assert(document.querySelector('#sourcePopup [data-src-found]').textContent.includes('已找到 0 本'),
+    '暂停后仍应显示已找到数量');
 
   posted.length = 0;
   pauseBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
@@ -1446,6 +1448,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(20);
   assert(document.querySelectorAll('#sourcePopup .src-result').length === 1, '收到批次应立即显示结果');
   assert(!document.querySelector('#sourcePopup [data-src-errors]'), '搜索未结束时不显示「已移入失效」摘要');
+  assert(document.querySelector('#sourcePopup [data-src-found]').textContent.includes('已找到 1 本'),
+    '应动态显示已找到数量');
 
   sendMsg({ type: 'searchResults', token: searchMsg.token, done: true, deadAdded: ['s2'], errors: [
     { sourceId: 's2', sourceName: 'B站', kind: 'timeout', message: '搜索超时(10s)' },
@@ -1462,11 +1466,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#sourcePopup [data-src-results]'), '搜索结果应放在独立滚动容器里');
   assert(document.querySelectorAll('[data-src-results] .src-result').length === 2,
     '结果行应位于滚动容器内');
-  // 构建后的 CSS 是压缩的: `.src-results{...}` 无空格, 属性间也无空格
-  assert(/\.src-results\{[^}]*max-height:\s*calc\(var\(--src-result-h\)\s*\*\s*10\)/.test(capturedHtml),
-    '结果列表应限制为 10 条高度');
-  assert(/\.src-results\{[^}]*overflow-y:\s*auto/.test(capturedHtml),
-    '结果列表应内部滚动');
+  // 结果区只做布局: 上下两个 pane 各自滚动
+  assert(/\.src-results\{[^}]*display:\s*flex/.test(capturedHtml), '结果区应为 flex 列布局');
+  assert(/\.src-results\{[^}]*overflow:\s*hidden/.test(capturedHtml), '结果区自身不应滚动');
+  assert(/\.src-pane\{[^}]*overflow-y:\s*auto/.test(capturedHtml), '结果 pane 应内部滚动');
 
   assert(document.querySelector('#sourcePopup [data-src-errors]').textContent.includes('1 个书源搜索失败'),
     '搜索报错应折叠成一行摘要');
@@ -1633,6 +1636,157 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     (document.querySelector('#reader') || document.body).dispatchEvent(ev);
     assert(!ev.defaultPrevented, '正文区域的滚轮不应被拦截');
   }
+
+  // 13) 取消: 进度消失、结果保留、迟到回包被 token 丢弃
+  document.querySelector('#sourcePopup [data-src-tab="search"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  const searchInput = document.querySelector('#sourcePopup [data-src-input]');
+  searchInput.value = '斗破';
+  searchInput.dispatchEvent(new win.Event('input', { bubbles: true }));
+  posted.length = 0;
+  document.querySelector('#sourcePopup [data-src-go]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  const histStart = posted.filter((m) => m.type === 'sourceSearch').pop();
+  assert(histStart && histStart.key === '斗破', '应发起新一轮搜索');
+  assert(document.querySelector('#sourcePopup [data-src-found]').textContent.includes('已找到 0 本'),
+    '新搜索开始时应显示 0 本');
+  sendMsg({ type: 'searchProgress', token: histStart.token, done: 1, total: 10, sourceName: 'A站', ok: true, failed: 0 });
+  sendMsg({ type: 'searchBatch', token: histStart.token, errors: [], items: [
+    { sourceId: 's1', sourceName: 'A站', title: '斗破苍穹', author: '天蚕土豆', bookUrl: 'https://h/1' },
+    { sourceId: 's1', sourceName: 'A站', title: '斗破外传', author: '天蚕土豆', bookUrl: 'https://h/2' },
+    { sourceId: 's1', sourceName: 'A站', title: '斗破合集', author: '天蚕土豆', bookUrl: 'https://h/3' },
+  ] });
+  await sleep(30);
+  assert(document.querySelector('#sourcePopup [data-src-found]').textContent.includes('已找到 3 本'),
+    '已找到数量应随批次增长');
+  assert(document.querySelector('#sourcePopup [data-src-history-label]').textContent.includes('遮天'),
+    '应显示历史搜索关键词');
+  assert(document.querySelectorAll('#sourcePopup [data-src-history-result]').length === 2,
+    '历史区应显示上一次的 2 条结果');
+  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.maxHeight === '132px',
+    '当前 3 条应为 3 行高');
+  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.maxHeight === '88px',
+    '历史 2 条应为 2 行高');
+
+  posted.length = 0;
+  document.querySelector('#sourcePopup [data-src-cancel]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(posted.some((m) => m.type === 'sourceSearchCancel' && m.token === histStart.token),
+    '点取消应发送 sourceSearchCancel');
+  assert(!document.querySelector('#sourcePopup [data-src-progress]'), '取消后进度行应消失');
+  assert(document.querySelectorAll('#sourcePopup [data-src-pane="current"] .src-result').length === 3,
+    '取消后应保留已搜到的结果');
+  assert(document.querySelector('#sourcePopup [data-src-go]').textContent.includes('搜索'),
+    '取消后按钮应回到「搜索」');
+
+  // 迟到的旧 token 回包不得改动结果
+  sendMsg({ type: 'searchResults', token: histStart.token, done: true, items: [
+    { sourceId: 's1', sourceName: 'A站', title: '迟到结果', author: 'x', bookUrl: 'https://h/9' },
+  ], errors: [] });
+  await sleep(20);
+  assert(document.querySelectorAll('#sourcePopup [data-src-pane="current"] .src-result').length === 3,
+    '取消后迟到的回包应被 token 丢弃');
+
+  // 14) 搜索中改写关键词 -> 取消本轮, 状态回到「搜索」
+  posted.length = 0;
+  document.querySelector('#sourcePopup [data-src-go]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  const editStart = posted.filter((m) => m.type === 'sourceSearch').pop();
+  assert(editStart && editStart.key === '斗破', '同词重搜应发新请求');
+  sendMsg({ type: 'searchBatch', token: editStart.token, errors: [], items: [
+    { sourceId: 's1', sourceName: 'A站', title: '斗破新结果', author: 'x', bookUrl: 'https://h/10' },
+  ] });
+  await sleep(20);
+  searchInput.value = '完美世界';
+  searchInput.dispatchEvent(new win.Event('input', { bubbles: true }));
+  await sleep(30);
+  assert(posted.some((m) => m.type === 'sourceSearchCancel' && m.token === editStart.token),
+    '改写输入框应取消本轮');
+  assert(!document.querySelector('#sourcePopup [data-src-progress]'), '改写后进度行应消失');
+  assert(document.querySelector('#sourcePopup [data-src-go]').textContent.includes('搜索'),
+    '改写后状态应回到「搜索」');
+
+  // 15) 再搜: 上一轮 1 条进历史, 本次 6 条 -> 6/1 行
+  posted.length = 0;
+  document.querySelector('#sourcePopup [data-src-go]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  const splitStart = posted.filter((m) => m.type === 'sourceSearch').pop();
+  assert(splitStart && splitStart.key === '完美世界', '应按新关键词搜索');
+  assert(document.querySelector('#sourcePopup [data-src-history-label]').textContent.includes('斗破'),
+    '历史应替换为上一轮(斗破)');
+  const six = Array.from({ length: 6 }, (_, i) => ({
+    sourceId: 's1', sourceName: 'A站', title: '完美 ' + i, author: '辰东', bookUrl: 'https://p/' + i,
+  }));
+  sendMsg({ type: 'searchBatch', token: splitStart.token, errors: [], items: six });
+  await sleep(30);
+  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.maxHeight === '264px',
+    '当前 6 条应占 6 行(264px)');
+  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.maxHeight === '44px',
+    '历史 1 条应占 1 行(44px)');
+
+  // 16) 再搜: 上一轮 6 条进历史, 本次 6 条 -> 5/5 行, 拖动 +1 行
+  posted.length = 0;
+  searchInput.value = '圣墟';
+  searchInput.dispatchEvent(new win.Event('input', { bubbles: true }));
+  await sleep(30);   // 改写会先取消上一轮(watch 异步), 再点搜索
+  document.querySelector('#sourcePopup [data-src-go]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  const dragStart = posted.filter((m) => m.type === 'sourceSearch').pop();
+  assert(dragStart && dragStart.key === '圣墟', '应发起第三次搜索');
+  const six2 = Array.from({ length: 6 }, (_, i) => ({
+    sourceId: 's1', sourceName: 'A站', title: '圣墟 ' + i, author: '辰东', bookUrl: 'https://s/' + i,
+  }));
+  sendMsg({ type: 'searchBatch', token: dragStart.token, errors: [], items: six2 });
+  await sleep(30);
+  assert(document.querySelectorAll('#sourcePopup [data-src-history-result]').length === 6,
+    '历史应为 6 条');
+  assert(!document.querySelector('#sourcePopup [data-src-history-result] .src-add'),
+    '历史结果不应显示加入书架按钮');
+  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.maxHeight === '220px',
+    '两边都 6 条时当前区应为 5 行');
+  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.maxHeight === '220px',
+    '两边都 6 条时历史区应为 5 行');
+
+  const splitEl = document.querySelector('#sourcePopup [data-src-split]');
+  const pt = (type, y) => {
+    if (win.PointerEvent) { return new win.PointerEvent(type, { bubbles: true, cancelable: true, button: 0, clientY: y }); }
+    const e = new win.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(e, 'clientY', { value: y });
+    Object.defineProperty(e, 'button', { value: 0 });
+    return e;
+  };
+  splitEl.dispatchEvent(pt('pointerdown', 100));
+  document.dispatchEvent(pt('pointermove', 144));
+  document.dispatchEvent(pt('pointerup', 144));
+  await sleep(30);
+  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.maxHeight === '264px',
+    '拖动 +1 行后当前区应增高 44px');
+  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.maxHeight === '176px',
+    '拖动后历史区应减少 44px');
+  assert(document.querySelector('#sourcePopup [data-src-split]').getAttribute('aria-valuenow') === '6',
+    '分隔条当前行数应更新');
+
+  // 17) 当前结果补到 10 条, 拖到底 -> 历史收起到 0, 标题仍在
+  const four = Array.from({ length: 4 }, (_, i) => ({
+    sourceId: 's1', sourceName: 'A站', title: '圣墟 附加 ' + i, author: '辰东', bookUrl: 'https://s2/' + i,
+  }));
+  sendMsg({ type: 'searchBatch', token: dragStart.token, errors: [], items: four });
+  await sleep(30);
+  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.maxHeight === '264px',
+    '补到 10 条后仍按拖动分得的 6 行显示(超出内滚)');
+  const splitEl2 = document.querySelector('#sourcePopup [data-src-split]');
+  splitEl2.dispatchEvent(pt('pointerdown', 100));
+  document.dispatchEvent(pt('pointermove', 500));
+  document.dispatchEvent(pt('pointerup', 500));
+  await sleep(30);
+  assert(!document.querySelector('#sourcePopup [data-src-pane="history"]'), '拖到最大时历史区应收起');
+  assert(document.querySelector('#sourcePopup [data-src-history-label]'), '历史标题应保留');
+  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.maxHeight === '440px',
+    '历史收起后当前区最多 10 行');
+
+  // 18) 历史收起后不渲染历史行
+  assert(!document.querySelector('#sourcePopup [data-src-history-result]'),
+    '历史收起后不渲染历史行');
 
   document.querySelector('#sourcePopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);

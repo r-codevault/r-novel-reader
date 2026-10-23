@@ -96,3 +96,56 @@ export function failedNames(names: string[]): string {
   const head = list.slice(0, 3).join('、');
   return '（' + head + (list.length > 3 ? ' 等' : '') + '）';
 }
+
+
+/** 搜索结果区行数分配: 总容量 10 行, 当前/历史上下分栏, 分隔条高度另算 */
+export const RESULT_ROW_CAP = 10;
+
+export interface ResultRows {
+  /** 当前结果实际渲染行数 */
+  curRender: number;
+  /** 历史结果实际渲染行数 */
+  histRender: number;
+  /** 当前区分到的行数(拖动/自动) */
+  curAlloc: number;
+  /** 历史区分到的行数 */
+  histAlloc: number;
+}
+
+export function allocResultRows(
+  currentCount: number,
+  historyCount: number,
+  hasHistory: boolean,
+  dragRows: number | null
+): ResultRows {
+  const CAP = RESULT_ROW_CAP;
+  const clamp = function (n: number, lo: number, hi: number): number {
+    return Math.min(hi, Math.max(lo, n));
+  };
+  if (!hasHistory) {
+    const cur = Math.min(currentCount, CAP);
+    return { curRender: cur, histRender: 0, curAlloc: cur, histAlloc: 0 };
+  }
+  if (currentCount === 0 && dragRows === null) {
+    const hist = Math.min(historyCount, CAP);
+    return { curRender: 0, histRender: hist, curAlloc: 0, histAlloc: hist };
+  }
+  let cur: number;
+  if (dragRows !== null) {
+    cur = dragRows;
+  } else if (currentCount < 5) {
+    cur = currentCount;                 // 当前 3 条 -> 3 / 7
+  } else if (historyCount < 5) {
+    cur = CAP - historyCount;           // 历史 3 条 -> 7 / 3
+  } else {
+    cur = 5;                            // 两边都够 -> 5 / 5
+  }
+  cur = clamp(cur, currentCount > 0 ? 1 : 0, Math.min(currentCount, CAP));
+  const histAlloc = Math.max(0, CAP - cur);
+  return {
+    curRender: Math.min(cur, currentCount),
+    histRender: Math.min(histAlloc, historyCount),
+    curAlloc: cur,
+    histAlloc,
+  };
+}

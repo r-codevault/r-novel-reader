@@ -263,6 +263,7 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.searchDeadAdded = (m.deadAdded || []).length;
       state.searchProgress = null;
       state.searchPaused = false;
+      state.searchCancelled = false;
       state.searchDone = !!m.done;
       state.searching = false;
       break;

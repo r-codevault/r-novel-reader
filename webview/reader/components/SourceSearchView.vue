@@ -2,12 +2,15 @@
 /**
  * SourceSearchView.vue — 书源搜索
  *
- * 搜索范围 = 「书源」Tab 里勾选启用、且未失效的书源(选源统一在那边设置)。
- * 搜索结果里的报错只做一行摘要；连续 2 次失败的源会自动进入「失效」Tab。
+ * 搜索范围 = 「书源」Tab 里勾选启用、且未失效的书源。
+ * 结果区上下分栏：本次结果 / 历史搜索(上一次)；分隔条可按行拖动。
  */
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { send, state } from '../composables/vscode';
-import { deadSources, failedNames, resultMeta, resultSummary, searchableSources, sourceLabel } from '../composables/sourceView';
+import {
+  allocResultRows, deadSources, failedNames, resultMeta, resultSummary,
+  searchableSources, sourceLabel,
+} from '../composables/sourceView';
 
 const inputRef = ref<HTMLInputElement | null>(null);
 defineExpose({ el: inputRef });
@@ -25,20 +28,68 @@ const errorNames = computed(function () {
   return failedNames(state.searchErrors.map(function (e) { return e.sourceName; }));
 });
 
+/** 历史搜索(仅上一次) */
+const hasHistory = computed(function () {
+  return !!state.searchHistory && state.searchHistory.items.length > 0;
+});
+const alloc = computed(function () {
+  return allocResultRows(
+    state.searchResults.length,
+    state.searchHistory ? state.searchHistory.items.length : 0,
+    hasHistory.value,
+    state.splitCurrentRows
+  );
+});
+
 function doSearch(): void {
   const key = state.searchKeyword.trim();
   if (!key || state.searching) { return; }
+
+  // 上一次的结果归档为「历史搜索」(同词重搜不覆盖, 空结果不覆盖)
+  if (state.searchResults.length > 0 && state.searchKey && state.searchKey !== key) {
+    state.searchHistory = {
+      key: state.searchKey,
+      items: state.searchResults.slice(),
+      errors: state.searchErrors.slice(),
+    };
+  }
+
+  state.searchKey = key;
   state.searching = true;
   state.searchDone = false;
+  state.searchCancelled = false;
   state.searchResults = [];
   state.searchErrors = [];
   state.searchSkipped = 0;
   state.searchDeadAdded = 0;
   state.searchProgress = null;
   state.searchPaused = false;
+  state.splitCurrentRows = null;
   state.searchToken += 1;
   send({ type: 'sourceSearch', key, token: state.searchToken });
 }
+
+/**
+ * 取消本轮: 停止发请求, 丢弃迟到的回包, 但保留已搜到的结果。
+ * (取消后 token+1, 旧结果回包会被 token 校验挡掉)
+ */
+function cancelSearch(): void {
+  if (!state.searching) { return; }
+  send({ type: 'sourceSearchCancel', token: state.searchToken });
+  state.searchToken += 1;
+  state.searching = false;
+  state.searchPaused = false;
+  state.searchProgress = null;
+  state.searchDone = false;
+  state.searchCancelled = true;
+  state.searchSkipped = 0;
+  state.searchDeadAdded = 0;
+}
+
+/** 搜索中/暂停时改写关键词 -> 取消本轮, 回到未搜索状态(结果保留) */
+watch(function () { return state.searchKeyword; }, function (v) {
+  if (state.searching && v.trim() !== state.searchKey) { cancelSearch(); }
+});
 
 /** 暂停/继续: 只影响"是否启动新源", 已在途的会完成 */
 function togglePause(): void {
@@ -46,6 +97,83 @@ function togglePause(): void {
   state.searchPaused = !state.searchPaused;
   send({ type: 'sourceSearchPause', token: state.searchToken, paused: state.searchPaused });
 }
+
+// ---------------------------------------------------------------- 分隔条拖动
+const dragging = ref(false);
+let splitDrag: { startY: number; startRows: number; handle: HTMLElement; pointerId?: number } | null = null;
+
+function rowPx(): number {
+  const pop = document.getElementById('sourcePopup');
+  const raw = pop ? getComputedStyle(pop).getPropertyValue('--src-result-h') : '';
+  const v = parseFloat(raw || '');
+  return isFinite(v) && v > 0 ? v : 44;
+}
+
+function beginSplit(e: PointerEvent): void {
+  if (e.button !== 0) { return; }
+  const handle = e.currentTarget as HTMLElement | null;
+  if (!handle) { return; }
+  e.preventDefault();
+  splitDrag = {
+    startY: e.clientY,
+    startRows: alloc.value.curAlloc,
+    handle,
+    pointerId: e.pointerId,
+  };
+  dragging.value = true;
+  if (typeof handle.setPointerCapture === 'function' && e.pointerId !== undefined) {
+    try { handle.setPointerCapture(e.pointerId); } catch { /* 忽略 */ }
+  }
+  document.body.style.userSelect = 'none';
+  document.body.style.cursor = 'row-resize';
+}
+
+function moveSplit(e: PointerEvent): void {
+  if (!splitDrag) { return; }
+  const delta = Math.round((e.clientY - splitDrag.startY) / rowPx());
+  state.splitCurrentRows = splitDrag.startRows + delta;
+}
+
+function endSplit(): void {
+  if (!splitDrag) { return; }
+  const handle = splitDrag.handle;
+  if (typeof handle.releasePointerCapture === 'function' && splitDrag.pointerId !== undefined) {
+    try { handle.releasePointerCapture(splitDrag.pointerId); } catch { /* 忽略 */ }
+  }
+  document.body.style.userSelect = '';
+  document.body.style.cursor = '';
+  dragging.value = false;
+  splitDrag = null;
+}
+
+/** 键盘: 上下各挪一行 */
+function onSplitKey(e: KeyboardEvent): void {
+  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') { return; }
+  e.preventDefault();
+  const delta = e.key === 'ArrowDown' ? 1 : -1;
+  const cap = 10;
+  const next = Math.max(1, Math.min(cap, alloc.value.curAlloc + delta));
+  state.splitCurrentRows = next;
+}
+
+onMounted(function () {
+  document.addEventListener('pointermove', moveSplit);
+  document.addEventListener('pointerup', endSplit);
+  document.addEventListener('pointercancel', endSplit);
+});
+
+onBeforeUnmount(function () {
+  document.removeEventListener('pointermove', moveSplit);
+  document.removeEventListener('pointerup', endSplit);
+  document.removeEventListener('pointercancel', endSplit);
+  // 卸载时把拖拽残留状态收干净(分隔条 v-if 消失时 pointerup 可能收不到)
+  if (splitDrag) {
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+    splitDrag = null;
+    dragging.value = false;
+  }
+});
 
 function goManage(): void {
   state.sourceView = 'manage';
@@ -67,6 +195,7 @@ function goDead(): void {
       <button v-if="state.searching" class="src-pause" data-src-pause @click="togglePause">
         {{ state.searchPaused ? '继续' : '暂停' }}
       </button>
+      <button v-if="state.searching" class="src-cancel" data-src-cancel @click="cancelSearch">取消</button>
     </div>
 
     <div v-if="noSource" class="popup-empty src-empty">
@@ -91,7 +220,10 @@ function goDead(): void {
           <span :class="state.searchProgress.ok ? 'src-ok' : 'src-bad'">{{ state.searchProgress.ok ? '✓' : '✗' }}</span>
           <span v-if="state.searchProgress.failed > 0" class="src-skip src-progress-fail">失败 {{ state.searchProgress.failed }}</span>
         </template>
-        <template v-else>正在准备搜索…</template>
+        <template v-else>
+          <span class="src-progress-prefix">正在准备搜索…</span>
+        </template>
+        <span class="src-found" data-src-found>已找到 {{ state.searchResults.length }} 本</span>
       </div>
       <div v-if="state.searching && state.searchProgress" class="src-bar" data-src-bar>
         <i :style="{ width: progressPercent + '%' }"></i>
@@ -110,16 +242,44 @@ function goDead(): void {
       </div>
 
       <div class="src-results" data-src-results>
-      <div v-for="(item, i) in state.searchResults" :key="item.bookUrl + i" class="src-result" :data-src-result="i">
-        <div class="src-result-main">
-          <div class="src-result-title">{{ item.title }}</div>
-          <div class="src-result-meta">{{ resultMeta(item) }}</div>
+        <div class="src-pane src-pane-current" data-src-pane="current"
+          :style="{ maxHeight: alloc.curRender * 44 + 'px' }">
+          <div v-for="(item, i) in state.searchResults" :key="item.bookUrl + i" class="src-result" :data-src-result="i">
+            <div class="src-result-main">
+              <div class="src-result-title">{{ item.title }}</div>
+              <div class="src-result-meta">{{ resultMeta(item) }}</div>
+            </div>
+            <div class="src-result-side">
+              <span class="src-badge">{{ sourceLabel(item) }}</span>
+              <button class="popup-btn src-add" disabled title="在线阅读将在下一版本接入">加入书架</button>
+            </div>
+          </div>
         </div>
-        <div class="src-result-side">
-          <span class="src-badge">{{ sourceLabel(item) }}</span>
-          <button class="popup-btn src-add" disabled title="在线阅读将在下一版本接入">加入书架</button>
-        </div>
-      </div>
+
+        <template v-if="hasHistory">
+          <div class="src-split" data-src-split :class="{ dragging }" role="separator"
+            aria-orientation="horizontal" tabindex="0" :aria-valuemin="1" :aria-valuemax="10"
+            :aria-valuenow="alloc.curAlloc" aria-label="历史搜索, 可拖动调整"
+            @pointerdown="beginSplit" @keydown="onSplitKey">
+            <span class="src-split-line"></span>
+            <span class="src-split-label" data-src-history-label>历史搜索 · {{ state.searchHistory?.key }}</span>
+            <span class="src-split-line"></span>
+          </div>
+
+          <div v-if="alloc.histRender > 0" class="src-pane src-pane-history" data-src-pane="history"
+            :style="{ maxHeight: alloc.histRender * 44 + 'px' }">
+            <div v-for="(item, i) in state.searchHistory?.items || []" :key="'h' + item.bookUrl + i"
+              class="src-result src-result-history" :data-src-history-result="i">
+              <div class="src-result-main">
+                <div class="src-result-title">{{ item.title }}</div>
+                <div class="src-result-meta">{{ resultMeta(item) }}</div>
+              </div>
+              <div class="src-result-side">
+                <span class="src-badge">{{ sourceLabel(item) }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
     </template>
   </div>
