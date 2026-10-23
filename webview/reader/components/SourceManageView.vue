@@ -50,6 +50,22 @@ function check(s?: BookSourceView): void {
   send(s ? { type: 'sourceCheck', id: s.id } : { type: 'sourceCheck', scope: 'active' });
 }
 
+/** 「检查全部」运行中变成暂停/继续 */
+const checkAllRunning = computed(function () { return state.checkRunning && state.checkScope === 'active'; });
+const checkAllLabel = computed(function () {
+  if (!checkAllRunning.value) { return '检查全部'; }
+  return state.checkPaused ? '继续' : '暂停';
+});
+
+function toggleCheckAll(): void {
+  if (checkAllRunning.value) {
+    state.checkPaused = !state.checkPaused;
+    send({ type: 'sourceCheckPause', paused: state.checkPaused });
+    return;
+  }
+  check();
+}
+
 function exportAll(): void {
   send({ type: 'sourceExport' });
 }
@@ -127,8 +143,14 @@ function loadMore(): void {
       <button class="popup-secondary" data-src-import="clipboard" @click="importBy('clipboard')">粘贴 JSON</button>
       <button class="popup-secondary" data-src-import="file" @click="importBy('file')">本地文件</button>
       <span class="spacer"></span>
-      <button class="popup-btn" data-src-check-all @click="check()">检查全部</button>
+      <button class="popup-btn" data-src-check-all @click="toggleCheckAll">{{ checkAllLabel }}</button>
       <button class="popup-btn" data-src-export @click="exportAll">导出</button>
+    </div>
+
+    <div v-if="checkAllRunning" class="src-hint src-progress" data-src-check-progress>
+      <span class="src-progress-prefix">{{ state.checkPaused ? '已暂停' : '检查中' }}</span>
+      <span class="src-progress-count">{{ state.checkDone }}/{{ state.checkTotal }}</span>
+      <span class="src-progress-name" :title="state.checkSource">{{ state.checkSource }}</span>
     </div>
 
     <div class="src-bulk">

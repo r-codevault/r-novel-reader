@@ -1293,6 +1293,43 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   sendMsg({ type: 'sources', items: baseItems.map(function (x) { return { ...x, enabled: x.id !== 's3' }; }) });
   await sleep(30);
 
+  // 5b) 检查全部: 运行中可暂停/继续
+  posted.length = 0;
+  const checkAllBtn = document.querySelector('#sourcePopup [data-src-check-all]');
+  checkAllBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceCheck' && m.scope === 'active'),
+    '点「检查全部」应发送 sourceCheck(scope=active)');
+
+  sendMsg({ type: 'sourceCheckProgress', scope: 'active', done: 1, total: 10, sourceName: 'A站', paused: false });
+  await sleep(20);
+  assert(checkAllBtn.textContent.includes('暂停'), '检查中按钮应变为「暂停」');
+  let checkHint = document.querySelector('#sourcePopup [data-src-check-progress]');
+  assert(checkHint && checkHint.textContent.includes('1/10') && checkHint.textContent.includes('A站'),
+    '应显示检查进度与当前源');
+
+  posted.length = 0;
+  checkAllBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceCheckPause' && m.paused === true),
+    '点暂停应发送 sourceCheckPause(true)');
+  assert(checkAllBtn.textContent.includes('继续'), '暂停后按钮应变「继续」');
+  assert(document.querySelector('#sourcePopup [data-src-check-progress]').textContent.includes('已暂停'),
+    '进度行应显示已暂停');
+
+  sendMsg({ type: 'sourceCheckProgress', scope: 'active', done: 1, total: 10, sourceName: 'A站', paused: true });
+  await sleep(20);
+  posted.length = 0;
+  checkAllBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceCheckPause' && m.paused === false),
+    '点继续应发送 sourceCheckPause(false)');
+
+  sendMsg({ type: 'sourceCheckDone' });
+  await sleep(20);
+  assert(checkAllBtn.textContent.includes('检查全部'), '检查结束后按钮应恢复');
+  assert(!document.querySelector('#sourcePopup [data-src-check-progress]'), '结束后进度行应消失');
+
   // 6) 编辑 / 两步删除 / 导入
   document.querySelector('#sourcePopup [data-src-edit="s1"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
@@ -1419,6 +1456,32 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '失效说明不应再写「连续 2 次」');
   assert(document.querySelector('#sourcePopup .src-risk').textContent.includes('任意一次失败'),
     '失效说明应改为「任意一次失败」');
+
+  // 7e) 全部重查: 运行中可暂停/继续
+  posted.length = 0;
+  const recheckAllBtn = document.querySelector('#sourcePopup [data-src-recheck-all]');
+  recheckAllBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceCheck' && m.scope === 'dead'),
+    '点「全部重查」应发送 sourceCheck(scope=dead)');
+
+  sendMsg({ type: 'sourceCheckProgress', scope: 'dead', done: 3, total: 8, sourceName: 'C站', paused: false });
+  await sleep(20);
+  assert(recheckAllBtn.textContent.includes('暂停'), '重查中按钮应变为「暂停」');
+  const recheckHint = document.querySelector('#sourcePopup [data-src-check-progress]');
+  assert(recheckHint && recheckHint.textContent.includes('3/8') && recheckHint.textContent.includes('C站'),
+    '失效 Tab 应显示重查进度');
+
+  posted.length = 0;
+  recheckAllBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceCheckPause' && m.paused === true),
+    '重查中暂停应发送 sourceCheckPause(true)');
+  assert(recheckAllBtn.textContent.includes('继续'), '暂停后按钮应变「继续」');
+
+  sendMsg({ type: 'sourceCheckDone' });
+  await sleep(20);
+  assert(recheckAllBtn.textContent.includes('全部重查'), '重查结束后按钮应恢复');
 
   posted.length = 0;
   document.querySelector('#sourcePopup [data-src-recheck="s3"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));

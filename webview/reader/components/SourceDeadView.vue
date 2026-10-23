@@ -26,6 +26,22 @@ function recheckAll(): void {
   send({ type: 'sourceCheck', scope: 'dead' });
 }
 
+/** 「全部重查」运行中变成暂停/继续 */
+const recheckAllRunning = computed(function () { return state.checkRunning && state.checkScope === 'dead'; });
+const recheckAllLabel = computed(function () {
+  if (!recheckAllRunning.value) { return '全部重查'; }
+  return state.checkPaused ? '继续' : '暂停';
+});
+
+function toggleRecheckAll(): void {
+  if (recheckAllRunning.value) {
+    state.checkPaused = !state.checkPaused;
+    send({ type: 'sourceCheckPause', paused: state.checkPaused });
+    return;
+  }
+  recheckAll();
+}
+
 function revive(s: BookSourceView): void {
   send({ type: 'sourceRevive', id: s.id });
 }
@@ -54,9 +70,15 @@ function loadMore(): void {
     <div class="src-tools">
       <span class="src-dead-title">共 {{ dead.length }} 个失效书源</span>
       <span class="spacer"></span>
-      <button class="popup-btn" data-src-recheck-all :disabled="!dead.length" @click="recheckAll">全部重查</button>
+      <button class="popup-btn" data-src-recheck-all :disabled="!dead.length" @click="toggleRecheckAll">{{ recheckAllLabel }}</button>
       <button class="popup-btn src-del" data-src-clear-dead :disabled="!dead.length" @click="clearAll">清除全部</button>
     </div>
+    <div v-if="recheckAllRunning" class="src-hint src-progress" data-src-check-progress>
+      <span class="src-progress-prefix">{{ state.checkPaused ? '已暂停' : '重查中' }}</span>
+      <span class="src-progress-count">{{ state.checkDone }}/{{ state.checkTotal }}</span>
+      <span class="src-progress-name" :title="state.checkSource">{{ state.checkSource }}</span>
+    </div>
+
     <p class="src-risk">任意一次失败(检查或搜索)即判定失效并退出搜索；成功一次自动恢复。</p>
 
     <div v-if="!dead.length" class="popup-empty src-empty">没有失效的书源。</div>

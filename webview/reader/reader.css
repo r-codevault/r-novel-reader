@@ -820,6 +820,7 @@
   .src-manage-body > .src-tools,
   .src-manage-body > .src-bulk,
   .src-manage-body > .src-filter,
+  .src-manage-body > .src-hint,
   .src-manage-body > .src-load-more,
   .src-manage-body > .src-risk,
   .src-manage-body > .popup-empty { flex: none; }

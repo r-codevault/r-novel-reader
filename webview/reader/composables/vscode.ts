@@ -199,6 +199,13 @@ export const state = reactive({
   searchProgress: null as null | { done: number; total: number; sourceName: string; ok: boolean; failed: number },
   /** 用户暂停中的搜索 */
   searchPaused: false,
+  // ---- 批量检查(检查全部 / 全部重查)
+  checkRunning: false,
+  checkPaused: false,
+  checkScope: '' as '' | 'active' | 'dead' | 'all' | 'single',
+  checkDone: 0,
+  checkTotal: 0,
+  checkSource: '',
   /** 书源管理: 正在编辑的 sourceId(空 = 无) */
   sourceEditingId: '',
 });

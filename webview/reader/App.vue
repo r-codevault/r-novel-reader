@@ -194,6 +194,21 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.notes = state.notes.filter(function (n) { return n.id !== id; });
       break;
     }
+    case 'sourceCheckProgress': {
+      const m = msg as { scope?: typeof state.checkScope; done?: number; total?: number; sourceName?: string; paused?: boolean };
+      state.checkRunning = true;
+      state.checkScope = m.scope || 'active';
+      state.checkDone = m.done || 0;
+      state.checkTotal = m.total || 0;
+      state.checkSource = m.sourceName || '';
+      state.checkPaused = !!m.paused;
+      break;
+    }
+    case 'sourceCheckDone':
+      state.checkRunning = false;
+      state.checkPaused = false;
+      state.checkScope = '';
+      break;
     case 'searchBatch': {
       const m = msg as { token?: number; items?: typeof state.searchResults; errors?: typeof state.searchErrors };
       if (m.token !== undefined && m.token !== state.searchToken) { break; }

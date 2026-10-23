@@ -23,7 +23,7 @@ import { ReadingSettings, SettingsStore } from './settings';
 import { decodeBuffer } from './encoding';
 import { SlackerController } from './slacker';
 import { BookSource, BookSourceStore, LEGACY_BOOK_SOURCES_KEY, parseSourceText, toSourceView } from './bookSource';
-import { SearchService } from './online/searchService';
+import { SearchControl, SearchService } from './online/searchService';
 import { buildSearchRequest } from './online/searchUrl';
 import { parseSearchPage } from './online/ruleApply';
 import { fetchForSource, sandboxHttpFor, SourceHttpPool } from './online/sourceHttp';
@@ -376,6 +376,8 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     type CheckScope = 'active' | 'dead' | 'all';
+    /** 正在跑的批量检查(暂停/取消) */
+    let activeCheck: SearchControl | undefined;
     /** 书源可用性检查: 用测试关键词搜一次, 看是否出结果(结果批量落盘) */
     async function checkBookSources(arg?: string | { id?: string; scope?: CheckScope }): Promise<void> {
         const id = typeof arg === 'string' ? arg : arg?.id;
@@ -387,20 +389,41 @@ export function activate(context: vscode.ExtensionContext): void {
         } else if (scope === 'dead') {
             targets = bookSources.deadList();
         } else if (scope === 'all') {
-            targets = bookSources.list().slice(0, 200);
+            targets = bookSources.list();
         } else {
-            targets = bookSources.searchable().slice(0, 20);
+            // 检查全部 = 所有已启用且未失效的源, 不再截断
+            targets = bookSources.searchable();
         }
         if (!targets.length) {
             void vscode.window.showInformationMessage('没有可检查的书源');
             return;
         }
 
+        // 新一轮检查开始: 取消上一轮(暂停中的也释放)
+        activeCheck?.cancel();
+        const control = new SearchControl();
+        activeCheck = control;
+
         const results: { id: string; ok: boolean; message: string }[] = [];
+        const postProgress = (done: number, sourceName: string): void => {
+            ReaderPanel.current?.postSourceCheckProgress({
+                scope: id ? 'single' : scope,
+                done,
+                total: targets.length,
+                sourceName,
+                paused: control.paused,
+            });
+        };
+        postProgress(0, targets[0].bookSourceName);
+
         await vscode.window.withProgress(
             { location: vscode.ProgressLocation.Notification, title: '检查书源可用性', cancellable: false },
             async (progress) => {
                 for (let i = 0; i < targets.length; i++) {
+                    if (control.cancelled) { break; }
+                    // 暂停: 不再发起下一个, 在途的会完成
+                    if (control.paused) { await control.waitIfPaused(); }
+                    if (control.cancelled) { break; }
                     const source = targets[i];
                     progress.report({ message: source.bookSourceName, increment: 100 / targets.length });
                     try {
@@ -416,11 +439,16 @@ export function activate(context: vscode.ExtensionContext): void {
                     } catch (err) {
                         results.push({ id: source.id, ok: false, message: err instanceof Error ? err.message : String(err) });
                     }
+                    if (control.cancelled) { break; }
+                    postProgress(results.length, source.bookSourceName);
                 }
             }
         );
-        // 一次写盘: 连续 2 次失败会自动判失效, 成功则清零/自动恢复
-        await bookSources.recordResults(results);
+
+        activeCheck = undefined;
+        ReaderPanel.current?.postSourceCheckDone();
+        // 一次写盘: 失败一次即判失效, 成功则清零/自动恢复
+        if (results.length) { await bookSources.recordResults(results); }
         ReaderPanel.current?.postSources();
     }
 
@@ -445,6 +473,10 @@ export function activate(context: vscode.ExtensionContext): void {
         clearDead: () => bookSources.clearDead(),
         deadCount: () => bookSources.deadList().length,
         setEnabledMany: (patches) => bookSources.setEnabledMany(patches),
+        pauseCheck: (paused: boolean) => {
+            if (!activeCheck) { return; }
+            if (paused) { activeCheck.pause(); } else { activeCheck.resume(); }
+        },
         search: (key, sourceIds, hooks) => searchService.search(key, { sourceIds, ...(hooks || {}) }).then((out) => {
             // 失效/恢复有变化时立刻刷新列表(避免用户还要手动刷新)
             if (out.recorded > 0) { ReaderPanel.current?.postSources(); }
@@ -456,6 +488,12 @@ export function activate(context: vscode.ExtensionContext): void {
             };
         }),
         importInteractive: importSourcesInteractive,
+    };
+
+    // 面板关闭时停掉批量检查, 避免后台挂着
+    ReaderPanel.cancelSourceCheck = () => {
+        activeCheck?.cancel();
+        activeCheck = undefined;
     };
 
     /** 打开书源面板: 没有书时提示先打开一本(面板依赖阅读页) */

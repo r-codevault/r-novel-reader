@@ -89,6 +89,7 @@ type WebviewMessage =
     | { type: 'sourceUpdate'; id: string; name?: string; searchUrl?: string }
     | { type: 'sourceExport' }
     | { type: 'sourceCheck'; id?: string; scope?: 'active' | 'dead' | 'all' }
+    | { type: 'sourceCheckPause'; paused: boolean }
     | { type: 'sourceRevive'; id: string }
     | { type: 'sourceClearDead' }
     | { type: 'sourceSetEnabled'; patches: { id: string; enabled: boolean }[] };
@@ -133,6 +134,8 @@ export interface BookSourceApi {
     deadCount(): number;
     /** 批量启停(全选/反选/全部停用) */
     setEnabledMany(patches: { id: string; enabled: boolean }[]): Promise<number>;
+    /** 暂停/继续批量检查 */
+    pauseCheck?(paused: boolean): void;
     /** 搜索; token 原样回传, 供 webview 丢弃过期结果 */
     search(key: string, sourceIds: string[] | undefined, hooks?: {
         control?: SearchControl;
@@ -182,6 +185,8 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
     public static notes?: NotesApi;
     /** 书源存储与搜索(插件入口注入) */
     public static bookSources?: BookSourceApi;
+    /** 面板关闭时取消正在跑的批量检查 */
+    public static cancelSourceCheck?: () => void;
     /** 视图就绪前的抽屉打开请求 */
     private static _pendingDrawer: DrawerTab | null = null;
 
@@ -475,9 +480,10 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
 
     dispose(): void {
         ReaderPanel.current = undefined;
-        // 面板关闭: 停掉还在跑(或暂停中)的搜索, 避免后台挂着
+        // 面板关闭: 停掉还在跑(或暂停中)的搜索与批量检查, 避免后台挂着
         this._activeSearch?.control.cancel();
         this._activeSearch = undefined;
+        ReaderPanel.cancelSourceCheck?.();
         this._panel.dispose();
         for (const d of this._disposables) {
             d.dispose();
@@ -727,6 +733,9 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             case 'sourceExport':
                 void vscode.commands.executeCommand('novelReader.exportSources');
                 break;
+            case 'sourceCheckPause':
+                ReaderPanel.bookSources?.pauseCheck?.(msg.paused);
+                break;
             case 'sourceCheck':
                 // 兼容旧调用: 只传 id 时按单源检查
                 void vscode.commands.executeCommand('novelReader.checkSources',
@@ -761,6 +770,24 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
         const removed = await api.clearDead();
         this.postSources();
         void vscode.window.showInformationMessage('已清除 ' + removed + ' 个失效书源');
+    }
+
+    /** 批量检查进度(书源 Tab / 失效 Tab 的暂停按钮与进度行) */
+    public postSourceCheckProgress(p: {
+        scope: 'active' | 'dead' | 'all' | 'single';
+        done: number;
+        total: number;
+        sourceName: string;
+        paused: boolean;
+    }): void {
+        if (!this._ready) { return; }
+        void this._panel.webview.postMessage({ type: 'sourceCheckProgress', ...p });
+    }
+
+    /** 批量检查结束 */
+    public postSourceCheckDone(): void {
+        if (!this._ready) { return; }
+        void this._panel.webview.postMessage({ type: 'sourceCheckDone' });
     }
 
     /** 推送书源列表(精简视图) */
