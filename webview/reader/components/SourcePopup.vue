@@ -45,6 +45,9 @@ watch(function () { return state.sourceOpen; }, function (open) {
         失效<span v-if="deadCount" class="src-tab-num" data-src-dead-count>{{ deadCount }}</span>
       </button>
     </div>
+    <div v-if="state.previewPending" class="src-pending" data-src-preview-pending>
+      正在解析「{{ state.previewPending.title }}」· {{ state.previewPending.sourceName }}…
+    </div>
     <SourceSearchView v-if="state.sourceView === 'search'" />
     <SourceManageView v-else-if="state.sourceView === 'manage'" />
     <SourceDeadView v-else />

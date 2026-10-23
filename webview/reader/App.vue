@@ -96,6 +96,41 @@ function openTab(tab: DrawerTab | undefined): void {
 }
 
 // ---------------------------------------------------------------- 扩展消息
+let previewTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearPreviewPending(): void {
+  if (previewTimer) { clearTimeout(previewTimer); previewTimer = null; }
+  state.previewPending = null;
+}
+
+function startPreviewTimer(): void {
+  if (previewTimer) { clearTimeout(previewTimer); previewTimer = null; }
+  const pending = state.previewPending;
+  if (!pending) { return; }
+  previewTimer = setTimeout(function () {
+    const current = state.previewPending;
+    if (!current || current.at !== pending.at) { return; }
+    const dismissed = current.dismissed;
+    clearPreviewPending();
+    state.previewBookUrl = '';
+    state.onlineError = '预览解析超时(>45s)，请重试';
+    state.sourceView = 'search';
+    if (!dismissed) { state.sourceOpen = true; }
+  }, 45000);
+}
+
+watch(function () { return state.previewPending; }, function (pending) {
+  if (pending) { startPreviewTimer(); } else if (previewTimer) {
+    clearTimeout(previewTimer);
+    previewTimer = null;
+  }
+});
+
+// 用户解析中手动关闭弹窗: 失败时不再强行重开
+watch(function () { return state.sourceOpen; }, function (open, old) {
+  if (old && !open && state.previewPending) { state.previewPending.dismissed = true; }
+});
+
 function handleExtensionMessage(msg: { type?: string; payload?: Record<string, unknown> }): void {
   if (!msg || !msg.type) { return; }
   switch (msg.type) {
@@ -113,6 +148,17 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       };
       document.title = (p.bookTitle as string) + ' - 小说阅读';
       state.previewBookUrl = (p.online && (p.online as { bookUrl?: string }).bookUrl) || '';
+      if (state.previewPending) {
+        const initUrl = (p.online as { bookUrl?: string } | undefined)?.bookUrl;
+        if (initUrl && initUrl === state.previewPending.bookUrl) {
+          // init 先于 previewReady 到达: 同样视为成功
+          clearPreviewPending();
+          state.sourceOpen = false;
+        } else {
+          // 已经切到别的书(本地书/其他在线书), 放弃这次预览状态
+          clearPreviewPending();
+        }
+      }
       state.chapters = (p.chapters as { index: number; title: string }[]) || [];
       state.catReverse = false;
       state.catCollapsed = [];
@@ -183,6 +229,19 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.chapterError = { index: p.index, message: p.message || '加载失败' };
       break;
     }
+    case 'previewReady': {
+      const m = msg as { bookUrl?: string };
+      if (state.previewPending && m.bookUrl && m.bookUrl === state.previewPending.bookUrl) {
+        clearPreviewPending();
+        state.onlineError = '';
+        state.sourceOpen = false;
+      } else if (!state.previewPending && m.bookUrl) {
+        // 超时清理后迟到的成功回包: 书已打开, 同样收起弹窗
+        state.previewBookUrl = m.bookUrl;
+        state.sourceOpen = false;
+      }
+      break;
+    }
     case 'previewSaved':
       if (state.novel && state.novel.online) {
         state.novel = { ...state.novel, online: { ...state.novel.online, preview: false } };
@@ -203,10 +262,16 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       break;
     }
     case 'previewError': {
-      const m = msg as { message?: string };
+      const m = msg as { message?: string; bookUrl?: string };
+      if (m.bookUrl && state.previewPending && m.bookUrl !== state.previewPending.bookUrl) { break; }
+      const dismissed = !!(state.previewPending && state.previewPending.dismissed);
+      clearPreviewPending();
       state.onlineError = m.message || '预览失败';
       state.previewBookUrl = '';
-      state.sourceOpen = true;
+      if (!dismissed) {
+        state.sourceView = 'search';
+        state.sourceOpen = true;
+      }
       break;
     }
     case 'shelf':

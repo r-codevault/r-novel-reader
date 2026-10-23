@@ -157,7 +157,7 @@ export interface BookSourceApi {
     /** 把搜索结果加入在线书架 */
     addOnlineBook?(item: SearchBookItem): Promise<{ ok: boolean; message?: string }>;
     /** 临时预览搜索结果(不加入书架) */
-    previewOnlineBook?(item: SearchBookItem): Promise<void>;
+    previewOnlineBook?(item: SearchBookItem): Promise<{ ok: boolean; message?: string }>;
     /** 把当前预览的书加入书架 */
     savePreview?(): Promise<{ ok: boolean; message?: string }>;
     /** 搜索; token 原样回传, 供 webview 丢弃过期结果 */
@@ -227,6 +227,10 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
     /** 本会话内的章节位置记忆(章节序号 -> 0~1), 切走再切回时恢复原位置 */
     private readonly _ratios = new Map<number, number>();
     private _ready = false;
+    /** webview 未就绪时暂存的预览成功/失败回包 */
+    private _pendingPreviewReady: string | null = null;
+    private _pendingPreviewError: { message: string; bookUrl?: string } | null = null;
+    private _lastPreviewReady = '';
     /** 正在加载的在线章节序号 */
     private readonly _loadingChapters = new Set<number>();
     /** 当前运行中的搜索(暂停/取消用) */
@@ -524,10 +528,24 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
         return this._novel ? this._novel.chapters.length : 0;
     }
 
-    /** 预览失败: 通知 webview 重开搜索面板并显示原因 */
-    public postPreviewError(message: string): void {
-        if (!this._ready) { return; }
-        void this._panel.webview.postMessage({ type: 'previewError', message });
+    /** 预览失败: 通知 webview 关闭加载态并显示原因(可带 bookUrl 过滤过期回包) */
+    public postPreviewError(message: string, bookUrl?: string): void {
+        if (!this._ready) {
+            this._pendingPreviewError = { message, bookUrl };
+            return;
+        }
+        void this._panel.webview.postMessage({ type: 'previewError', message, bookUrl });
+    }
+
+    /** 预览成功: webview 收到后才关闭搜索弹窗 */
+    public postPreviewReady(bookUrl: string): void {
+        if (!this._ready) {
+            this._pendingPreviewReady = bookUrl;
+            return;
+        }
+        if (!bookUrl || this._lastPreviewReady === bookUrl) { return; }
+        this._lastPreviewReady = bookUrl;
+        void this._panel.webview.postMessage({ type: 'previewReady', bookUrl });
     }
 
     dispose(): void {
@@ -559,6 +577,16 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                     const tab = ReaderPanel._pendingDrawer;
                     ReaderPanel._pendingDrawer = null;
                     void this._panel.webview.postMessage({ type: 'openDrawer', tab });
+                }
+                if (this._pendingPreviewReady) {
+                    const url = this._pendingPreviewReady;
+                    this._pendingPreviewReady = null;
+                    this.postPreviewReady(url);
+                }
+                if (this._pendingPreviewError) {
+                    const err = this._pendingPreviewError;
+                    this._pendingPreviewError = null;
+                    this.postPreviewError(err.message, err.bookUrl);
                 }
                 break;
             case 'getChapter': {
@@ -654,12 +682,17 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             case 'previewOnlineBook': {
                 const api = ReaderPanel.bookSources;
                 if (!api?.previewOnlineBook) {
-                    this.postPreviewError('书源功能不可用');
+                    this.postPreviewError('书源功能不可用', msg.item.bookUrl);
                     break;
                 }
-                void api.previewOnlineBook(msg.item).then(undefined, (err: unknown) => {
+                void api.previewOnlineBook(msg.item).then((res) => {
+                    const panel = ReaderPanel.current || this;
+                    if (res && res.ok) { panel.postPreviewReady(msg.item.bookUrl); }
+                    else { panel.postPreviewError((res && res.message) || '预览失败', msg.item.bookUrl); }
+                }, (err: unknown) => {
                     const message = err instanceof Error ? err.message : String(err);
-                    this.postPreviewError(message);
+                    const panel = ReaderPanel.current || this;
+                    panel.postPreviewError(message, msg.item.bookUrl);
                 });
                 break;
             }

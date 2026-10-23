@@ -71,17 +71,44 @@ async function resolveRuleUrl(
     return resolveUrl(ctx.baseUrl || source.bookSourceUrl, clean);
 }
 
-/** 从一页目录里取章节(HTML 或 JSON) */
+/** 展示用 URL: 去掉 query/hash/userinfo, 截断 */
+function safeUrl(raw: string): string {
+    const text = String(raw || '').trim();
+    if (!text) { return '(空地址)'; }
+    try {
+        const u = new URL(text);
+        const clean = u.origin + u.pathname;
+        return clean.length > 60 ? clean.slice(0, 57) + '…' : clean;
+    } catch {
+        const clean = text.split('?')[0].split('#')[0];
+        return clean.length > 60 ? clean.slice(0, 57) + '…' : clean;
+    }
+}
+
+/** 规则片段: 折叠空白并截断 */
+function clipRule(raw: string): string {
+    const text = String(raw || '').replace(/\s+/g, ' ').trim();
+    if (!text) { return '(未配置)'; }
+    return text.length > 60 ? text.slice(0, 57) + '…' : text;
+}
+
+function clipMessage(text: string, max = 220): string {
+    return text.length > max ? text.slice(0, max - 1) + '…' : text;
+}
+
+/** 从一页目录里取章节(HTML 或 JSON); matched = 列表规则命中的节点/条目数 */
 async function parseTocPage(
     source: BookSource,
     pageUrl: string,
     html: string,
     opts: OnlineFetchOptions
-): Promise<OnlineChapter[]> {
+): Promise<{ chapters: OnlineChapter[]; matched: number }> {
     const toc = source.ruleToc || {};
     const listRule = (toc.chapterList || '').trim();
     if (!listRule) {
-        throw new UnsupportedRuleError('书源未配置 ruleToc.chapterList, 无法解析目录');
+        throw new UnsupportedRuleError(clipMessage(
+            '书源「' + source.bookSourceName + '」未配置 ruleToc.chapterList（目录页 ' + safeUrl(pageUrl) + '）'
+        ));
     }
     const nameRule = (toc.chapterName || '@text').trim();
     const urlRule = (toc.chapterUrl || 'a@href').trim();
@@ -106,6 +133,8 @@ async function parseTocPage(
         sourceName: source.bookSourceName,
     });
 
+    const matched = parsed.kind === 'json' ? parsed.items.length : parsed.nodes.length;
+
     if (parsed.kind === 'json') {
         for (const item of parsed.items) {
             if (!item || typeof item !== 'object') { continue; }
@@ -127,7 +156,7 @@ async function parseTocPage(
             }, '');
         }
     }
-    return chapters;
+    return { chapters, matched };
 }
 
 /** 抓目录(支持 nextTocUrl 翻页; 自动去重) */
@@ -169,9 +198,11 @@ export async function fetchToc(
         throw new UnsupportedRuleError('目录地址无效: ' + pageUrl.slice(0, 80));
     }
 
+    const listRuleForError = (): string => (source.ruleToc?.chapterList || '').trim();
     const chapters: OnlineChapter[] = [];
     const seenUrls = new Set<string>();
     const seenPages = new Set<string>();
+    let matchedTotal = 0;
     let tocUrl = pageUrl;
     const maxPages = Math.max(1, opts.maxTocPages || 20);
 
@@ -184,8 +215,9 @@ export async function fetchToc(
             signal: opts.signal,
             timeoutMs: opts.timeoutMs || 15000,
         });
-        const pageChapters = await parseTocPage(source, res.url, res.text, opts);
-        for (const ch of pageChapters) {
+        const pageResult = await parseTocPage(source, res.url, res.text, opts);
+        matchedTotal += pageResult.matched;
+        for (const ch of pageResult.chapters) {
             if (seenUrls.has(ch.url)) { continue; }
             seenUrls.add(ch.url);
             chapters.push({ index: chapters.length, title: ch.title, url: ch.url });
@@ -210,7 +242,13 @@ export async function fetchToc(
     }
 
     if (!chapters.length) {
-        throw new UnsupportedRuleError('目录解析结果为空(检查 ruleToc 规则或页面结构)');
+        const ctx = '源「' + source.bookSourceName + '」 目录页 ' + safeUrl(pageUrl)
+            + ' · chapterList="' + clipRule(listRuleForError()) + '"';
+        const pages = seenPages.size > 1 ? ' · 已翻 ' + seenPages.size + ' 页' : '';
+        const tail = matchedTotal === 0
+            ? '未匹配到节点(页面结构变更/需登录/反爬)'
+            : '匹配 ' + matchedTotal + ' 个节点但 chapterName/chapterUrl 为空(检查 @text/@href)';
+        throw new UnsupportedRuleError(clipMessage('目录解析结果为空: ' + ctx + pages + ' ' + tail));
     }
     return { chapters, tocUrl, fetchedAt: Date.now() };
 }

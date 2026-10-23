@@ -108,6 +108,41 @@ const source = {
     assert.strictEqual(c.chapters.length, 2, '[0:2] 应取前 2 条');
   }
 
+  // 4c) 空目录错误: 带源名/目录页/规则/命中数, 且 URL 脱敏
+  {
+    globalThis.fetch = async (url) => {
+      const u = String(url);
+      if (u.indexOf('/book/1024/') >= 0) { return makeResponse(200, fx.TOC_HTML); }
+      return makeResponse(404, 'not found');
+    };
+    const base = { ...source };
+    const noMatch = { ...base, ruleToc: { ...base.ruleToc, chapterList: '.nope' } };
+    await assert.rejects(
+      fetchToc(noMatch, BASE + '/book/1024/', { pool: new SourceHttpPool() }),
+      (err) => /目录解析结果为空/.test(err.message)
+        && /测试站/.test(err.message)
+        && /\/book\/1024\//.test(err.message)
+        && /\.nope/.test(err.message)
+        && /未匹配到节点/.test(err.message)
+    );
+
+    const noRule = { ...base, ruleToc: { chapterName: 'text' } };
+    await assert.rejects(
+      fetchToc(noRule, BASE + '/book/1024/', { pool: new SourceHttpPool() }),
+      (err) => /未配置 ruleToc\.chapterList/.test(err.message)
+    );
+
+    const badUrlRule = {
+      ...base,
+      ruleBookInfo: { tocUrl: '{{baseUrl}}/book/1024/?token=secret#x' },
+      ruleToc: { ...base.ruleToc, chapterUrl: '@data-x' },
+    };
+    await assert.rejects(
+      fetchToc(badUrlRule, BASE + '/book/1024/', { pool: new SourceHttpPool() }),
+      (err) => /匹配 3 个节点但/.test(err.message) && !/secret/.test(err.message)
+    );
+  }
+
   // 5) 缓存读写/清理
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'r-online-cache-'));
   const cache = new OnlineCache(tmp);

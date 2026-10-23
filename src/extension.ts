@@ -37,6 +37,8 @@ interface LoadOptions {
     openPanel?: boolean;
     openSettings?: boolean;
     silent?: boolean;
+    /** 失败时把真实原因回传给调用方(预览用) */
+    onError?: (err: unknown) => void;
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -356,6 +358,7 @@ export function activate(context: vscode.ExtensionContext): void {
             }
             return novel;
         } catch (err) {
+            opts.onError?.(err);
             if (!opts.silent) {
                 void vscode.window.showErrorMessage(
                     `打开在线书失败: ${err instanceof Error ? err.message : String(err)}`
@@ -425,19 +428,29 @@ export function activate(context: vscode.ExtensionContext): void {
         sourceId: string; sourceName: string; title: string; author?: string;
         bookUrl: string; coverUrl?: string; intro?: string; kind?: string;
         lastChapter?: string; wordCount?: number;
-    }): Promise<void> {
+    }): Promise<{ ok: boolean; message?: string }> {
+        const seq = ++previewSeq;
         const source = bookSources.get(item.sourceId);
         if (!source) {
-            ReaderPanel.current?.postPreviewError('书源不存在或已被删除');
-            void vscode.window.showErrorMessage('预览失败: 书源不存在或已被删除');
-            return;
+            const message = '书源不存在或已被删除';
+            void vscode.window.showErrorMessage('预览失败: ' + message);
+            return { ok: false, message };
         }
         const key = onlineKey(item.sourceId, item.bookUrl);
         // 已在书架: 直接按正常书打开(预览按钮不会出现)
         if (shelf.get(key)) {
-            const opened = await loadOnlineNovel(key, { openPanel: true });
-            if (!opened) { ReaderPanel.current?.postPreviewError('打开这本书失败'); }
-            return;
+            let detail = '';
+            const opened = await loadOnlineNovel(key, {
+                openPanel: true,
+                silent: true,
+                onError: (err) => { detail = err instanceof Error ? err.message : String(err); },
+            });
+            if (!opened) {
+                const message = detail || '打开这本书失败';
+                void vscode.window.showErrorMessage('预览失败: ' + message);
+                return { ok: false, message };
+            }
+            return { ok: true };
         }
         try {
             await vscode.window.withProgress(
@@ -483,14 +496,20 @@ export function activate(context: vscode.ExtensionContext): void {
                         }
                     } catch { /* 预览页内重试 */ }
 
+                    // 旧轮请求: 不打开, 避免覆盖用户后来的选择
+                    if (seq !== previewSeq) { return; }
                     currentNovel = novel;
                     ReaderPanel.createOrShow(novel, 0, 0, store, vscode.ViewColumn.One);
                 }
             );
+            if (seq !== previewSeq) {
+                return { ok: false, message: '预览请求已被新的操作取代' };
+            }
+            return { ok: true };
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            ReaderPanel.current?.postPreviewError(message);
             void vscode.window.showErrorMessage(`预览失败: ${message}`);
+            return { ok: false, message };
         }
     }
 
@@ -628,6 +647,8 @@ export function activate(context: vscode.ExtensionContext): void {
     const sourcePool = new SourceHttpPool();
     const searchService = new SearchService(bookSources, sourcePool);
     const onlineCache = new OnlineCache(path.join(context.globalStorageUri.fsPath, 'online-cache'));
+    /** 预览轮次: 旧请求跑完也不能覆盖新请求 */
+    let previewSeq = 0;
     /** 目录缓存有效期: 6 小时; 过期后重新抓, 失败则回退旧缓存 */
     const TOC_TTL = 6 * 60 * 60 * 1000;
     // 书源改存文件(合集可达数千条); 首次启动把旧版 globalState 数据迁移过来

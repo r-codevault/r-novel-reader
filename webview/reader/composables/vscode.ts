@@ -231,6 +231,14 @@ export const state = reactive({
   onlineError: '',
   /** 当前打开/预览中的在线书地址(搜索结果高亮用) */
   previewBookUrl: '',
+  /** 预览解析中(全局: 切 Tab/关闭弹窗都保留) */
+  previewPending: null as null | {
+    bookUrl: string;
+    title: string;
+    sourceName: string;
+    at: number;
+    dismissed: boolean;
+  },
   /** 在线章节加载中 */
   chapterLoading: null as null | { index: number; title: string },
   /** 在线章节加载失败 */

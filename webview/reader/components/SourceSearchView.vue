@@ -53,6 +53,7 @@ function isAdded(item: { bookUrl: string }): boolean {
 
 /** 当前行徽标: 已打开的正式书显示「在读」, 其余(含加载中)显示「预览中」 */
 function currentLabel(item: { bookUrl: string }): string {
+  if (isPreviewing(item)) { return '解析中…'; }
   const online = state.novel && state.novel.online;
   return online && online.bookUrl === item.bookUrl && !online.preview ? '在读' : '预览中';
 }
@@ -62,13 +63,26 @@ function isPending(item: { bookUrl: string }): boolean {
 }
 
 /** 点击结果行: 临时预览阅读(不加入书架) */
-function previewBook(item: { bookUrl: string } & Record<string, unknown>): void {
+function previewBook(item: { bookUrl: string; title: string } & Record<string, unknown>): void {
+  // 解析中禁止再点其他结果, 避免多个预览互相覆盖
+  if (state.previewPending) { return; }
   // 切书前先把上一本的章节/章内位置发给扩展(此时面板仍指向旧书)
   flushProgress();
   state.onlineError = '';
   state.previewBookUrl = item.bookUrl;
+  state.previewPending = {
+    bookUrl: item.bookUrl,
+    title: item.title,
+    sourceName: sourceLabel(item as never),
+    at: Date.now(),
+    dismissed: false,
+  };
+  // 弹窗保持打开, 等扩展回 previewReady 后再关
   send({ type: 'previewOnlineBook', item: plainSearchBook(item as never) });
-  state.sourceOpen = false;
+}
+
+function isPreviewing(item: { bookUrl: string }): boolean {
+  return !!state.previewPending && state.previewPending.bookUrl === item.bookUrl;
 }
 
 function addOnline(item: { bookUrl: string } & Record<string, unknown>): void {
@@ -307,8 +321,9 @@ function goDead(): void {
         <div class="src-pane src-pane-current" data-src-pane="current"
           :style="{ maxHeight: alloc.curRender * 44 + 'px' }">
           <div v-for="(item, i) in state.searchResults" :key="item.bookUrl + i" class="src-result"
-            :class="{ cur: state.previewBookUrl === item.bookUrl }"
+            :class="{ cur: state.previewBookUrl === item.bookUrl, pending: isPreviewing(item) }"
             :data-src-result="i" :data-src-current="state.previewBookUrl === item.bookUrl ? '1' : undefined"
+            :data-src-preview-busy="isPreviewing(item) ? '1' : undefined"
             :title="'点击预览: ' + item.title" @click="previewBook(item)">
             <div class="src-result-main">
               <div class="src-result-title">{{ item.title }}</div>
@@ -320,7 +335,7 @@ function goDead(): void {
               </span>
               <span class="src-badge">{{ sourceLabel(item) }}</span>
               <button class="popup-btn src-add" :class="{ added: isAdded(item) }"
-                :disabled="isAdded(item) || isPending(item)"
+                :disabled="isAdded(item) || isPending(item) || !!state.previewPending"
                 :title="isAdded(item) ? '已在书架' : '加入在线书架'" @click.stop="addOnline(item)">
                 {{ isAdded(item) ? '已加入' : (isPending(item) ? '加入中…' : '加入书架') }}
               </button>

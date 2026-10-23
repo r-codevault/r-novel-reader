@@ -1908,7 +1908,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(20);
   assert(!posted.some((m) => m.type === 'sourceSearch'), '输入法组合中的回车不应发起搜索');
 
-  // 19) 点击结果行 -> 临时预览(不加入书架)
+  // 19) 点击结果行 -> 临时预览: 弹窗保持到 previewReady
   posted.length = 0;
   document.querySelector('#sourcePopup [data-src-result="0"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
@@ -1921,16 +1921,52 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const previewRow = document.querySelector('#sourcePopup [data-src-result="0"]');
   assert(previewRow.classList.contains('cur') && previewRow.getAttribute('data-src-current') === '1',
     '被预览的结果行应高亮');
-  assert(previewRow.querySelector('.src-cur-badge').textContent.includes('预览中'),
-    '高亮行应显示「预览中」');
-  assert(!$('#sourcePopup').classList.contains('open'), '预览后应关闭书源弹窗');
-  sendMsg({ type: 'previewError', message: '目录解析结果为空' });
+  assert(previewRow.getAttribute('data-src-preview-busy') === '1', '解析中的行应标记 busy');
+  assert(previewRow.querySelector('.src-cur-badge').textContent.includes('解析中'), '解析中徽标应显示「解析中…」');
+  assert($('#sourcePopup').classList.contains('open'), '解析中弹窗应保持打开');
+  assert(document.querySelector('#sourcePopup [data-src-preview-pending]'), '应显示全局解析中提示');
+
+  // 解析中再点第二行: 不应再发请求
+  posted.length = 0;
+  document.querySelector('#sourcePopup [data-src-result="1"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.filter((m) => m.type === 'previewOnlineBook').length === 0, '解析中再点其他结果不应发第二个请求');
+
+  // bookUrl 不匹配的成功回包不关闭
+  sendMsg({ type: 'previewReady', bookUrl: 'https://other/book' });
+  await sleep(20);
+  assert($('#sourcePopup').classList.contains('open'), '不匹配的 previewReady 不应关闭弹窗');
+  assert(document.querySelector('#sourcePopup [data-src-preview-pending]'), '不匹配时 pending 应保留');
+
+  // 匹配的成功回包 -> 关闭弹窗, 清除解析中
+  sendMsg({ type: 'previewReady', bookUrl: previewMsg.item.bookUrl });
   await sleep(30);
-  assert($('#sourcePopup').classList.contains('open'), '预览失败应重开搜索弹窗');
+  assert(!$('#sourcePopup').classList.contains('open'), '预览成功后应关闭书源弹窗');
+  assert(!document.querySelector('#sourcePopup [data-src-preview-pending]'), '成功后解析中提示应消失');
+
+  // 失败: 弹窗保持, 清除 pending/高亮, 显示原因
+  menuItem('source').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  document.querySelector('#sourcePopup [data-src-result="0"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  sendMsg({ type: 'previewError', message: '目录解析结果为空: 源「A站」 目录页 https://a.com/book/1', bookUrl: previewMsg.item.bookUrl });
+  await sleep(30);
+  assert($('#sourcePopup').classList.contains('open'), '预览失败后弹窗应保持打开');
+  assert(!document.querySelector('#sourcePopup [data-src-preview-pending]'), '失败后应清除解析中提示');
   assert(!document.querySelector('#sourcePopup [data-src-result="0"]').classList.contains('cur'),
     '预览失败后应清除高亮');
-  assert(document.querySelector('#sourcePopup [data-src-op-error]').textContent.includes('目录解析结果为空'),
-    '预览失败应显示原因');
+  assert(document.querySelector('#sourcePopup [data-src-op-error]').textContent.includes('源「A站」'),
+    '失败提示应带源名/目录页');
+
+  // 解析中手动关闭: 失败不应强行重开
+  document.querySelector('#sourcePopup [data-src-result="0"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  document.querySelector('#sourcePopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(!$('#sourcePopup').classList.contains('open'), '手动关闭后应保持关闭');
+  sendMsg({ type: 'previewError', message: '目录解析结果为空', bookUrl: previewMsg.item.bookUrl });
+  await sleep(30);
+  assert(!$('#sourcePopup').classList.contains('open'), '手动关闭后失败不应强行重开');
 
   document.querySelector('#sourcePopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
