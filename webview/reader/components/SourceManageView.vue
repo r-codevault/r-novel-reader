@@ -50,28 +50,37 @@ function check(s?: BookSourceView): void {
   send(s ? { type: 'sourceCheck', id: s.id } : { type: 'sourceCheck', scope: 'active' });
 }
 
-/** 「检查全部」运行中变成暂停/继续 */
-const checkAllRunning = computed(function () { return state.checkRunning && state.checkScope === 'active'; });
+/** 「书源」Tab 自己的检查状态(与失效 Tab 完全独立) */
+const checkState = computed(function () { return state.checkStates.active; });
+const checkAllRunning = computed(function () { return checkState.value.running; });
 const checkAllLabel = computed(function () {
-  if (!checkAllRunning.value) { return '检查全部'; }
-  return state.checkPaused ? '继续' : '暂停';
+  if (!checkState.value.running) { return '检查全部'; }
+  return checkState.value.paused ? '继续' : '暂停';
 });
 
 /** 取消本次检查(已完成的结果保留) */
 function cancelCheckAll(): void {
-  send({ type: 'sourceCheckCancel' });
-  state.checkRunning = false;
-  state.checkPaused = false;
-  state.checkScope = '';
+  const st = state.checkStates.active;
+  send({ type: 'sourceCheckCancel', scope: 'active', runId: st.runId });
+  st.running = false;
+  st.paused = false;
 }
 
 function toggleCheckAll(): void {
-  if (checkAllRunning.value) {
-    state.checkPaused = !state.checkPaused;
-    send({ type: 'sourceCheckPause', paused: state.checkPaused });
+  const st = state.checkStates.active;
+  if (st.running) {
+    st.paused = !st.paused;
+    send({ type: 'sourceCheckPause', scope: 'active', paused: st.paused, runId: st.runId });
     return;
   }
-  check();
+  // 新一轮: 重置本 Tab 状态(不影响失效 Tab)
+  st.runId += 1;
+  st.running = true;
+  st.paused = false;
+  st.done = 0;
+  st.total = 0;
+  st.sourceName = '';
+  send({ type: 'sourceCheck', scope: 'active', runId: st.runId });
 }
 
 function exportAll(): void {
@@ -152,15 +161,15 @@ function loadMore(): void {
       <button class="popup-secondary" data-src-import="file" @click="importBy('file')">本地文件</button>
       <span class="spacer"></span>
       <button class="popup-btn" data-src-check-all @click="toggleCheckAll">{{ checkAllLabel }}</button>
-      <button v-if="checkAllRunning && state.checkPaused" class="popup-btn" data-src-check-cancel
+      <button v-if="checkAllRunning && checkState.paused" class="popup-btn" data-src-check-cancel
         @click="cancelCheckAll">取消</button>
       <button class="popup-btn" data-src-export @click="exportAll">导出</button>
     </div>
 
     <div v-if="checkAllRunning" class="src-hint src-progress" data-src-check-progress>
-      <span class="src-progress-prefix">{{ state.checkPaused ? '已暂停' : '检查中' }}</span>
-      <span class="src-progress-count">{{ state.checkDone }}/{{ state.checkTotal }}</span>
-      <span class="src-progress-name" :title="state.checkSource">{{ state.checkSource }}</span>
+      <span class="src-progress-prefix">{{ checkState.paused ? '已暂停' : '检查中' }}</span>
+      <span class="src-progress-count">{{ checkState.done }}/{{ checkState.total }}</span>
+      <span class="src-progress-name" :title="checkState.sourceName">{{ checkState.sourceName }}</span>
     </div>
 
     <div class="src-bulk">

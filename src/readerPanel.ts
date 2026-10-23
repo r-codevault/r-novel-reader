@@ -88,9 +88,9 @@ type WebviewMessage =
     | { type: 'sourceRemove'; id: string }
     | { type: 'sourceUpdate'; id: string; name?: string; searchUrl?: string }
     | { type: 'sourceExport' }
-    | { type: 'sourceCheck'; id?: string; scope?: 'active' | 'dead' | 'all' }
-    | { type: 'sourceCheckPause'; paused: boolean }
-    | { type: 'sourceCheckCancel' }
+    | { type: 'sourceCheck'; id?: string; scope?: 'active' | 'dead' | 'all'; runId?: number }
+    | { type: 'sourceCheckPause'; scope: 'active' | 'dead'; paused: boolean; runId?: number }
+    | { type: 'sourceCheckCancel'; scope: 'active' | 'dead'; runId?: number }
     | { type: 'sourceRevive'; id: string }
     | { type: 'sourceClearDead' }
     | { type: 'sourceSetEnabled'; patches: { id: string; enabled: boolean }[] };
@@ -135,10 +135,10 @@ export interface BookSourceApi {
     deadCount(): number;
     /** 批量启停(全选/反选/全部停用) */
     setEnabledMany(patches: { id: string; enabled: boolean }[]): Promise<number>;
-    /** 暂停/继续批量检查 */
-    pauseCheck?(paused: boolean): void;
-    /** 取消批量检查 */
-    cancelCheck?(): void;
+    /** 暂停/继续批量检查(runId 用于忽略过期请求) */
+    pauseCheck?(scope: 'active' | 'dead', paused: boolean, runId?: number): void;
+    /** 取消批量检查(runId 用于忽略过期请求) */
+    cancelCheck?(scope: 'active' | 'dead', runId?: number): void;
     /** 搜索; token 原样回传, 供 webview 丢弃过期结果 */
     search(key: string, sourceIds: string[] | undefined, hooks?: {
         control?: SearchControl;
@@ -737,15 +737,15 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                 void vscode.commands.executeCommand('novelReader.exportSources');
                 break;
             case 'sourceCheckPause':
-                ReaderPanel.bookSources?.pauseCheck?.(msg.paused);
+                ReaderPanel.bookSources?.pauseCheck?.(msg.scope || 'active', msg.paused, msg.runId);
                 break;
             case 'sourceCheckCancel':
-                ReaderPanel.bookSources?.cancelCheck?.();
+                ReaderPanel.bookSources?.cancelCheck?.(msg.scope || 'active', msg.runId);
                 break;
             case 'sourceCheck':
                 // 兼容旧调用: 只传 id 时按单源检查
                 void vscode.commands.executeCommand('novelReader.checkSources',
-                    msg.scope ? { id: msg.id, scope: msg.scope } : msg.id);
+                    msg.scope || msg.runId ? { id: msg.id, scope: msg.scope, runId: msg.runId } : msg.id);
                 break;
             case 'sourceRevive':
                 void ReaderPanel.bookSources?.revive(msg.id).then(() => this.postSources());
@@ -785,15 +785,16 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
         total: number;
         sourceName: string;
         paused: boolean;
+        runId?: number;
     }): void {
         if (!this._ready) { return; }
         void this._panel.webview.postMessage({ type: 'sourceCheckProgress', ...p });
     }
 
-    /** 批量检查结束 */
-    public postSourceCheckDone(): void {
+    /** 批量检查结束(scope + runId 供 webview 丢弃上一轮迟到的结束消息) */
+    public postSourceCheckDone(scope: 'active' | 'dead' | 'single' | 'all', runId?: number): void {
         if (!this._ready) { return; }
-        void this._panel.webview.postMessage({ type: 'sourceCheckDone' });
+        void this._panel.webview.postMessage({ type: 'sourceCheckDone', scope, runId });
     }
 
     /** 推送书源列表(精简视图) */

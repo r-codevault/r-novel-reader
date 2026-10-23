@@ -26,28 +26,36 @@ function recheckAll(): void {
   send({ type: 'sourceCheck', scope: 'dead' });
 }
 
-/** 「全部重查」运行中变成暂停/继续 */
-const recheckAllRunning = computed(function () { return state.checkRunning && state.checkScope === 'dead'; });
+/** 「失效」Tab 自己的重查状态(与书源 Tab 完全独立) */
+const checkState = computed(function () { return state.checkStates.dead; });
+const recheckAllRunning = computed(function () { return checkState.value.running; });
 const recheckAllLabel = computed(function () {
-  if (!recheckAllRunning.value) { return '全部重查'; }
-  return state.checkPaused ? '继续' : '暂停';
+  if (!checkState.value.running) { return '全部重查'; }
+  return checkState.value.paused ? '继续' : '暂停';
 });
 
 /** 取消重查(已完成的结果保留) */
 function cancelRecheckAll(): void {
-  send({ type: 'sourceCheckCancel' });
-  state.checkRunning = false;
-  state.checkPaused = false;
-  state.checkScope = '';
+  const st = state.checkStates.dead;
+  send({ type: 'sourceCheckCancel', scope: 'dead', runId: st.runId });
+  st.running = false;
+  st.paused = false;
 }
 
 function toggleRecheckAll(): void {
-  if (recheckAllRunning.value) {
-    state.checkPaused = !state.checkPaused;
-    send({ type: 'sourceCheckPause', paused: state.checkPaused });
+  const st = state.checkStates.dead;
+  if (st.running) {
+    st.paused = !st.paused;
+    send({ type: 'sourceCheckPause', scope: 'dead', paused: st.paused, runId: st.runId });
     return;
   }
-  recheckAll();
+  st.runId += 1;
+  st.running = true;
+  st.paused = false;
+  st.done = 0;
+  st.total = 0;
+  st.sourceName = '';
+  send({ type: 'sourceCheck', scope: 'dead', runId: st.runId });
 }
 
 function revive(s: BookSourceView): void {
@@ -79,14 +87,14 @@ function loadMore(): void {
       <span class="src-dead-title">共 {{ dead.length }} 个失效书源</span>
       <span class="spacer"></span>
       <button class="popup-btn" data-src-recheck-all :disabled="!dead.length" @click="toggleRecheckAll">{{ recheckAllLabel }}</button>
-      <button v-if="recheckAllRunning && state.checkPaused" class="popup-btn" data-src-check-cancel
+      <button v-if="recheckAllRunning && checkState.paused" class="popup-btn" data-src-check-cancel
         @click="cancelRecheckAll">取消</button>
       <button class="popup-btn src-del" data-src-clear-dead :disabled="!dead.length" @click="clearAll">清除全部</button>
     </div>
     <div v-if="recheckAllRunning" class="src-hint src-progress" data-src-check-progress>
-      <span class="src-progress-prefix">{{ state.checkPaused ? '已暂停' : '重查中' }}</span>
-      <span class="src-progress-count">{{ state.checkDone }}/{{ state.checkTotal }}</span>
-      <span class="src-progress-name" :title="state.checkSource">{{ state.checkSource }}</span>
+      <span class="src-progress-prefix">{{ checkState.paused ? '已暂停' : '重查中' }}</span>
+      <span class="src-progress-count">{{ checkState.done }}/{{ checkState.total }}</span>
+      <span class="src-progress-name" :title="checkState.sourceName">{{ checkState.sourceName }}</span>
     </div>
 
     <p class="src-risk">任意一次失败(检查或搜索)即判定失效并退出搜索；成功一次自动恢复。</p>

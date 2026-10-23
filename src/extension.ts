@@ -376,12 +376,13 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     type CheckScope = 'active' | 'dead' | 'all';
-    /** 正在跑的批量检查(暂停/取消) */
-    let activeCheck: SearchControl | undefined;
+    /** 正在跑的批量检查: 按 scope 分开(书源 Tab / 失效 Tab 互不影响) */
+    const activeChecks = new Map<string, { control: SearchControl; runId?: number }>();
     /** 书源可用性检查: 用测试关键词搜一次, 看是否出结果(结果批量落盘) */
-    async function checkBookSources(arg?: string | { id?: string; scope?: CheckScope }): Promise<void> {
+    async function checkBookSources(arg?: string | { id?: string; scope?: CheckScope; runId?: number }): Promise<void> {
         const id = typeof arg === 'string' ? arg : arg?.id;
         const scope: CheckScope = (typeof arg === 'object' && arg?.scope) || 'active';
+        const runId = typeof arg === 'object' ? arg?.runId : undefined;
         let targets: BookSource[];
         if (id) {
             const one = bookSources.get(id);
@@ -400,9 +401,11 @@ export function activate(context: vscode.ExtensionContext): void {
         }
 
         // 新一轮检查开始: 取消上一轮(暂停中的也释放)
-        activeCheck?.cancel();
+        const runKey = id ? 'single:' + id : scope;
+        const previous = activeChecks.get(runKey);
+        previous?.control.cancel();
         const control = new SearchControl();
-        activeCheck = control;
+        activeChecks.set(runKey, { control, runId });
 
         const results: { id: string; ok: boolean; message: string }[] = [];
         const postProgress = (done: number, sourceName: string): void => {
@@ -412,6 +415,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 total: targets.length,
                 sourceName,
                 paused: control.paused,
+                runId,
             });
         };
         postProgress(0, targets[0].bookSourceName);
@@ -445,8 +449,9 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         );
 
-        activeCheck = undefined;
-        ReaderPanel.current?.postSourceCheckDone();
+        const stillMine = activeChecks.get(runKey);
+        if (stillMine && stillMine.control === control) { activeChecks.delete(runKey); }
+        ReaderPanel.current?.postSourceCheckDone(id ? 'single' : scope, runId);
         // 一次写盘: 失败一次即判失效, 成功则清零/自动恢复
         if (results.length) { await bookSources.recordResults(results); }
         ReaderPanel.current?.postSources();
@@ -473,12 +478,18 @@ export function activate(context: vscode.ExtensionContext): void {
         clearDead: () => bookSources.clearDead(),
         deadCount: () => bookSources.deadList().length,
         setEnabledMany: (patches) => bookSources.setEnabledMany(patches),
-        pauseCheck: (paused: boolean) => {
-            if (!activeCheck) { return; }
-            if (paused) { activeCheck.pause(); } else { activeCheck.resume(); }
+        pauseCheck: (scope, paused, runId) => {
+            const entry = activeChecks.get(scope);
+            if (!entry) { return; }
+            // 过期轮次的暂停/继续请求直接忽略
+            if (runId !== undefined && entry.runId !== runId) { return; }
+            if (paused) { entry.control.pause(); } else { entry.control.resume(); }
         },
-        cancelCheck: () => {
-            activeCheck?.cancel();
+        cancelCheck: (scope, runId) => {
+            const entry = activeChecks.get(scope);
+            if (!entry) { return; }
+            if (runId !== undefined && entry.runId !== runId) { return; }
+            entry.control.cancel();
         },
         search: (key, sourceIds, hooks) => searchService.search(key, { sourceIds, ...(hooks || {}) }).then((out) => {
             // 失效/恢复有变化时立刻刷新列表(避免用户还要手动刷新)
@@ -495,8 +506,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // 面板关闭时停掉批量检查, 避免后台挂着
     ReaderPanel.cancelSourceCheck = () => {
-        activeCheck?.cancel();
-        activeCheck = undefined;
+        for (const entry of activeChecks.values()) { entry.control.cancel(); }
+        activeChecks.clear();
     };
 
     /** 打开书源面板: 没有书时提示先打开一本(面板依赖阅读页) */
@@ -540,7 +551,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('novelReader.importSourceFromUrl', () => importSourcesInteractive('url')),
         vscode.commands.registerCommand('novelReader.importSourceFromClipboard', () => importSourcesInteractive('clipboard')),
         vscode.commands.registerCommand('novelReader.importSourceFromFile', () => importSourcesInteractive('file')),
-        vscode.commands.registerCommand('novelReader.checkSources', (arg?: string | { id?: string; scope?: 'active' | 'dead' | 'all' }) => checkBookSources(arg)),
+        vscode.commands.registerCommand('novelReader.checkSources', (arg?: string | { id?: string; scope?: 'active' | 'dead' | 'all'; runId?: number }) => checkBookSources(arg)),
         vscode.commands.registerCommand('novelReader.exportSources', async () => {
             const picked = await vscode.window.showSaveDialog({
                 title: '导出书源',

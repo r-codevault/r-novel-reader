@@ -195,22 +195,32 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       break;
     }
     case 'sourceCheckProgress': {
-      const m = msg as { scope?: typeof state.checkScope; done?: number; total?: number; sourceName?: string; paused?: boolean };
-      const first = !state.checkRunning;
-      state.checkRunning = true;
-      state.checkScope = m.scope || 'active';
-      state.checkDone = m.done || 0;
-      state.checkTotal = m.total || 0;
-      state.checkSource = m.sourceName || '';
-      // 暂停状态以用户点击为准: 进度回包可能是在暂停前发出的, 不能把「继续」改回「暂停」
-      if (first) { state.checkPaused = !!m.paused; }
+      const m = msg as { scope?: string; done?: number; total?: number; sourceName?: string; paused?: boolean; runId?: number };
+      const scope = m.scope === 'dead' ? 'dead' : m.scope === 'active' ? 'active' : null;
+      if (!scope) { break; }
+      const st = state.checkStates[scope];
+      // 只认当前轮: 旧轮迟到的进度不能串到新轮
+      if (m.runId !== undefined && st.runId !== m.runId) { break; }
+      st.running = true;
+      st.done = m.done || 0;
+      st.total = m.total || 0;
+      st.sourceName = m.sourceName || '';
+      // 暂停状态以用户点击为准, 不被在途回包覆盖
       break;
     }
-    case 'sourceCheckDone':
-      state.checkRunning = false;
-      state.checkPaused = false;
-      state.checkScope = '';
+    case 'sourceCheckDone': {
+      const m = msg as { scope?: string; runId?: number };
+      const scope = m.scope === 'dead' ? 'dead' : m.scope === 'active' ? 'active' : null;
+      if (!scope) { break; }
+      const st = state.checkStates[scope];
+      if (m.runId !== undefined && st.runId !== m.runId) { break; }
+      st.running = false;
+      st.paused = false;
+      st.done = 0;
+      st.total = 0;
+      st.sourceName = '';
       break;
+    }
     case 'searchBatch': {
       const m = msg as { token?: number; items?: typeof state.searchResults; errors?: typeof state.searchErrors };
       if (m.token !== undefined && m.token !== state.searchToken) { break; }
