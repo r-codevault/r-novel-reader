@@ -13,7 +13,7 @@ const assert = require('assert');
 const { BookSourceStore } = require('../dist/bookSource');
 const { buildSearchRequest, splitUrlOptions } = require('../dist/online/searchUrl');
 const { parseSearchPage, relevanceScore, resultKey } = require('../dist/online/ruleApply');
-const { SearchService } = require('../dist/online/searchService');
+const { SearchService, SearchControl } = require('../dist/online/searchService');
 const fx = require('./fixtures-source');
 
 /** 内存存储适配器(书源存文件) */
@@ -377,6 +377,86 @@ const realFetch = globalThis.fetch;
     const good = events.find((e) => e.sourceName === 'HTML站');
     assert.ok(good && good.ok === true, '成功源应标记 ok=true');
     assert.strictEqual(out.sourceCount, 2);
+  }
+
+  // 19) 不限制书源数量: 勾了多少就搜多少
+  {
+    const store = await makeStore();
+    const many = Array.from({ length: 120 }, (_, i) => ({
+      bookSourceName: '源' + i, bookSourceUrl: 'https://s' + i + '.example.com',
+      searchUrl: 'https://s' + i + '.example.com/s?q={{key}}',
+      ruleSearch: { bookList: '.item', name: '.name@text', bookUrl: 'a@href' },
+    }));
+    await store.importText(JSON.stringify(many));
+    let requests = 0;
+    globalThis.fetch = async () => { requests += 1; return makeResponse(200, fx.SEARCH_HTML); };
+    const out = await new SearchService(store).search('遮天');
+    assert.strictEqual(out.sourceCount, 120, '应搜索全部 120 个源');
+    assert.strictEqual(requests, 120, '每个源都应发一次请求');
+    assert.strictEqual(out.skippedSources, 0, '不应再有源上限');
+  }
+
+  // 20) 暂停/继续: 暂停后不再发起新请求, 继续后跑完
+  {
+    const store = await makeStore();
+    const many = Array.from({ length: 20 }, (_, i) => ({
+      bookSourceName: '源' + i, bookSourceUrl: 'https://p' + i + '.example.com',
+      searchUrl: 'https://p' + i + '.example.com/s?q={{key}}',
+      ruleSearch: { bookList: '.item', name: '.name@text', bookUrl: 'a@href' },
+    }));
+    await store.importText(JSON.stringify(many));
+    let requests = 0;
+    globalThis.fetch = async () => {
+      requests += 1;
+      await new Promise((r) => setTimeout(r, 10));
+      return makeResponse(200, fx.SEARCH_HTML);
+    };
+    const control = new SearchControl();
+    let paused = false;
+    const running = new SearchService(store).search('遮天', {
+      control,
+      onProgress: (p) => {
+        if (!paused && p.done >= 3) { paused = true; control.pause(); }
+      },
+    });
+    await new Promise((r) => setTimeout(r, 120));
+    const atPause = requests;
+    await new Promise((r) => setTimeout(r, 150));
+    assert.strictEqual(requests, atPause, '暂停后不应再发起新请求(在途的会完成)');
+    assert.ok(atPause < 20, '暂停时应还没跑完, 实际已请求 ' + atPause);
+    control.resume();
+    const out = await running;
+    assert.strictEqual(out.sourceCount, 20);
+    assert.strictEqual(requests, 20, '继续后应跑完全部源');
+  }
+
+  // 21) 流式批次: onBatch 回传新增结果, 合并后与最终结果一致
+  {
+    const store = await makeStore();
+    const many = Array.from({ length: 20 }, (_, i) => ({
+      bookSourceName: '源' + i, bookSourceUrl: 'https://b' + i + '.example.com',
+      searchUrl: 'https://b' + i + '.example.com/s?q={{key}}',
+      ruleSearch: HTML_SOURCE.ruleSearch,
+    }));
+    await store.importText(JSON.stringify(many));
+    // 每个源返回一本不同的书, 才能观察到分批
+    let seq = 0;
+    globalThis.fetch = async () => {
+      seq += 1;
+      const html = '<div class="book-item"><h3 class="book-name"><a href="https://x/' + seq + '">书' + seq + '</a></h3>'
+        + '<span class="author">作者' + seq + '</span></div>';
+      return makeResponse(200, html);
+    };
+    const batches = [];
+    const out = await new SearchService(store).search('遮天', { onBatch: (b) => batches.push(b) });
+    assert.ok(batches.length >= 2, '应分多批回传, 实际 ' + batches.length);
+    const streamed = [];
+    for (const b of batches) { streamed.push(...b.items); }
+    assert.deepStrictEqual(
+      streamed.map((i) => i.bookUrl).sort(),
+      out.items.map((i) => i.bookUrl).sort(),
+      '流式批次合并后应与最终结果一致'
+    );
   }
 
   console.log('书源搜索测试全部通过 ✔');

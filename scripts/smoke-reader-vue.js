@@ -1353,6 +1353,33 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(hint.includes('2/2') && hint.includes('B站') && hint.includes('✗'), '应显示失败源与失败标记');
   assert(hint.includes('失败 1'), '应显示累计失败数');
 
+  // 7c) 暂停/继续: 停止启动新源, 进度标记暂停
+  const pauseBtn = document.querySelector('#sourcePopup [data-src-pause]');
+  assert(pauseBtn && pauseBtn.textContent.includes('暂停'), '搜索中应有暂停按钮');
+  posted.length = 0;
+  pauseBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceSearchPause' && m.paused === true && m.token === searchMsg.token),
+    '点暂停应发送 sourceSearchPause(paused=true)');
+  assert(pauseBtn.textContent.includes('继续'), '暂停后按钮应变「继续」');
+  assert(document.querySelector('#sourcePopup [data-src-progress]').textContent.includes('已暂停'),
+    '进度行应显示已暂停');
+
+  posted.length = 0;
+  pauseBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceSearchPause' && m.paused === false),
+    '点继续应发送 sourceSearchPause(paused=false)');
+  assert(pauseBtn.textContent.includes('暂停'), '继续后按钮应回「暂停」');
+
+  // 7d) 流式批次: 搜索过程中先显示已有结果
+  sendMsg({ type: 'searchBatch', token: searchMsg.token, items: [
+    { sourceId: 's1', sourceName: 'A站', title: '遮天', author: '辰东', bookUrl: 'https://a.com/b/1', kind: '玄幻' },
+  ], errors: [] });
+  await sleep(20);
+  assert(document.querySelectorAll('#sourcePopup .src-result').length === 1, '收到批次应立即显示结果');
+  assert(!document.querySelector('#sourcePopup [data-src-errors]'), '搜索未结束时不显示「已移入失效」摘要');
+
   sendMsg({ type: 'searchResults', token: searchMsg.token, done: true, deadAdded: ['s2'], errors: [
     { sourceId: 's2', sourceName: 'B站', kind: 'timeout', message: '搜索超时(10s)' },
   ], items: [

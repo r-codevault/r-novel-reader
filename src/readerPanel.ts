@@ -18,7 +18,8 @@ import { ReadingSettings, SettingsStore, THEMES, fontStackById, themeById } from
 import type { NoteDraft, NoteItem } from './notes';
 import type { BookSourceView, ImportResult } from './bookSource';
 import type { SearchBookItem } from './online/ruleApply';
-import type { SearchProgress, SourceSearchError } from './online/searchService';
+import type { SearchBatch, SearchProgress, SourceSearchError } from './online/searchService';
+import { SearchControl } from './online/searchService';
 
 interface InitPayload {
     filePath: string;
@@ -81,6 +82,7 @@ type WebviewMessage =
     // 网络书源
     | { type: 'requestSources' }
     | { type: 'sourceSearch'; key: string; sourceIds?: string[]; token: number }
+    | { type: 'sourceSearchPause'; token: number; paused: boolean }
     | { type: 'sourceImport'; mode: 'url' | 'clipboard' | 'file' }
     | { type: 'sourceToggle'; id: string; enabled: boolean }
     | { type: 'sourceRemove'; id: string }
@@ -132,7 +134,11 @@ export interface BookSourceApi {
     /** 批量启停(全选/反选/全部停用) */
     setEnabledMany(patches: { id: string; enabled: boolean }[]): Promise<number>;
     /** 搜索; token 原样回传, 供 webview 丢弃过期结果 */
-    search(key: string, sourceIds: string[] | undefined, onProgress?: (p: SearchProgress) => void): Promise<{
+    search(key: string, sourceIds: string[] | undefined, hooks?: {
+        control?: SearchControl;
+        onProgress?: (p: SearchProgress) => void;
+        onBatch?: (b: SearchBatch) => void;
+    }): Promise<{
         items: SearchBookItem[];
         errors: SourceSearchError[];
         skippedSources: number;
@@ -188,6 +194,8 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
     /** 本会话内的章节位置记忆(章节序号 -> 0~1), 切走再切回时恢复原位置 */
     private readonly _ratios = new Map<number, number>();
     private _ready = false;
+    /** 当前运行中的搜索(暂停/取消用) */
+    private _activeSearch: { token: number; control: SearchControl } | undefined;
     private _openSettingsOnLoad = false;
     private readonly _disposables: vscode.Disposable[] = [];
 
@@ -467,6 +475,9 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
 
     dispose(): void {
         ReaderPanel.current = undefined;
+        // 面板关闭: 停掉还在跑(或暂停中)的搜索, 避免后台挂着
+        this._activeSearch?.control.cancel();
+        this._activeSearch = undefined;
         this._panel.dispose();
         for (const d of this._disposables) {
             d.dispose();
@@ -646,16 +657,31 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             case 'sourceSearch': {
                 const api = ReaderPanel.bookSources;
                 if (!api) { break; }
-                void api.search(msg.key, msg.sourceIds, (p) => {
-                    void this._panel.webview.postMessage({
-                        type: 'searchProgress',
-                        token: msg.token,
-                        done: p.done,
-                        total: p.total,
-                        sourceName: p.sourceName,
-                        ok: p.ok,
-                        failed: p.failed,
-                    });
+                // 新搜索开始: 取消上一轮(避免暂停中的旧任务一直挂着)
+                this._activeSearch?.control.cancel();
+                const control = new SearchControl();
+                this._activeSearch = { token: msg.token, control };
+                void api.search(msg.key, msg.sourceIds, {
+                    control,
+                    onProgress: (p) => {
+                        void this._panel.webview.postMessage({
+                            type: 'searchProgress',
+                            token: msg.token,
+                            done: p.done,
+                            total: p.total,
+                            sourceName: p.sourceName,
+                            ok: p.ok,
+                            failed: p.failed,
+                        });
+                    },
+                    onBatch: (b) => {
+                        void this._panel.webview.postMessage({
+                            type: 'searchBatch',
+                            token: msg.token,
+                            items: b.items,
+                            errors: b.errors,
+                        });
+                    },
                 }).then((out) => {
                     void this._panel.webview.postMessage({
                         type: 'searchResults',
@@ -666,6 +692,7 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                         deadAdded: out.deadAdded,
                         done: true,
                     });
+                    if (this._activeSearch?.token === msg.token) { this._activeSearch = undefined; }
                 }, (err: unknown) => {
                     void this._panel.webview.postMessage({
                         type: 'searchResults',
@@ -675,6 +702,12 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                         done: true,
                     });
                 });
+                break;
+            }
+            case 'sourceSearchPause': {
+                const active = this._activeSearch;
+                if (!active || active.token !== msg.token) { break; }
+                if (msg.paused) { active.control.pause(); } else { active.control.resume(); }
                 break;
             }
             case 'sourceImport':

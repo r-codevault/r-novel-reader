@@ -1,13 +1,15 @@
 /**
  * online/searchService.ts — 多书源并发搜索
  *
- * 并发 6、单源超时 10s; 单源失败不影响其它源, 错误折叠返回给 UI。
- * 去重规则: 书名+作者相同视为同一本书, 保留书源列表里靠前的那条。
+ * - 不做书源数量上限: 用户勾了多少就搜多少
+ * - 支持暂停/继续/取消(SearchControl): 暂停时不再启动新源, 已在途的完成
+ * - 结果分批流式回传(onBatch), 上千个源时也能先看到结果
+ * - 单源失败不影响其它源; 一轮搜索只写一次盘
  */
 import { BookSource, BookSourceStore, SourceResult } from '../bookSource';
 import { HttpError } from '../http';
 import { UnsupportedRuleError } from '../rules/evalRule';
-import { mapLimit, withTimeout } from '../util/async';
+import { withTimeout } from '../util/async';
 import { buildSearchRequest } from './searchUrl';
 import { parseSearchPage, relevanceScore, resultKey, SearchBookItem } from './ruleApply';
 import { fetchForSource, sandboxHttpFor, SourceHttpPool } from './sourceHttp';
@@ -26,7 +28,7 @@ export interface SearchOutcome {
     sourceCount: number;
     /** 结果条数被截断 */
     truncated: boolean;
-    /** 因源上限未参与本次搜索的书源数 */
+    /** 因源上限未参与本次搜索的书源数(已不做上限, 恒为 0, 保留兼容) */
     skippedSources: number;
     /** 本次回写结果的书源数 */
     recorded: number;
@@ -38,37 +40,77 @@ export interface SearchOutcome {
 
 /** 搜索进度(每完成一个源推一次) */
 export interface SearchProgress {
-    /** 已完成源数 */
     done: number;
-    /** 本次参与搜索的源总数 */
     total: number;
-    /** 刚完成的源名 */
     sourceName: string;
-    /** 该源是否成功 */
     ok: boolean;
-    /** 累计失败源数 */
     failed: number;
 }
 
-export interface SearchOptions {
+/** 流式结果: 每凑够一批或结束时回传新增部分 */
+export interface SearchBatch {
+    items: SearchBookItem[];
+    errors: SourceSearchError[];
+}
+
+export interface SearchHooks {
+    onProgress?: (p: SearchProgress) => void;
+    onBatch?: (b: SearchBatch) => void;
+}
+
+export interface SearchOptions extends SearchHooks {
     /** 只搜这些书源; 不传 = 全部启用 */
     sourceIds?: string[];
     page?: number;
     signal?: AbortSignal;
     /** 单源超时(默认 10s) */
     perSourceTimeoutMs?: number;
-    /** 进度回调(每完成一个源调用一次) */
-    onProgress?: (p: SearchProgress) => void;
+    /** 暂停/继续/取消控制器 */
+    control?: SearchControl;
+}
+
+/** 暂停/继续/取消: 搜索过程中由 UI 控制 */
+export class SearchControl {
+    public paused = false;
+    public cancelled = false;
+    private waiters: (() => void)[] = [];
+    private readonly aborter = new AbortController();
+
+    public get signal(): AbortSignal { return this.aborter.signal; }
+
+    public pause(): void {
+        if (this.cancelled) { return; }
+        this.paused = true;
+    }
+
+    public resume(): void {
+        this.paused = false;
+        const list = this.waiters;
+        this.waiters = [];
+        for (const fn of list) { fn(); }
+    }
+
+    /** 取消: 停止发起新请求, 中断在途请求 */
+    public cancel(): void {
+        this.cancelled = true;
+        this.resume();
+        try { this.aborter.abort(); } catch { /* 已取消 */ }
+    }
+
+    /** 暂停时挂起等待(取消会立即放行) */
+    public async waitIfPaused(): Promise<void> {
+        while (this.paused && !this.cancelled) {
+            await new Promise<void>((resolve) => { this.waiters.push(resolve); });
+        }
+    }
 }
 
 const CONCURRENCY = 6;
 const PER_SOURCE_TIMEOUT = 10000;
-const MAX_TOTAL = 300;
-/**
- * 单次搜索的书源上限: 合集动辄上千个源, 全量并发既慢又容易被站点封。
- * 按用户书源顺序取前 100 个, 超出部分在 UI 提示(可用选择弹窗缩小范围)。
- */
-const MAX_SOURCES_PER_SEARCH = 100;
+/** 结果总数上限(不是书源数): 防止上万源时内存/渲染爆掉 */
+const MAX_TOTAL = 1000;
+/** 每完成多少个源回传一批结果 */
+const FLUSH_EVERY = 8;
 
 function errorOf(err: unknown): { kind: string; message: string } {
     if (err instanceof UnsupportedRuleError) {
@@ -98,79 +140,120 @@ export class SearchService {
     async search(key: string, opts: SearchOptions = {}): Promise<SearchOutcome> {
         const keyword = (key || '').trim();
         if (!keyword) {
-            return { items: [], errors: [], sourceCount: 0, truncated: false, skippedSources: 0, recorded: 0, deadAdded: [], revived: [] };
+            return {
+                items: [], errors: [], sourceCount: 0, truncated: false,
+                skippedSources: 0, recorded: 0, deadAdded: [], revived: [],
+            };
         }
-        const picked = this.pickSources(opts.sourceIds);
-        const list = picked.slice(0, MAX_SOURCES_PER_SEARCH);
-        const skippedSources = Math.max(0, picked.length - list.length);
+        const list = this.pickSources(opts.sourceIds);
+        const total = list.length;
+        const control = opts.control;
+        const signal = control ? control.signal : opts.signal;
         const errors: SourceSearchError[] = [];
         const outcomes: SourceResult[] = [];
         const perSource = opts.perSourceTimeoutMs || PER_SOURCE_TIMEOUT;
-        const total = list.length;
+
+        const merged: SearchBookItem[] = [];
+        const keyIndex = new Map<string, number>();
+        const sourceOrder = new Map(list.map((s, i) => [s.id, i]));
+        let truncated = false;
         let done = 0;
         let failed = 0;
-        /** 每完成一个源: 累加并回报进度 */
-        const report = (source: BookSource, ok: boolean): void => {
-            done += 1;
-            if (!ok) { failed += 1; }
-            opts.onProgress?.({ done, total, sourceName: source.bookSourceName, ok, failed });
+        let sinceFlush = 0;
+        let pendingItems: SearchBookItem[] = [];
+        let pendingErrors: SourceSearchError[] = [];
+
+        const flush = (): void => {
+            if (!pendingItems.length && !pendingErrors.length) { return; }
+            opts.onBatch?.({ items: pendingItems, errors: pendingErrors });
+            pendingItems = [];
+            pendingErrors = [];
+            sinceFlush = 0;
         };
 
-        const batches = await mapLimit(list, CONCURRENCY, async (source) => {
-            if (opts.signal?.aborted) {
-                return { source, items: [] as SearchBookItem[], error: null as SourceSearchError | null };
+        /**
+         * 合并一条结果: 同一本书(书名+作者)只留书源顺序靠前的那条。
+         * 并发下到达顺序不定, 用源顺序比较, 保证最终结果稳定。
+         */
+        const absorb = (item: SearchBookItem): void => {
+            const k = resultKey(item);
+            const order = sourceOrder.get(item.sourceId) ?? 999;
+            const existing = keyIndex.get(k);
+            if (existing !== undefined) {
+                const old = merged[existing];
+                const oldOrder = sourceOrder.get(old.sourceId) ?? 999;
+                if (order < oldOrder) {
+                    merged[existing] = item;
+                    pendingItems.push(item);
+                }
+                return;
             }
+            if (merged.length >= MAX_TOTAL) { truncated = true; return; }
+            keyIndex.set(k, merged.length);
+            merged.push(item);
+            pendingItems.push(item);
+        };
+
+        const cancelled = (): boolean => control?.cancelled === true;
+
+        const runOne = async (source: BookSource): Promise<void> => {
+            if (cancelled()) { return; }
             const task = (async () => {
                 const req = await buildSearchRequest(source, keyword, opts.page || 1, sandboxHttpFor(source, this.pool));
                 const res = await fetchForSource(source, this.pool, req.url, {
                     method: req.method,
                     headers: req.headers,
                     body: req.body,
-                    signal: opts.signal,
+                    signal,
                 });
                 return parseSearchPage(source, res.text, res.url, sandboxHttpFor(source, this.pool));
             })();
             const result = await withTimeout(task, perSource);
+            if (cancelled()) { return; }
+
+            let ok = false;
             if (result.timedOut) {
                 const message = '搜索超时(' + Math.round(perSource / 1000) + 's)';
                 outcomes.push({ id: source.id, ok: false, message });
-                report(source, false);
-                return {
-                    source,
-                    items: [] as SearchBookItem[],
-                    error: { sourceId: source.id, sourceName: source.bookSourceName, kind: 'timeout', message },
-                };
-            }
-            if (!result.ok || result.value === undefined) {
+                const err = { sourceId: source.id, sourceName: source.bookSourceName, kind: 'timeout', message };
+                errors.push(err);
+                pendingErrors.push(err);
+            } else if (!result.ok || result.value === undefined) {
                 const e = errorOf(result.error);
                 // 用户取消(abort)不算书源失败
                 if (e.kind !== 'abort') { outcomes.push({ id: source.id, ok: false, message: e.message }); }
-                report(source, e.kind === 'abort');
-                return {
-                    source,
-                    items: [] as SearchBookItem[],
-                    error: { sourceId: source.id, sourceName: source.bookSourceName, ...e },
-                };
+                const err = { sourceId: source.id, sourceName: source.bookSourceName, ...e };
+                errors.push(err);
+                if (e.kind !== 'abort') { pendingErrors.push(err); }
+                ok = e.kind === 'abort';
+            } else {
+                const items = result.value as SearchBookItem[];
+                outcomes.push({ id: source.id, ok: true, message: items.length ? '命中 ' + items.length + ' 条' : '可请求, 但未命中结果' });
+                for (const item of items) { absorb(item); }
+                ok = true;
             }
-            const items = result.value as SearchBookItem[];
-            outcomes.push({ id: source.id, ok: true, message: items.length ? '命中 ' + items.length + ' 条' : '可请求, 但未命中结果' });
-            report(source, true);
-            return { source, items, error: null };
-        });
 
-        const merged: SearchBookItem[] = [];
-        const seen = new Set<string>();
-        let truncated = false;
-        for (const batch of batches) {
-            if (batch.error) { errors.push(batch.error); continue; }
-            for (const item of batch.items) {
-                const k = resultKey(item);
-                if (seen.has(k)) { continue; }
-                seen.add(k);
-                if (merged.length >= MAX_TOTAL) { truncated = true; break; }
-                merged.push(item);
+            done += 1;
+            if (!ok) { failed += 1; }
+            sinceFlush += 1;
+            opts.onProgress?.({ done, total, sourceName: source.bookSourceName, ok, failed });
+            if (sinceFlush >= FLUSH_EVERY) { flush(); }
+        };
+
+        // 自定义调度: 支持暂停(不启动新源)与取消
+        let next = 0;
+        const worker = async (): Promise<void> => {
+            while (!cancelled()) {
+                if (control) { await control.waitIfPaused(); }
+                if (cancelled()) { return; }
+                const idx = next++;
+                if (idx >= list.length) { return; }
+                await runOne(list[idx]);
             }
-        }
+        };
+        const workers = Math.max(1, Math.min(CONCURRENCY, list.length));
+        await Promise.all(Array.from({ length: workers }, () => worker()));
+        flush();
 
         // 相关性排序 + 书源顺序保持
         const order = new Map(list.map((s, i) => [s.id, i]));
@@ -183,7 +266,7 @@ export class SearchService {
             return oa - ob;
         });
 
-        // 一轮搜索只写一次盘: 累计连续失败 / 自动判失效 / 成功后自动恢复
+        // 一轮搜索只写一次盘: 累计失败 / 自动判失效 / 成功后自动恢复
         const rec = await this.sources.recordResults(outcomes);
 
         return {
@@ -191,7 +274,7 @@ export class SearchService {
             errors,
             sourceCount: list.length,
             truncated,
-            skippedSources,
+            skippedSources: 0,
             recorded: outcomes.length,
             deadAdded: rec.died,
             revived: rec.revived,

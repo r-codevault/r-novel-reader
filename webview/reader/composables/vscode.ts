@@ -197,6 +197,8 @@ export const state = reactive({
   searchDeadAdded: 0,
   /** 搜索进度(每完成一个源更新) */
   searchProgress: null as null | { done: number; total: number; sourceName: string; ok: boolean; failed: number },
+  /** 用户暂停中的搜索 */
+  searchPaused: false,
   /** 书源管理: 正在编辑的 sourceId(空 = 无) */
   sourceEditingId: '',
 });

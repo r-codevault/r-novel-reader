@@ -194,6 +194,23 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.notes = state.notes.filter(function (n) { return n.id !== id; });
       break;
     }
+    case 'searchBatch': {
+      const m = msg as { token?: number; items?: typeof state.searchResults; errors?: typeof state.searchErrors };
+      if (m.token !== undefined && m.token !== state.searchToken) { break; }
+      const seenUrls = new Set(state.searchResults.map(function (i) { return i.bookUrl; }));
+      for (const item of m.items || []) {
+        if (seenUrls.has(item.bookUrl)) { continue; }
+        seenUrls.add(item.bookUrl);
+        state.searchResults.push(item);
+      }
+      const seenErr = new Set(state.searchErrors.map(function (e) { return e.sourceId; }));
+      for (const e of m.errors || []) {
+        if (seenErr.has(e.sourceId)) { continue; }
+        seenErr.add(e.sourceId);
+        state.searchErrors.push(e);
+      }
+      break;
+    }
     case 'searchProgress': {
       const m = msg as { token?: number; done?: number; total?: number; sourceName?: string; ok?: boolean; failed?: number };
       if (m.token !== undefined && m.token !== state.searchToken) { break; }
@@ -218,6 +235,7 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.searchSkipped = m.skippedSources || 0;
       state.searchDeadAdded = (m.deadAdded || []).length;
       state.searchProgress = null;
+      state.searchPaused = false;
       state.searchDone = !!m.done;
       state.searching = false;
       break;

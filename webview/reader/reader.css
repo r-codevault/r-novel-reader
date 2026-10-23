@@ -731,6 +731,12 @@
     color: var(--accent-fg); background: var(--accent); border: 1px solid transparent; border-radius: 6px;
   }
   .src-go:disabled { opacity: .55; cursor: default; }
+  .src-pause {
+    flex: none; padding: 6px 12px; cursor: pointer; font-family: inherit; font-size: var(--ui-font);
+    color: var(--fg); background: var(--sp-control-bg);
+    border: 1px solid var(--sp-border-strong); border-radius: 6px;
+  }
+  .src-pause:hover { border-color: var(--accent); color: var(--accent); }
 
   #sourcePopup .src-search-body { display: flex; flex-direction: column; overflow: hidden; }
   .src-search-body > .src-search,
@@ -745,6 +751,15 @@
     overscroll-behavior: auto;
   }
   .src-hint { padding: 8px 18px 2px; font-size: var(--ui-font-sub); color: var(--fg-muted); }
+  /* 进度行固定高度 + 源名省略: 避免每个源名字长短不同导致面板高度抖动 */
+  .src-progress {
+    display: flex; align-items: center; gap: 6px;
+    height: 20px; padding-top: 6px; padding-bottom: 0;
+    white-space: nowrap; overflow: hidden;
+  }
+  .src-progress-prefix, .src-progress-count, .src-progress-fail { flex: none; }
+  .src-progress-count { font-variant-numeric: tabular-nums; color: var(--fg); }
+  .src-progress-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .src-hint b { font-weight: 600; color: var(--fg); }
   .src-ok { color: var(--charts-green, #2ea043); }
   .src-bad { color: var(--danger); }

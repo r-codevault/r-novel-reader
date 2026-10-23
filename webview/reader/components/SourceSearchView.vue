@@ -35,8 +35,16 @@ function doSearch(): void {
   state.searchSkipped = 0;
   state.searchDeadAdded = 0;
   state.searchProgress = null;
+  state.searchPaused = false;
   state.searchToken += 1;
   send({ type: 'sourceSearch', key, token: state.searchToken });
+}
+
+/** 暂停/继续: 只影响"是否启动新源", 已在途的会完成 */
+function togglePause(): void {
+  if (!state.searching) { return; }
+  state.searchPaused = !state.searchPaused;
+  send({ type: 'sourceSearchPause', token: state.searchToken, paused: state.searchPaused });
 }
 
 function goManage(): void {
@@ -56,6 +64,9 @@ function goDead(): void {
       <button class="src-go" :disabled="state.searching || noSearchable" data-src-go @click="doSearch">
         {{ state.searching ? '搜索中…' : '搜索' }}
       </button>
+      <button v-if="state.searching" class="src-pause" data-src-pause @click="togglePause">
+        {{ state.searchPaused ? '继续' : '暂停' }}
+      </button>
     </div>
 
     <div v-if="noSource" class="popup-empty src-empty">
@@ -72,12 +83,13 @@ function goDead(): void {
     </div>
 
     <template v-else>
-      <div v-if="state.searching" class="src-hint" data-src-progress>
+      <div v-if="state.searching" class="src-hint src-progress" data-src-progress>
         <template v-if="state.searchProgress">
-          正在搜索 {{ state.searchProgress.done }}/{{ state.searchProgress.total }}
-          · 刚完成 <b>{{ state.searchProgress.sourceName }}</b>
+          <span class="src-progress-prefix">{{ state.searchPaused ? '已暂停' : '正在搜索' }}</span>
+          <span class="src-progress-count">{{ state.searchProgress.done }}/{{ state.searchProgress.total }}</span>
+          <span class="src-progress-name" :title="state.searchProgress.sourceName">刚完成 {{ state.searchProgress.sourceName }}</span>
           <span :class="state.searchProgress.ok ? 'src-ok' : 'src-bad'">{{ state.searchProgress.ok ? '✓' : '✗' }}</span>
-          <span v-if="state.searchProgress.failed > 0" class="src-skip"> · 失败 {{ state.searchProgress.failed }}</span>
+          <span v-if="state.searchProgress.failed > 0" class="src-skip src-progress-fail">失败 {{ state.searchProgress.failed }}</span>
         </template>
         <template v-else>正在准备搜索…</template>
       </div>
@@ -87,10 +99,10 @@ function goDead(): void {
       <div v-else-if="state.searchDone" class="src-hint">
         {{ resultSummary(state.searchResults, state.searchErrors.length) }}
         <span v-if="state.searchDeadAdded > 0" class="src-skip">· {{ state.searchDeadAdded }} 个源失败已移入失效</span>
-        <span v-if="state.searchSkipped > 0" class="src-skip">（另有 {{ state.searchSkipped }} 个书源未参与: 单次最多搜 100 个）</span>
+        <span v-if="state.searchSkipped > 0" class="src-skip">（另有 {{ state.searchSkipped }} 个书源未参与）</span>
       </div>
 
-      <div v-if="state.searchErrors.length" class="src-errors" data-src-errors>
+      <div v-if="state.searchDone && state.searchErrors.length" class="src-errors" data-src-errors>
         <span class="src-error-line">
           {{ state.searchErrors.length }} 个书源搜索失败{{ errorNames }}；失败的源已移入失效
         </span>
