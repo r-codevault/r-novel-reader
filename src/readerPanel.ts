@@ -86,7 +86,10 @@ type WebviewMessage =
     | { type: 'sourceRemove'; id: string }
     | { type: 'sourceUpdate'; id: string; name?: string; searchUrl?: string }
     | { type: 'sourceExport' }
-    | { type: 'sourceCheck'; id?: string };
+    | { type: 'sourceCheck'; id?: string; scope?: 'active' | 'dead' | 'all' }
+    | { type: 'sourceRevive'; id: string }
+    | { type: 'sourceClearDead' }
+    | { type: 'sourceSetEnabled'; patches: { id: string; enabled: boolean }[] };
 
 /** 窗口重开时的恢复信息(VS Code 持久化 webview 状态用) */
 export interface ReaderPanelState {
@@ -120,11 +123,20 @@ export interface BookSourceApi {
     setEnabled(id: string, enabled: boolean): Promise<void>;
     update(id: string, patch: { name?: string; searchUrl?: string }): Promise<BookSourceView | undefined>;
     exportText(): string;
+    /** 恢复失效源(清标记, 不检查) */
+    revive(id: string): Promise<boolean>;
+    /** 清除全部失效源(删除数据), 返回删除条数 */
+    clearDead(): Promise<number>;
+    /** 失效源数量(清除前确认用) */
+    deadCount(): number;
+    /** 批量启停(全选/反选/全部停用) */
+    setEnabledMany(patches: { id: string; enabled: boolean }[]): Promise<number>;
     /** 搜索; token 原样回传, 供 webview 丢弃过期结果 */
     search(key: string, sourceIds: string[] | undefined): Promise<{
         items: SearchBookItem[];
         errors: SourceSearchError[];
         skippedSources: number;
+        deadAdded: string[];
     }>;
     /** 触发导入交互(url/clipboard/file), 由扩展实现弹窗与下载 */
     importInteractive?: (mode: 'url' | 'clipboard' | 'file') => Promise<void>;
@@ -641,6 +653,7 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                         items: out.items,
                         errors: out.errors,
                         skippedSources: out.skippedSources,
+                        deadAdded: out.deadAdded,
                         done: true,
                     });
                 }, (err: unknown) => {
@@ -672,9 +685,39 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                 void vscode.commands.executeCommand('novelReader.exportSources');
                 break;
             case 'sourceCheck':
-                void vscode.commands.executeCommand('novelReader.checkSources', msg.id);
+                // 兼容旧调用: 只传 id 时按单源检查
+                void vscode.commands.executeCommand('novelReader.checkSources',
+                    msg.scope ? { id: msg.id, scope: msg.scope } : msg.id);
+                break;
+            case 'sourceRevive':
+                void ReaderPanel.bookSources?.revive(msg.id).then(() => this.postSources());
+                break;
+            case 'sourceClearDead':
+                void this._clearDeadSources();
+                break;
+            case 'sourceSetEnabled':
+                void ReaderPanel.bookSources
+                    ?.setEnabledMany(msg.patches || [])
+                    .then(() => this.postSources());
                 break;
         }
+    }
+
+    /** 清除全部失效书源: 模态确认后删除 */
+    private async _clearDeadSources(): Promise<void> {
+        const api = ReaderPanel.bookSources;
+        if (!api) { return; }
+        const total = api.deadCount();
+        if (total <= 0) { return; }
+        const pick = await vscode.window.showWarningMessage(
+            '确定清除 ' + total + ' 个失效书源吗？清除后需要重新导入才能恢复。',
+            { modal: true },
+            '删除'
+        );
+        if (pick !== '删除') { return; }
+        const removed = await api.clearDead();
+        this.postSources();
+        void vscode.window.showInformationMessage('已清除 ' + removed + ' 个失效书源');
     }
 
     /** 推送书源列表(精简视图) */

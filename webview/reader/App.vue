@@ -426,6 +426,44 @@ function onWheel(e: WheelEvent): void {
   if (next !== cur) { persistSettings({ fontSize: next }); }
 }
 
+// 弹窗/浮层根节点: 命中即认为滚轮发生在浮层内
+const OVERLAY_SEL = '.popup, #catalogPanel, #settingsPanel, .note-preview, .note-composer';
+/** 已登记的纵向滚动容器(新增浮层时记得补) */
+const SCROLLER_SEL = '.popup-body, .cat-body, #settingsPanel, .note-preview';
+
+function isScrollableY(el: HTMLElement | null): boolean {
+  if (!el) { return false; }
+  if (el.scrollHeight <= el.clientHeight + 1) { return false; }
+  let oy = '';
+  try { oy = getComputedStyle(el).overflowY || ''; } catch { oy = ''; }
+  // happy-dom 无布局/无计算样式时 oy 为空 -> 只看几何, 便于冒烟断言
+  return oy === '' || oy === 'auto' || oy === 'scroll' || oy === 'overlay';
+}
+
+function nearestScroller(start: HTMLElement | null): HTMLElement | null {
+  for (let el: HTMLElement | null = start; el && el !== document.body; el = el.parentElement) {
+    if (el.matches && el.matches(SCROLLER_SEL)) { return isScrollableY(el) ? el : null; }
+    if (isScrollableY(el)) { return el; } // 兜底: 未登记的滚动容器
+  }
+  return null;
+}
+
+/**
+ * 阻止滚动穿透: 浮层内滚不动/已到边界时吞掉滚轮, 背后正文不再跟着滚。
+ * CSS 的 overscroll-behavior 只能挡"容器内到底", 挡不住"容器根本不可滚"。
+ */
+function onWheelGuard(e: WheelEvent): void {
+  if (e.defaultPrevented || e.ctrlKey || e.metaKey) { return; } // Ctrl+滚轮交给字号缩放
+  const target = e.target as HTMLElement | null;
+  if (!target || !target.closest || !target.closest(OVERLAY_SEL)) { return; }
+  const scroller = nearestScroller(target);
+  if (!scroller) { e.preventDefault(); return; }
+  if (e.deltaY === 0) { return; }
+  const atTop = scroller.scrollTop <= 0;
+  const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+  if ((e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) { e.preventDefault(); }
+}
+
 // ---------------------------------------------------------------- 生命周期
 onMounted(function () {
   window.addEventListener('message', function (e: MessageEvent) {
@@ -436,6 +474,7 @@ onMounted(function () {
   // 任何 click 冒泡到 document 都清掉"吞点击"标志(段落 click handler 先于它执行)
   document.addEventListener('click', function () { setSuppressParaClick(false); });
   document.addEventListener('wheel', onWheel, { passive: false, capture: true });
+  document.addEventListener('wheel', onWheelGuard, { passive: false, capture: true });
   window.addEventListener('resize', function () {
     readerRef.value?.positionHandles();
   });

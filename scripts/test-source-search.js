@@ -234,6 +234,196 @@ const realFetch = globalThis.fetch;
   }
 
   globalThis.fetch = realFetch;
+  // 12) 连续 2 次搜索失败 -> 判失效 -> 第三次不再参与搜索
+  {
+    const store = await makeStore();
+    const BAD = {
+      bookSourceName: '坏源', bookSourceUrl: 'https://bad.example.com',
+      searchUrl: 'https://bad.example.com/s?q={{key}}',
+      ruleSearch: { bookList: '.item', name: '.name@text', bookUrl: 'a@href' },
+    };
+    await store.importText(JSON.stringify([HTML_SOURCE, BAD]));
+    const badId = store.list().find((s) => s.bookSourceName === '坏源').id;
+
+    globalThis.fetch = async (url) => {
+      if (String(url).indexOf('bad.example.com') >= 0) { return makeResponse(404, 'not found'); }
+      return makeResponse(200, fx.SEARCH_HTML);
+    };
+    const service = new SearchService(store);
+
+    let out = await service.search('遮天');
+    assert.strictEqual(out.sourceCount, 2);
+    assert.strictEqual(store.get(badId).failStreak, 1, '第 1 次失败只计数');
+    assert.strictEqual(store.deadList().length, 0);
+    assert.deepStrictEqual(out.deadAdded, []);
+
+    out = await service.search('遮天');
+    assert.strictEqual(store.deadList().length, 1, '第 2 次失败应判失效');
+    assert.deepStrictEqual(out.deadAdded, [badId], '回包应告知新失效的源');
+
+    out = await service.search('遮天');
+    assert.strictEqual(out.sourceCount, 1, '失效源第三次不再参与');
+    assert.strictEqual(out.errors.length, 0, '不再为失效源报错');
+    assert.strictEqual(store.get(badId).failStreak, 2, '失效后不应继续累加');
+
+    // 健康源不受影响
+    const okId = store.list().find((s) => s.bookSourceName === 'HTML站').id;
+    assert.strictEqual(store.get(okId).failStreak, 0, '健康源失败计数应保持 0');
+  }
+
+  // 13) 已取消(signal 预 abort)的搜索不写回任何检查结果
+  {
+    const store = await makeStore();
+    await store.importText(JSON.stringify([HTML_SOURCE]));
+    const id = store.list()[0].id;
+    globalThis.fetch = async () => { throw new Error('不应发请求'); };
+    const controller = new AbortController();
+    controller.abort();
+    const out = await new SearchService(store).search('遮天', { signal: controller.signal });
+    assert.strictEqual(out.sourceCount, 1, '源仍计入本次范围');
+    assert.strictEqual(store.get(id).lastCheck, undefined, '取消的搜索不应写回检查结果');
+    assert.strictEqual(store.get(id).failStreak, 0);
+  }
+
+  // 14) 显式指定 ids 时, 失效/停用源被过滤
+  {
+    const store = await makeStore();
+    await store.importText(JSON.stringify([HTML_SOURCE, JSON_SOURCE, {
+      bookSourceName: '停用源', bookSourceUrl: 'https://off.example.com',
+      enabled: false, searchUrl: 'https://off.example.com/s?q={{key}}',
+      ruleSearch: { bookList: '.x' },
+    }]));
+    const htmlId = store.list().find((s) => s.bookSourceName === 'HTML站').id;
+    const jsonId = store.list().find((s) => s.bookSourceName === 'JSON站').id;
+    const offId = store.list().find((s) => s.bookSourceName === '停用源').id;
+
+    // 让 JSON 源连续失败 2 次判失效
+    await store.recordResults([
+      { id: jsonId, ok: false, message: 'x' },
+      { id: jsonId, ok: false, message: 'y' },
+    ]);
+    assert.strictEqual(store.deadList().length, 1);
+
+    globalThis.fetch = async () => makeResponse(200, fx.SEARCH_HTML);
+    const out = await new SearchService(store).search('遮天', { sourceIds: [htmlId, jsonId, offId] });
+    assert.strictEqual(out.sourceCount, 1, '失效/停用源不应参与');
+  }
+
+  // 15) 搜索结果回写: 健康源记录命中信息, 且只写一次盘
+  {
+    let file = null;
+    let writes = 0;
+    const store = new BookSourceStore({
+      read: async () => file,
+      write: async (t) => { file = t; writes += 1; },
+    });
+    await store.load();
+    await store.importText(JSON.stringify([HTML_SOURCE]));
+    const before = writes;
+    globalThis.fetch = async () => makeResponse(200, fx.SEARCH_HTML);
+    const out = await new SearchService(store).search('遮天');
+    assert.strictEqual(out.recorded, 1);
+    assert.strictEqual(writes, before + 1, '一轮搜索应只写盘一次');
+    const item = store.list()[0];
+    assert.strictEqual(item.lastCheckOk, true);
+    assert.strictEqual(item.lastCheckMessage, '命中 3 条');
+  }
+
+  // 12) 连续 2 次搜索失败 -> 判失效 -> 第三次不再参与搜索
+  {
+    const store = await makeStore();
+    const BAD = {
+      bookSourceName: '坏源', bookSourceUrl: 'https://bad.example.com',
+      searchUrl: 'https://bad.example.com/s?q={{key}}',
+      ruleSearch: { bookList: '.item', name: '.name@text', bookUrl: 'a@href' },
+    };
+    await store.importText(JSON.stringify([HTML_SOURCE, BAD]));
+    const badId = store.list().find((s) => s.bookSourceName === '坏源').id;
+
+    globalThis.fetch = async (url) => {
+      if (String(url).indexOf('bad.example.com') >= 0) { return makeResponse(404, 'not found'); }
+      return makeResponse(200, fx.SEARCH_HTML);
+    };
+    const service = new SearchService(store);
+
+    let out = await service.search('遮天');
+    assert.strictEqual(out.sourceCount, 2);
+    assert.strictEqual(store.get(badId).failStreak, 1, '第 1 次失败只计数');
+    assert.strictEqual(store.deadList().length, 0);
+    assert.deepStrictEqual(out.deadAdded, []);
+
+    out = await service.search('遮天');
+    assert.strictEqual(store.deadList().length, 1, '第 2 次失败应判失效');
+    assert.deepStrictEqual(out.deadAdded, [badId], '回包应告知新失效的源');
+
+    out = await service.search('遮天');
+    assert.strictEqual(out.sourceCount, 1, '失效源第三次不再参与');
+    assert.strictEqual(out.errors.length, 0, '不再为失效源报错');
+    assert.strictEqual(store.get(badId).failStreak, 2, '失效后不应继续累加');
+
+    // 健康源不受影响
+    const okId = store.list().find((s) => s.bookSourceName === 'HTML站').id;
+    assert.strictEqual(store.get(okId).failStreak, 0, '健康源失败计数应保持 0');
+  }
+
+  // 13) 已取消(signal 预 abort)的搜索不写回任何检查结果
+  {
+    const store = await makeStore();
+    await store.importText(JSON.stringify([HTML_SOURCE]));
+    const id = store.list()[0].id;
+    globalThis.fetch = async () => { throw new Error('不应发请求'); };
+    const controller = new AbortController();
+    controller.abort();
+    const out = await new SearchService(store).search('遮天', { signal: controller.signal });
+    assert.strictEqual(out.sourceCount, 1, '源仍计入本次范围');
+    assert.strictEqual(store.get(id).lastCheck, undefined, '取消的搜索不应写回检查结果');
+    assert.strictEqual(store.get(id).failStreak, 0);
+  }
+
+  // 14) 显式指定 ids 时, 失效/停用源被过滤
+  {
+    const store = await makeStore();
+    await store.importText(JSON.stringify([HTML_SOURCE, JSON_SOURCE, {
+      bookSourceName: '停用源', bookSourceUrl: 'https://off.example.com',
+      enabled: false, searchUrl: 'https://off.example.com/s?q={{key}}',
+      ruleSearch: { bookList: '.x' },
+    }]));
+    const htmlId = store.list().find((s) => s.bookSourceName === 'HTML站').id;
+    const jsonId = store.list().find((s) => s.bookSourceName === 'JSON站').id;
+    const offId = store.list().find((s) => s.bookSourceName === '停用源').id;
+
+    // 让 JSON 源连续失败 2 次判失效
+    await store.recordResults([
+      { id: jsonId, ok: false, message: 'x' },
+      { id: jsonId, ok: false, message: 'y' },
+    ]);
+    assert.strictEqual(store.deadList().length, 1);
+
+    globalThis.fetch = async () => makeResponse(200, fx.SEARCH_HTML);
+    const out = await new SearchService(store).search('遮天', { sourceIds: [htmlId, jsonId, offId] });
+    assert.strictEqual(out.sourceCount, 1, '失效/停用源不应参与');
+  }
+
+  // 15) 搜索结果回写: 健康源记录命中信息, 且只写一次盘
+  {
+    let file = null;
+    let writes = 0;
+    const store = new BookSourceStore({
+      read: async () => file,
+      write: async (t) => { file = t; writes += 1; },
+    });
+    await store.load();
+    await store.importText(JSON.stringify([HTML_SOURCE]));
+    const before = writes;
+    globalThis.fetch = async () => makeResponse(200, fx.SEARCH_HTML);
+    const out = await new SearchService(store).search('遮天');
+    assert.strictEqual(out.recorded, 1);
+    assert.strictEqual(writes, before + 1, '一轮搜索应只写盘一次');
+    const item = store.list()[0];
+    assert.strictEqual(item.lastCheckOk, true);
+    assert.strictEqual(item.lastCheckMessage, '命中 3 条');
+  }
+
   console.log('书源搜索测试全部通过 ✔');
 })().catch((err) => {
   globalThis.fetch = realFetch;

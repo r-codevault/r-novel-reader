@@ -115,6 +115,11 @@ export interface BookSourceView {
   lastCheck?: number;
   lastCheckOk?: boolean;
   lastCheckMessage?: string;
+  /** 连续失败次数(检查/搜索), 成功清零 */
+  failStreak: number;
+  /** >0 = 失效(不参与搜索, 只在「失效」Tab 出现) */
+  deadAt?: number;
+  deadReason?: string;
 }
 
 /** 搜索结果条目 */
@@ -176,12 +181,10 @@ export const state = reactive({
   pendingNoteJump: null as NoteItem | null,
   // ---- 网络书源
   sourceOpen: false,
-  /** 书源弹窗内的视图: 搜索 / 管理 */
-  sourceView: 'search' as 'search' | 'manage',
+  /** 书源弹窗内的视图: 搜索 / 书源管理 / 失效书源 */
+  sourceView: 'search' as 'search' | 'manage' | 'dead',
   sources: [] as BookSourceView[],
   searchKeyword: '',
-  /** 空数组 = 搜索全部已启用书源 */
-  searchSourceIds: [] as string[],
   searching: false,
   /** 搜索序号: 扩展回包时比对, 丢弃过期结果 */
   searchToken: 0,
@@ -192,10 +195,6 @@ export const state = reactive({
   searchSkipped: 0,
   /** 书源管理: 正在编辑的 sourceId(空 = 无) */
   sourceEditingId: '',
-  /** 搜索书源选择弹窗(书源上千时用它全选/反选) */
-  sourcePickerOpen: false,
-  sourcePickerFilter: '',
-  sourcePickerDraft: [] as string[],
 });
 
 /** 发消息给扩展(自由格式, 字段与协议一一对应) */

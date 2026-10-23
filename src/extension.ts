@@ -22,7 +22,7 @@ import { moveToTrash } from './trash';
 import { ReadingSettings, SettingsStore } from './settings';
 import { decodeBuffer } from './encoding';
 import { SlackerController } from './slacker';
-import { BookSourceStore, LEGACY_BOOK_SOURCES_KEY, parseSourceText, toSourceView } from './bookSource';
+import { BookSource, BookSourceStore, LEGACY_BOOK_SOURCES_KEY, parseSourceText, toSourceView } from './bookSource';
 import { SearchService } from './online/searchService';
 import { buildSearchRequest } from './online/searchUrl';
 import { parseSearchPage } from './online/ruleApply';
@@ -375,15 +375,28 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     }
 
-    /** 书源可用性检查: 用测试关键词搜一次, 看是否出结果 */
-    async function checkBookSources(id?: string): Promise<void> {
-        const targets = id
-            ? [bookSources.get(id)].filter((x): x is NonNullable<typeof x> => !!x)
-            : bookSources.enabled().slice(0, 20);
+    type CheckScope = 'active' | 'dead' | 'all';
+    /** 书源可用性检查: 用测试关键词搜一次, 看是否出结果(结果批量落盘) */
+    async function checkBookSources(arg?: string | { id?: string; scope?: CheckScope }): Promise<void> {
+        const id = typeof arg === 'string' ? arg : arg?.id;
+        const scope: CheckScope = (typeof arg === 'object' && arg?.scope) || 'active';
+        let targets: BookSource[];
+        if (id) {
+            const one = bookSources.get(id);
+            targets = one ? [one] : [];
+        } else if (scope === 'dead') {
+            targets = bookSources.deadList();
+        } else if (scope === 'all') {
+            targets = bookSources.list().slice(0, 200);
+        } else {
+            targets = bookSources.searchable().slice(0, 20);
+        }
         if (!targets.length) {
             void vscode.window.showInformationMessage('没有可检查的书源');
             return;
         }
+
+        const results: { id: string; ok: boolean; message: string }[] = [];
         await vscode.window.withProgress(
             { location: vscode.ProgressLocation.Notification, title: '检查书源可用性', cancellable: false },
             async (progress) => {
@@ -399,14 +412,15 @@ export function activate(context: vscode.ExtensionContext): void {
                             timeoutMs: 12000,
                         });
                         const items = await parseSearchPage(source, res.text, res.url, sandboxHttpFor(source, sourcePool));
-                        await bookSources.markCheck(source.id, true, items.length ? '命中 ' + items.length + ' 条' : '可请求, 但未命中结果');
+                        results.push({ id: source.id, ok: true, message: items.length ? '命中 ' + items.length + ' 条' : '可请求, 但未命中结果' });
                     } catch (err) {
-                        const message = err instanceof Error ? err.message : String(err);
-                        await bookSources.markCheck(source.id, false, message);
+                        results.push({ id: source.id, ok: false, message: err instanceof Error ? err.message : String(err) });
                     }
                 }
             }
         );
+        // 一次写盘: 连续 2 次失败会自动判失效, 成功则清零/自动恢复
+        await bookSources.recordResults(results);
         ReaderPanel.current?.postSources();
     }
 
@@ -427,11 +441,20 @@ export function activate(context: vscode.ExtensionContext): void {
             return toSourceView(next);
         },
         exportText: () => bookSources.exportText(),
-        search: (key, sourceIds) => searchService.search(key, { sourceIds }).then((out) => ({
-            items: out.items,
-            errors: out.errors,
-            skippedSources: out.skippedSources,
-        })),
+        revive: (id) => bookSources.revive(id),
+        clearDead: () => bookSources.clearDead(),
+        deadCount: () => bookSources.deadList().length,
+        setEnabledMany: (patches) => bookSources.setEnabledMany(patches),
+        search: (key, sourceIds) => searchService.search(key, { sourceIds }).then((out) => {
+            // 失效/恢复有变化时立刻刷新列表(避免用户还要手动刷新)
+            if (out.recorded > 0) { ReaderPanel.current?.postSources(); }
+            return {
+                items: out.items,
+                errors: out.errors,
+                skippedSources: out.skippedSources,
+                deadAdded: out.deadAdded,
+            };
+        }),
         importInteractive: importSourcesInteractive,
     };
 
@@ -476,7 +499,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('novelReader.importSourceFromUrl', () => importSourcesInteractive('url')),
         vscode.commands.registerCommand('novelReader.importSourceFromClipboard', () => importSourcesInteractive('clipboard')),
         vscode.commands.registerCommand('novelReader.importSourceFromFile', () => importSourcesInteractive('file')),
-        vscode.commands.registerCommand('novelReader.checkSources', (id?: string) => checkBookSources(id)),
+        vscode.commands.registerCommand('novelReader.checkSources', (arg?: string | { id?: string; scope?: 'active' | 'dead' | 'all' }) => checkBookSources(arg)),
         vscode.commands.registerCommand('novelReader.exportSources', async () => {
             const picked = await vscode.window.showSaveDialog({
                 title: '导出书源',

@@ -3,7 +3,27 @@
  */
 import type { BookSourceView, SearchBookItem } from './vscode';
 
-/** 已启用书源 */
+/** 是否已失效(deadAt 是唯一事实源) */
+export function isDead(s: { deadAt?: number }): boolean {
+  return typeof s.deadAt === 'number' && (s.deadAt as number) > 0;
+}
+
+/** 未失效的书源(「书源」Tab 列表用) */
+export function aliveSources(sources: BookSourceView[]): BookSourceView[] {
+  return sources.filter(function (s) { return !isDead(s); });
+}
+
+/** 已启用且未失效(参与搜索) */
+export function searchableSources(sources: BookSourceView[]): BookSourceView[] {
+  return sources.filter(function (s) { return s.enabled && !isDead(s); });
+}
+
+/** 失效书源 */
+export function deadSources(sources: BookSourceView[]): BookSourceView[] {
+  return sources.filter(isDead);
+}
+
+/** 已启用书源(含失效, 仅用于统计展示) */
 export function enabledSources(sources: BookSourceView[]): BookSourceView[] {
   return sources.filter(function (s) { return s.enabled; });
 }
@@ -18,9 +38,10 @@ export function filterSources(sources: BookSourceView[], keyword: string): BookS
   });
 }
 
-export type CheckStatus = 'ok' | 'bad' | 'unknown';
+export type CheckStatus = 'ok' | 'bad' | 'dead' | 'unknown';
 
 export function checkStatus(s: BookSourceView): CheckStatus {
+  if (isDead(s)) { return 'dead'; }
   if (s.lastCheckOk === true) { return 'ok'; }
   if (s.lastCheckOk === false) { return 'bad'; }
   return 'unknown';
@@ -28,6 +49,7 @@ export function checkStatus(s: BookSourceView): CheckStatus {
 
 export function statusText(s: BookSourceView): string {
   const status = checkStatus(s);
+  if (status === 'dead') { return '失效'; }
   if (status === 'ok') { return '可用'; }
   if (status === 'bad') { return '不可用'; }
   return '未检查';
@@ -67,23 +89,10 @@ export function resultSummary(items: SearchBookItem[], errors: number): string {
   return parts.join(' · ');
 }
 
-/** 选中书源的展示文案 */
-export function selectedSourcesText(selected: string[], sources: BookSourceView[]): string {
-  if (!selected.length) {
-    const total = enabledSources(sources).length;
-    return total ? '全部已启用书源（' + total + ' 个）' : '全部已启用书源';
-  }
-  if (selected.length === 1) {
-    const hit = sources.find(function (s) { return s.id === selected[0]; });
-    return hit ? hit.name : '1 个书源';
-  }
-  return selected.length + ' 个书源';
-}
-
-/** 切换某个书源的选中态(空数组代表"全部", 选中具体源后从全集中收敛) */
-export function toggleSourceSelection(selected: string[], id: string): string[] {
-  if (selected.indexOf(id) >= 0) {
-    return selected.filter(function (x) { return x !== id; });
-  }
-  return selected.concat([id]);
+/** 失败源名字摘要(最多 3 个) */
+export function failedNames(names: string[]): string {
+  const list = names.filter(Boolean);
+  if (!list.length) { return ''; }
+  const head = list.slice(0, 3).join('、');
+  return '（' + head + (list.length > 3 ? ' 等' : '') + '）';
 }

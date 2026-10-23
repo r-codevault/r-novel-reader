@@ -9,6 +9,19 @@
  */
 import * as crypto from 'crypto';
 
+/** 连续失败多少次判定失效 */
+export const FAIL_THRESHOLD = 2;
+
+/** 失效判定: deadAt 是唯一事实源 */
+export function isDead(s: { deadAt?: number }): boolean {
+    return typeof s.deadAt === 'number' && s.deadAt > 0;
+}
+
+export function failStreakOf(s: { failStreak?: number }): number {
+    const n = s.failStreak;
+    return typeof n === 'number' && isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
 export interface RuleSearch {
     bookList?: string;
     name?: string;
@@ -73,6 +86,12 @@ export interface BookSource {
     lastCheck?: number;
     lastCheckOk?: boolean;
     lastCheckMessage?: string;
+    /** 连续失败次数(检查/搜索), 任意一次成功清零 */
+    failStreak?: number;
+    /** >0 = 失效(自动退出搜索, 只在「失效」Tab 出现) */
+    deadAt?: number;
+    /** 失效原因(最近一次失败信息) */
+    deadReason?: string;
     [extra: string]: unknown;
 }
 
@@ -87,6 +106,9 @@ export interface BookSourceView {
     lastCheck?: number;
     lastCheckOk?: boolean;
     lastCheckMessage?: string;
+    failStreak: number;
+    deadAt?: number;
+    deadReason?: string;
 }
 
 export function toSourceView(s: BookSource): BookSourceView {
@@ -100,6 +122,9 @@ export function toSourceView(s: BookSource): BookSourceView {
         lastCheck: s.lastCheck,
         lastCheckOk: s.lastCheckOk,
         lastCheckMessage: s.lastCheckMessage,
+        failStreak: failStreakOf(s),
+        deadAt: isDead(s) ? s.deadAt : undefined,
+        deadReason: s.deadReason,
     };
 }
 
@@ -116,6 +141,23 @@ interface SourceFile {
 export interface BookSourceStorage {
     read(): Promise<string | null>;
     write(text: string): Promise<void>;
+}
+
+/** 单源检查/搜索结果 */
+export interface SourceResult {
+    id: string;
+    ok: boolean;
+    message?: string;
+    /** 结果时间戳, 缺省当前时间 */
+    at?: number;
+}
+
+export interface RecordOutcome {
+    /** 本次新标记失效的 id */
+    died: string[];
+    /** 本次自动恢复的 id */
+    revived: string[];
+    written: boolean;
 }
 
 export interface ImportResult {
@@ -159,6 +201,9 @@ export function normalizeSource(raw: unknown, now = Date.now()): BookSource | nu
         charset: str(o.charset),
         customOrder: typeof o.customOrder === 'number' ? o.customOrder : 0,
         addedAt: typeof o.addedAt === 'number' ? o.addedAt : now,
+        failStreak: failStreakOf({ failStreak: typeof o.failStreak === 'number' ? o.failStreak : 0 }),
+        deadAt: typeof o.deadAt === 'number' && o.deadAt > 0 ? (o.deadAt as number) : undefined,
+        deadReason: str(o.deadReason).slice(0, 300) || undefined,
     };
     const search = o.ruleSearch;
     source.ruleSearch = search && typeof search === 'object' ? (search as RuleSearch) : undefined;
@@ -251,6 +296,16 @@ function isSource(v: unknown): v is BookSource {
     return typeof o.id === 'string' && typeof o.bookSourceUrl === 'string' && typeof o.bookSourceName === 'string';
 }
 
+/** 旧文件没有失效字段: 只在内存补默认值, 不回写磁盘 */
+function hydrate(items: BookSource[]): BookSource[] {
+    return items.map((s) => ({
+        ...s,
+        failStreak: failStreakOf(s),
+        deadAt: isDead(s) ? s.deadAt : undefined,
+        deadReason: typeof s.deadReason === 'string' && s.deadReason ? s.deadReason : undefined,
+    }));
+}
+
 export class BookSourceStore {
     private _chain: Promise<unknown> = Promise.resolve();
     private items: BookSource[] = [];
@@ -270,7 +325,7 @@ export class BookSourceStore {
             if (!text) { return; }
             const parsed = JSON.parse(text) as SourceFile;
             if (parsed && parsed.v === 1 && Array.isArray(parsed.items)) {
-                this.items = parsed.items.filter(isSource);
+                this.items = hydrate(parsed.items.filter(isSource));
             }
         } catch {
             // 文件损坏: 以空表启动, 不阻断扩展
@@ -286,7 +341,7 @@ export class BookSourceStore {
         if (this.items.length > 0) { return 0; }
         const items = ((raw as SourceFile).items as unknown[]).filter(isSource) as BookSource[];
         if (!items.length) { return 0; }
-        this.items = items.slice(0, MAX_SOURCES);
+        this.items = hydrate(items.slice(0, MAX_SOURCES));
         await this._persist();
         return this.items.length;
     }
@@ -331,6 +386,16 @@ export class BookSourceStore {
         return this.list().filter((s) => s.enabled);
     }
 
+    /** 参与搜索: 已启用且未失效 */
+    searchable(): BookSource[] {
+        return this.list().filter((s) => s.enabled && !isDead(s));
+    }
+
+    /** 全部失效书源 */
+    deadList(): BookSource[] {
+        return this.list().filter((s) => isDead(s));
+    }
+
     size(): number {
         return this._read().length;
     }
@@ -340,8 +405,19 @@ export class BookSourceStore {
             const items = this._read();
             const idx = items.findIndex((s) => s.id === source.id);
             if (idx >= 0) {
-                // 保留用户本地状态(enabled / addedAt / 检查结果)
-                items[idx] = { ...source, enabled: items[idx].enabled, addedAt: items[idx].addedAt };
+                // 保留用户本地状态与运行态(启用/登记时间/检查结果/失效判定)
+                const old = items[idx];
+                items[idx] = {
+                    ...source,
+                    enabled: old.enabled,
+                    addedAt: old.addedAt,
+                    lastCheck: old.lastCheck,
+                    lastCheckOk: old.lastCheckOk,
+                    lastCheckMessage: old.lastCheckMessage,
+                    failStreak: old.failStreak,
+                    deadAt: old.deadAt,
+                    deadReason: old.deadReason,
+                };
             } else {
                 items.push(source);
             }
@@ -366,17 +442,104 @@ export class BookSourceStore {
         });
     }
 
-    /** 记录一次可用性检查结果 */
-    async markCheck(id: string, ok: boolean, message: string): Promise<void> {
-        await this._enqueue(async () => {
+    /** 批量启停(全选/反选/全部停用): 一次落盘 */
+    async setEnabledMany(patches: { id: string; enabled: boolean }[]): Promise<number> {
+        if (!patches.length) { return 0; }
+        return this._enqueue(async () => {
+            const items = this._read();
+            const byId = new Map(items.map((s) => [s.id, s]));
+            let changed = 0;
+            for (const patch of patches) {
+                const target = byId.get(patch.id);
+                if (!target || target.enabled === patch.enabled) { continue; }
+                target.enabled = patch.enabled;
+                changed++;
+            }
+            if (changed > 0) { await this._write(items); }
+            return changed;
+        });
+    }
+
+    /** 清除全部失效书源(删除数据), 返回删除条数 */
+    async clearDead(): Promise<number> {
+        return this._enqueue(async () => {
+            const items = this._read();
+            const kept = items.filter((s) => !isDead(s));
+            const removed = items.length - kept.length;
+            if (removed > 0) { await this._write(kept); }
+            return removed;
+        });
+    }
+
+    /** 恢复: 清失效标记与失败计数, 保留 lastCheck*(作为历史参考) */
+    async revive(id: string): Promise<boolean> {
+        return this._enqueue(async () => {
             const items = this._read();
             const target = items.find((s) => s.id === id);
-            if (!target) { return; }
-            target.lastCheck = Date.now();
-            target.lastCheckOk = ok;
-            target.lastCheckMessage = message.slice(0, 300);
+            if (!target) { return false; }
+            target.failStreak = 0;
+            delete target.deadAt;
+            delete target.deadReason;
             await this._write(items);
+            return true;
         });
+    }
+
+    /**
+     * 批量记录检查/搜索结果。
+     *  - ok: 失败计数清零, 若原本失效则自动恢复
+     *  - fail: 计数 +1, 达到阈值标失效
+     * 一轮搜索只调用一次(一次落盘); 内容无变化时不写盘。
+     */
+    async recordResults(results: SourceResult[]): Promise<RecordOutcome> {
+        if (!results.length) { return { died: [], revived: [], written: false }; }
+        return this._enqueue(async () => {
+            const items = this._read();
+            const byId = new Map(items.map((s) => [s.id, s]));
+            const died: string[] = [];
+            const revived: string[] = [];
+            const now = Date.now();
+            let changed = false;
+            for (const r of results) {
+                const t = byId.get(r.id);
+                if (!t) { continue; }
+                const at = typeof r.at === 'number' ? r.at : now;
+                const msg = (r.message || '').slice(0, 300);
+                const wasDead = isDead(t);
+                const prevStreak = failStreakOf(t);
+                if (t.lastCheck !== at || t.lastCheckOk !== r.ok || t.lastCheckMessage !== msg) { changed = true; }
+                t.lastCheck = at;
+                t.lastCheckOk = r.ok;
+                t.lastCheckMessage = msg;
+                if (r.ok) {
+                    if (prevStreak !== 0) { changed = true; }
+                    t.failStreak = 0;
+                    if (wasDead) {
+                        delete t.deadAt;
+                        delete t.deadReason;
+                        revived.push(t.id);
+                    }
+                } else {
+                    const next = prevStreak + 1;
+                    if (next !== prevStreak) { changed = true; }
+                    t.failStreak = next;
+                    if (next >= FAIL_THRESHOLD && !wasDead) {
+                        t.deadAt = at;
+                        t.deadReason = msg;
+                        died.push(t.id);
+                    } else if (wasDead && msg && t.deadReason !== msg) {
+                        t.deadReason = msg;
+                    }
+                }
+            }
+            if (changed || died.length || revived.length) { await this._write(items); }
+            return { died, revived, written: changed || died.length > 0 || revived.length > 0 };
+        });
+    }
+
+    /** 记录一次可用性检查结果 */
+    async markCheck(id: string, ok: boolean, message: string): Promise<void> {
+        await this.recordResults([{ id, ok, message }]);
     }
 
     /**
@@ -404,7 +567,17 @@ export class BookSourceStore {
             for (const src of incoming) {
                 const old = byId.get(src.id);
                 if (old) {
-                    byId.set(src.id, { ...src, enabled: old.enabled, addedAt: old.addedAt, lastCheck: old.lastCheck, lastCheckOk: old.lastCheckOk, lastCheckMessage: old.lastCheckMessage });
+                    byId.set(src.id, {
+                        ...src,
+                        enabled: old.enabled,
+                        addedAt: old.addedAt,
+                        lastCheck: old.lastCheck,
+                        lastCheckOk: old.lastCheckOk,
+                        lastCheckMessage: old.lastCheckMessage,
+                        failStreak: old.failStreak,
+                        deadAt: old.deadAt,
+                        deadReason: old.deadReason,
+                    });
                     result.updated++;
                 } else {
                     byId.set(src.id, src);
@@ -425,6 +598,9 @@ export class BookSourceStore {
                 delete out.lastCheck;
                 delete out.lastCheckOk;
                 delete out.lastCheckMessage;
+                delete out.failStreak;
+                delete out.deadAt;
+                delete out.deadReason;
                 return out;
             });
         return JSON.stringify(items, null, 2);

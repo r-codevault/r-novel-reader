@@ -10,11 +10,11 @@ const { BookSourceStore, parseSourceText, normalizeSource, sourceIdFor } = requi
 
 /** 内存存储适配器(书源已改为文件存储) */
 function memoryStore(initial) {
-  const box = { text: initial === undefined ? null : initial };
+  const box = { text: initial === undefined ? null : initial, writes: 0 };
   return {
     box,
     read: async () => box.text,
-    write: async (t) => { box.text = t; },
+    write: async (t) => { box.text = t; box.writes += 1; },
   };
 }
 
@@ -174,6 +174,456 @@ const SRC_B = {
     assert.strictEqual(moved, 1, '应迁移 1 条旧数据');
     assert.strictEqual(empty.store.size(), 1);
     assert.strictEqual(await empty.store.migrateLegacy(legacy), 0, '已有数据时不应重复迁移');
+  }
+
+  // 10) 失效判定: 连续 2 次失败才失效, 成功清零并可自动恢复
+  {
+    const { store } = await makeStore();
+    await store.importText(JSON.stringify([{ ...SRC_A, enabled: true }, SRC_B]));
+    const a = store.list().find((s) => s.bookSourceName === 'A站');
+    const b = store.list().find((s) => s.bookSourceName === 'B站');
+
+    assert.strictEqual(store.searchable().length, 2, '初始应有 2 个可搜源');
+    assert.strictEqual(store.deadList().length, 0);
+
+    let out = await store.recordResults([{ id: a.id, ok: false, message: '网络错误: fetch failed' }]);
+    assert.strictEqual(store.get(a.id).failStreak, 1, '第 1 次失败只计数');
+    assert.deepStrictEqual(out.died, [], '第 1 次失败不应判失效');
+    assert.strictEqual(store.deadList().length, 0);
+
+    out = await store.recordResults([{ id: a.id, ok: false, message: '网络错误: fetch failed' }]);
+    assert.deepStrictEqual(out.died, [a.id], '第 2 次失败应判失效');
+    assert.ok(store.get(a.id).deadAt > 0);
+    assert.strictEqual(store.get(a.id).deadReason, '网络错误: fetch failed');
+    assert.strictEqual(store.deadList().length, 1);
+    assert.strictEqual(store.searchable().length, 1, '失效源应退出搜索');
+
+    // 成功清零(未失效的 b)
+    await store.recordResults([{ id: b.id, ok: false, message: 'x' }]);
+    assert.strictEqual(store.get(b.id).failStreak, 1);
+    await store.recordResults([{ id: b.id, ok: true, message: '命中 3 条' }]);
+    assert.strictEqual(store.get(b.id).failStreak, 0, '成功应清零失败计数');
+
+    // 成功自动恢复失效源
+    out = await store.recordResults([{ id: a.id, ok: true, message: '命中 1 条' }]);
+    assert.deepStrictEqual(out.revived, [a.id], '成功后应自动恢复');
+    assert.strictEqual(store.get(a.id).deadAt, undefined);
+    assert.strictEqual(store.deadList().length, 0);
+  }
+
+  // 11) 批量一次落盘 + 无变化不写盘
+  {
+    const { store, storage } = await makeStore();
+    await store.importText(JSON.stringify([{ ...SRC_A, enabled: true }, SRC_B]));
+    const [a, b] = store.list();
+    const before = storage.box.writes;
+    await store.recordResults([
+      { id: a.id, ok: false, message: 'x' },
+      { id: b.id, ok: false, message: 'y' },
+    ]);
+    assert.strictEqual(storage.box.writes, before + 1, '多条结果应只写盘一次');
+
+    // 同样内容再写一次: 时间戳会变, 但 failStreak 已到 2 且已失效 -> 仍会更新 lastCheck
+    const pair = [
+      { id: a.id, ok: true, message: 'same', at: 111 },
+      { id: b.id, ok: true, message: 'same', at: 111 },
+    ];
+    await store.recordResults(pair);
+    const mid = storage.box.writes;
+    await store.recordResults(pair);
+    assert.strictEqual(storage.box.writes, mid, '内容无变化时不应写盘');
+  }
+
+  // 12) searchable / deadList / revive / clearDead / setEnabledMany
+  {
+    const { store } = await makeStore();
+    await store.importText(JSON.stringify([
+      { bookSourceName: '甲', bookSourceUrl: 'https://a3.com', enabled: true },
+      { bookSourceName: '乙', bookSourceUrl: 'https://b3.com', enabled: false },
+      { bookSourceName: '丙', bookSourceUrl: 'https://c3.com', enabled: true },
+    ]));
+    const byName = (n) => store.list().find((s) => s.bookSourceName === n);
+    await store.recordResults([
+      { id: byName('丙').id, ok: false, message: 'f1' },
+      { id: byName('丙').id, ok: false, message: 'f2' },
+    ]);
+    assert.deepStrictEqual(store.searchable().map((s) => s.bookSourceName), ['甲'], '停用与失效都不参与搜索');
+    assert.deepStrictEqual(store.deadList().map((s) => s.bookSourceName), ['丙']);
+
+    assert.strictEqual(await store.revive(byName('丙').id), true);
+    assert.strictEqual(store.deadList().length, 0);
+    assert.strictEqual(store.get(byName('丙').id).failStreak, 0);
+    assert.strictEqual(store.searchable().length, 2, '恢复后重新参与搜索');
+
+    // 批量启停: 一次写盘
+    const cnt = await store.setEnabledMany([
+      { id: byName('乙').id, enabled: true },
+      { id: byName('甲').id, enabled: false },
+      { id: byName('乙').id, enabled: true },
+    ]);
+    assert.strictEqual(cnt, 2, '只统计实际变化的条目');
+    assert.strictEqual(store.get(byName('乙').id).enabled, true);
+    assert.strictEqual(store.get(byName('甲').id).enabled, false);
+
+    // 清除失效
+    await store.recordResults([
+      { id: byName('丙').id, ok: false, message: 'x' },
+      { id: byName('丙').id, ok: false, message: 'y' },
+    ]);
+    assert.strictEqual(store.deadList().length, 1);
+    assert.strictEqual(await store.clearDead(), 1);
+    assert.strictEqual(store.deadList().length, 0);
+    assert.strictEqual(store.size(), 2, '清除只删失效源');
+  }
+
+  // 13) upsert 必须保留运行态字段(历史 bug: 只保留 enabled/addedAt)
+  {
+    const { store } = await makeStore();
+    await store.importText(JSON.stringify([SRC_A]));
+    const a = store.list()[0];
+    await store.recordResults([
+      { id: a.id, ok: false, message: 'e1' },
+      { id: a.id, ok: false, message: 'e2' },
+    ]);
+    const dead = store.get(a.id);
+    assert.ok(dead.deadAt > 0);
+
+    const next = { ...dead, bookSourceName: '改名后的A站', searchUrl: 'https://a.com/s2?q={{key}}' };
+    await store.upsert(next);
+    const after = store.get(a.id);
+    assert.strictEqual(after.bookSourceName, '改名后的A站', '规则/名称应更新');
+    assert.strictEqual(after.lastCheckOk, false, 'upsert 不应丢 lastCheck*');
+    assert.strictEqual(after.deadAt, dead.deadAt, 'upsert 不应清掉失效标记');
+    assert.strictEqual(after.failStreak, 2);
+
+    // 重新导入同 URL 也应保留失效态
+    await store.importText(JSON.stringify([SRC_A]));
+    assert.ok(store.get(a.id).deadAt > 0, '导入不应复活失效源');
+  }
+
+  // 14) 导出剔除运行态字段
+  {
+    const { store } = await makeStore();
+    await store.importText(JSON.stringify([SRC_A]));
+    const a = store.list()[0];
+    await store.recordResults([
+      { id: a.id, ok: false, message: 'x' },
+      { id: a.id, ok: false, message: 'y' },
+    ]);
+    const exported = JSON.parse(store.exportText())[0];
+    for (const k of ['lastCheck', 'lastCheckOk', 'lastCheckMessage', 'failStreak', 'deadAt', 'deadReason']) {
+      assert.strictEqual(exported[k], undefined, '导出不应带运行态字段: ' + k);
+    }
+    assert.ok(exported.bookSourceUrl, '导出仍应包含书源本体');
+  }
+
+  // 15) 旧文件兼容: 无新字段时按 0/未失效处理
+  {
+    const legacy = JSON.stringify({ v: 1, items: [{
+      id: 'old1', bookSourceName: '旧源', bookSourceUrl: 'https://old2.com',
+      enabled: true, addedAt: 1,
+    }] });
+    const { store } = await makeStore(legacy);
+    const s0 = store.get('old1');
+    assert.strictEqual(s0.failStreak, 0, '旧数据 failStreak 应为 0');
+    assert.strictEqual(store.deadList().length, 0, '旧数据不应被判失效');
+    assert.strictEqual(store.searchable().length, 1);
+  }
+
+  // 10) 失效判定: 连续 2 次失败才失效, 成功清零并可自动恢复
+  {
+    const { store } = await makeStore();
+    await store.importText(JSON.stringify([{ ...SRC_A, enabled: true }, SRC_B]));
+    const a = store.list().find((s) => s.bookSourceName === 'A站');
+    const b = store.list().find((s) => s.bookSourceName === 'B站');
+
+    assert.strictEqual(store.searchable().length, 2, '初始应有 2 个可搜源');
+    assert.strictEqual(store.deadList().length, 0);
+
+    let out = await store.recordResults([{ id: a.id, ok: false, message: '网络错误: fetch failed' }]);
+    assert.strictEqual(store.get(a.id).failStreak, 1, '第 1 次失败只计数');
+    assert.deepStrictEqual(out.died, [], '第 1 次失败不应判失效');
+    assert.strictEqual(store.deadList().length, 0);
+
+    out = await store.recordResults([{ id: a.id, ok: false, message: '网络错误: fetch failed' }]);
+    assert.deepStrictEqual(out.died, [a.id], '第 2 次失败应判失效');
+    assert.ok(store.get(a.id).deadAt > 0);
+    assert.strictEqual(store.get(a.id).deadReason, '网络错误: fetch failed');
+    assert.strictEqual(store.deadList().length, 1);
+    assert.strictEqual(store.searchable().length, 1, '失效源应退出搜索');
+
+    await store.recordResults([{ id: b.id, ok: false, message: 'x' }]);
+    assert.strictEqual(store.get(b.id).failStreak, 1);
+    await store.recordResults([{ id: b.id, ok: true, message: '命中 3 条' }]);
+    assert.strictEqual(store.get(b.id).failStreak, 0, '成功应清零失败计数');
+
+    out = await store.recordResults([{ id: a.id, ok: true, message: '命中 1 条' }]);
+    assert.deepStrictEqual(out.revived, [a.id], '成功后应自动恢复');
+    assert.strictEqual(store.get(a.id).deadAt, undefined);
+    assert.strictEqual(store.deadList().length, 0);
+  }
+
+  // 11) 批量一次落盘 + 无变化不写盘
+  {
+    const { store, storage } = await makeStore();
+    await store.importText(JSON.stringify([{ ...SRC_A, enabled: true }, SRC_B]));
+    const [a, b] = store.list();
+    const before = storage.box.writes;
+    await store.recordResults([
+      { id: a.id, ok: false, message: 'x' },
+      { id: b.id, ok: false, message: 'y' },
+    ]);
+    assert.strictEqual(storage.box.writes, before + 1, '多条结果应只写盘一次');
+
+    const pair = [
+      { id: a.id, ok: true, message: 'same', at: 111 },
+      { id: b.id, ok: true, message: 'same', at: 111 },
+    ];
+    await store.recordResults(pair);
+    const mid = storage.box.writes;
+    await store.recordResults(pair);
+    assert.strictEqual(storage.box.writes, mid, '内容无变化时不应写盘');
+  }
+
+  // 12) searchable / deadList / revive / clearDead / setEnabledMany
+  {
+    const { store } = await makeStore();
+    await store.importText(JSON.stringify([
+      { bookSourceName: '甲', bookSourceUrl: 'https://a3.com', enabled: true },
+      { bookSourceName: '乙', bookSourceUrl: 'https://b3.com', enabled: false },
+      { bookSourceName: '丙', bookSourceUrl: 'https://c3.com', enabled: true },
+    ]));
+    const byName = (n) => store.list().find((s) => s.bookSourceName === n);
+    await store.recordResults([
+      { id: byName('丙').id, ok: false, message: 'f1' },
+      { id: byName('丙').id, ok: false, message: 'f2' },
+    ]);
+    assert.deepStrictEqual(store.searchable().map((s) => s.bookSourceName), ['甲'], '停用与失效都不参与搜索');
+    assert.deepStrictEqual(store.deadList().map((s) => s.bookSourceName), ['丙']);
+
+    assert.strictEqual(await store.revive(byName('丙').id), true);
+    assert.strictEqual(store.deadList().length, 0);
+    assert.strictEqual(store.get(byName('丙').id).failStreak, 0);
+    assert.strictEqual(store.searchable().length, 2, '恢复后重新参与搜索');
+
+    const cnt = await store.setEnabledMany([
+      { id: byName('乙').id, enabled: true },
+      { id: byName('甲').id, enabled: false },
+      { id: byName('乙').id, enabled: true },
+    ]);
+    assert.strictEqual(cnt, 2, '只统计实际变化的条目');
+    assert.strictEqual(store.get(byName('乙').id).enabled, true);
+    assert.strictEqual(store.get(byName('甲').id).enabled, false);
+
+    await store.recordResults([
+      { id: byName('丙').id, ok: false, message: 'x' },
+      { id: byName('丙').id, ok: false, message: 'y' },
+    ]);
+    assert.strictEqual(store.deadList().length, 1);
+    assert.strictEqual(await store.clearDead(), 1);
+    assert.strictEqual(store.deadList().length, 0);
+    assert.strictEqual(store.size(), 2, '清除只删失效源');
+  }
+
+  // 13) upsert 必须保留运行态字段(历史 bug: 只保留 enabled/addedAt)
+  {
+    const { store } = await makeStore();
+    await store.importText(JSON.stringify([SRC_A]));
+    const a = store.list()[0];
+    await store.recordResults([
+      { id: a.id, ok: false, message: 'e1' },
+      { id: a.id, ok: false, message: 'e2' },
+    ]);
+    const dead = store.get(a.id);
+    assert.ok(dead.deadAt > 0);
+
+    const next = { ...dead, bookSourceName: '改名后的A站', searchUrl: 'https://a.com/s2?q={{key}}' };
+    await store.upsert(next);
+    const after = store.get(a.id);
+    assert.strictEqual(after.bookSourceName, '改名后的A站', '规则/名称应更新');
+    assert.strictEqual(after.lastCheckOk, false, 'upsert 不应丢 lastCheck*');
+    assert.strictEqual(after.deadAt, dead.deadAt, 'upsert 不应清掉失效标记');
+    assert.strictEqual(after.failStreak, 2);
+
+    await store.importText(JSON.stringify([SRC_A]));
+    assert.ok(store.get(a.id).deadAt > 0, '导入不应复活失效源');
+  }
+
+  // 14) 导出剔除运行态字段
+  {
+    const { store } = await makeStore();
+    await store.importText(JSON.stringify([SRC_A]));
+    const a = store.list()[0];
+    await store.recordResults([
+      { id: a.id, ok: false, message: 'x' },
+      { id: a.id, ok: false, message: 'y' },
+    ]);
+    const exported = JSON.parse(store.exportText())[0];
+    for (const k of ['lastCheck', 'lastCheckOk', 'lastCheckMessage', 'failStreak', 'deadAt', 'deadReason']) {
+      assert.strictEqual(exported[k], undefined, '导出不应带运行态字段: ' + k);
+    }
+    assert.ok(exported.bookSourceUrl, '导出仍应包含书源本体');
+  }
+
+  // 15) 旧文件兼容: 无新字段时按 0/未失效处理
+  {
+    const legacy = JSON.stringify({ v: 1, items: [{
+      id: 'old1', bookSourceName: '旧源', bookSourceUrl: 'https://old2.com',
+      enabled: true, addedAt: 1,
+    }] });
+    const { store } = await makeStore(legacy);
+    const s0 = store.get('old1');
+    assert.strictEqual(s0.failStreak, 0, '旧数据 failStreak 应为 0');
+    assert.strictEqual(store.deadList().length, 0, '旧数据不应被判失效');
+    assert.strictEqual(store.searchable().length, 1);
+  }
+
+  // 10) 失效判定: 连续 2 次失败才失效, 成功清零并可自动恢复
+  {
+    const { store } = await makeStore();
+    await store.importText(JSON.stringify([{ ...SRC_A, enabled: true }, SRC_B]));
+    const a = store.list().find((s) => s.bookSourceName === 'A站');
+    const b = store.list().find((s) => s.bookSourceName === 'B站');
+
+    assert.strictEqual(store.searchable().length, 2, '初始应有 2 个可搜源');
+    assert.strictEqual(store.deadList().length, 0);
+
+    let out = await store.recordResults([{ id: a.id, ok: false, message: '网络错误: fetch failed' }]);
+    assert.strictEqual(store.get(a.id).failStreak, 1, '第 1 次失败只计数');
+    assert.deepStrictEqual(out.died, [], '第 1 次失败不应判失效');
+    assert.strictEqual(store.deadList().length, 0);
+
+    out = await store.recordResults([{ id: a.id, ok: false, message: '网络错误: fetch failed' }]);
+    assert.deepStrictEqual(out.died, [a.id], '第 2 次失败应判失效');
+    assert.ok(store.get(a.id).deadAt > 0);
+    assert.strictEqual(store.get(a.id).deadReason, '网络错误: fetch failed');
+    assert.strictEqual(store.deadList().length, 1);
+    assert.strictEqual(store.searchable().length, 1, '失效源应退出搜索');
+
+    await store.recordResults([{ id: b.id, ok: false, message: 'x' }]);
+    assert.strictEqual(store.get(b.id).failStreak, 1);
+    await store.recordResults([{ id: b.id, ok: true, message: '命中 3 条' }]);
+    assert.strictEqual(store.get(b.id).failStreak, 0, '成功应清零失败计数');
+
+    out = await store.recordResults([{ id: a.id, ok: true, message: '命中 1 条' }]);
+    assert.deepStrictEqual(out.revived, [a.id], '成功后应自动恢复');
+    assert.strictEqual(store.get(a.id).deadAt, undefined);
+    assert.strictEqual(store.deadList().length, 0);
+  }
+
+  // 11) 批量一次落盘 + 无变化不写盘
+  {
+    const { store, storage } = await makeStore();
+    await store.importText(JSON.stringify([{ ...SRC_A, enabled: true }, SRC_B]));
+    const [a, b] = store.list();
+    const before = storage.box.writes;
+    await store.recordResults([
+      { id: a.id, ok: false, message: 'x' },
+      { id: b.id, ok: false, message: 'y' },
+    ]);
+    assert.strictEqual(storage.box.writes, before + 1, '多条结果应只写盘一次');
+
+    const pair = [
+      { id: a.id, ok: true, message: 'same', at: 111 },
+      { id: b.id, ok: true, message: 'same', at: 111 },
+    ];
+    await store.recordResults(pair);
+    const mid = storage.box.writes;
+    await store.recordResults(pair);
+    assert.strictEqual(storage.box.writes, mid, '内容无变化时不应写盘');
+  }
+
+  // 12) searchable / deadList / revive / clearDead / setEnabledMany
+  {
+    const { store } = await makeStore();
+    await store.importText(JSON.stringify([
+      { bookSourceName: '甲', bookSourceUrl: 'https://a3.com', enabled: true },
+      { bookSourceName: '乙', bookSourceUrl: 'https://b3.com', enabled: false },
+      { bookSourceName: '丙', bookSourceUrl: 'https://c3.com', enabled: true },
+    ]));
+    const byName = (n) => store.list().find((s) => s.bookSourceName === n);
+    await store.recordResults([
+      { id: byName('丙').id, ok: false, message: 'f1' },
+      { id: byName('丙').id, ok: false, message: 'f2' },
+    ]);
+    assert.deepStrictEqual(store.searchable().map((s) => s.bookSourceName), ['甲'], '停用与失效都不参与搜索');
+    assert.deepStrictEqual(store.deadList().map((s) => s.bookSourceName), ['丙']);
+
+    assert.strictEqual(await store.revive(byName('丙').id), true);
+    assert.strictEqual(store.deadList().length, 0);
+    assert.strictEqual(store.get(byName('丙').id).failStreak, 0);
+    assert.strictEqual(store.searchable().length, 2, '恢复后重新参与搜索');
+
+    const cnt = await store.setEnabledMany([
+      { id: byName('乙').id, enabled: true },
+      { id: byName('甲').id, enabled: false },
+      { id: byName('乙').id, enabled: true },
+    ]);
+    assert.strictEqual(cnt, 2, '只统计实际变化的条目');
+    assert.strictEqual(store.get(byName('乙').id).enabled, true);
+    assert.strictEqual(store.get(byName('甲').id).enabled, false);
+
+    await store.recordResults([
+      { id: byName('丙').id, ok: false, message: 'x' },
+      { id: byName('丙').id, ok: false, message: 'y' },
+    ]);
+    assert.strictEqual(store.deadList().length, 1);
+    assert.strictEqual(await store.clearDead(), 1);
+    assert.strictEqual(store.deadList().length, 0);
+    assert.strictEqual(store.size(), 2, '清除只删失效源');
+  }
+
+  // 13) upsert 必须保留运行态字段(历史 bug: 只保留 enabled/addedAt)
+  {
+    const { store } = await makeStore();
+    await store.importText(JSON.stringify([SRC_A]));
+    const a = store.list()[0];
+    await store.recordResults([
+      { id: a.id, ok: false, message: 'e1' },
+      { id: a.id, ok: false, message: 'e2' },
+    ]);
+    const dead = store.get(a.id);
+    assert.ok(dead.deadAt > 0);
+
+    const next = { ...dead, bookSourceName: '改名后的A站', searchUrl: 'https://a.com/s2?q={{key}}' };
+    await store.upsert(next);
+    const after = store.get(a.id);
+    assert.strictEqual(after.bookSourceName, '改名后的A站', '规则/名称应更新');
+    assert.strictEqual(after.lastCheckOk, false, 'upsert 不应丢 lastCheck*');
+    assert.strictEqual(after.deadAt, dead.deadAt, 'upsert 不应清掉失效标记');
+    assert.strictEqual(after.failStreak, 2);
+
+    await store.importText(JSON.stringify([SRC_A]));
+    assert.ok(store.get(a.id).deadAt > 0, '导入不应复活失效源');
+  }
+
+  // 14) 导出剔除运行态字段
+  {
+    const { store } = await makeStore();
+    await store.importText(JSON.stringify([SRC_A]));
+    const a = store.list()[0];
+    await store.recordResults([
+      { id: a.id, ok: false, message: 'x' },
+      { id: a.id, ok: false, message: 'y' },
+    ]);
+    const exported = JSON.parse(store.exportText())[0];
+    for (const k of ['lastCheck', 'lastCheckOk', 'lastCheckMessage', 'failStreak', 'deadAt', 'deadReason']) {
+      assert.strictEqual(exported[k], undefined, '导出不应带运行态字段: ' + k);
+    }
+    assert.ok(exported.bookSourceUrl, '导出仍应包含书源本体');
+  }
+
+  // 15) 旧文件兼容: 无新字段时按 0/未失效处理
+  {
+    const legacy = JSON.stringify({ v: 1, items: [{
+      id: 'old1', bookSourceName: '旧源', bookSourceUrl: 'https://old2.com',
+      enabled: true, addedAt: 1,
+    }] });
+    const { store } = await makeStore(legacy);
+    const s0 = store.get('old1');
+    assert.strictEqual(s0.failStreak, 0, '旧数据 failStreak 应为 0');
+    assert.strictEqual(store.deadList().length, 0, '旧数据不应被判失效');
+    assert.strictEqual(store.searchable().length, 1);
   }
 
   console.log('书源存储测试全部通过 ✔');

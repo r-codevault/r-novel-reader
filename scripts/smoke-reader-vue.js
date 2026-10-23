@@ -1222,7 +1222,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   }
 
 
-  // ================================================================ 书源(一期: 导入/管理/搜索)
+  // ================================================================ 书源(三 Tab / 失效 / 紧凑列表)
   console.log('[书源]');
   // 1) 菜单打开 + 互斥
   menuItem('catalog').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
@@ -1238,26 +1238,62 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   assert(document.querySelector('#sourcePopup .src-filter'), '点「去导入书源」应切到管理视图');
 
-  // 3) 扩展回推书源列表
+  // 3) 三 Tab + 失效源从「书源」列表移出
   sendMsg({ type: 'sources', items: [
-    { id: 's1', name: 'A站', url: 'https://a.com', group: '玄幻', enabled: true, searchUrl: 'https://a.com/s?q={{key}}', lastCheckOk: true, lastCheckMessage: '可用, 命中 3 条' },
-    { id: 's2', name: 'B站', url: 'https://b.com', group: '', enabled: true, searchUrl: 'https://b.com/s?q={{key}}' },
-    { id: 's3', name: 'C站', url: 'https://c.com', group: '', enabled: false, searchUrl: 'https://c.com/s?q={{key}}', lastCheckOk: false, lastCheckMessage: 'HTTP 404' },
+    { id: 's1', name: 'A站', url: 'https://a.com', group: '玄幻', enabled: true, searchUrl: 'https://a.com/s?q={{key}}', lastCheckOk: true, lastCheckMessage: '命中 3 条', failStreak: 0 },
+    { id: 's2', name: 'B站', url: 'https://b.com', group: '', enabled: true, searchUrl: 'https://b.com/s?q={{key}}', failStreak: 0 },
+    { id: 's3', name: 'C站', url: 'https://c.com', group: '', enabled: true, searchUrl: 'https://c.com/s?q={{key}}', lastCheckOk: false, lastCheckMessage: '网络错误', failStreak: 2, deadAt: Date.now() - 1000, deadReason: '网络错误: fetch failed (c.com)' },
   ] });
-  await sleep(30);
-  assert(document.querySelectorAll('#sourcePopup .src-row').length === 3, '管理视图应渲染 3 个书源');
-  assert(document.querySelector('#sourcePopup .src-row .src-status.is-ok'), '可用书源应显示绿色状态');
-  assert(document.querySelector('#sourcePopup .src-row .src-status.is-bad'), '不可用书源应显示红色状态');
-  assert(document.querySelector('#sourcePopup .src-risk').textContent.includes('第三方'),
-    '管理页应有「书源来自第三方」提示');
+  await sleep(40);
+  assert(document.querySelectorAll('#sourcePopup [data-src-tab]').length === 3, '应有 3 个 Tab(搜索/书源/失效)');
+  assert(document.querySelector('[data-src-dead-count]').textContent === '1', '失效 Tab 应显示 1 个角标');
+  assert($('#sourcePopup .popup-sub').textContent.includes('2 个可搜'), '头部应显示可搜数量');
+  assert(document.querySelectorAll('#sourcePopup .src-row[data-source-id]').length === 2, '「书源」列表不应包含失效源');
+  assert(document.querySelector('#sourcePopup .src-status.is-ok'), '可用源应显示绿色状态');
+  assert(document.querySelector('#sourcePopup .src-bulk'), '应有批量勾选条');
+  assert(document.querySelectorAll('#sourcePopup .src-ico').length === 6, '两个存活源各 3 个图标按钮');
 
-  // 4) 启停 / 编辑 / 两步删除 / 导入
+  // 4) 勾选启停(checkbox change) -> sourceToggle
   posted.length = 0;
-  document.querySelector('#sourcePopup [data-src-toggle="s3"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  const toggleS2 = document.querySelector('#sourcePopup input[data-src-toggle="s2"]');
+  assert(toggleS2 && toggleS2.checked, 'B站默认应勾选');
+  toggleS2.checked = false;
+  toggleS2.dispatchEvent(new win.Event('change', { bubbles: true }));
   await sleep(20);
-  assert(posted.some((m) => m.type === 'sourceToggle' && m.id === 's3' && m.enabled === true),
-    '点开关应发送 sourceToggle(enabled=true)');
+  assert(posted.some((m) => m.type === 'sourceToggle' && m.id === 's2' && m.enabled === false),
+    '取消勾选应发送 sourceToggle(enabled=false)');
 
+  // 5) 批量: 全选/反选/全部停用 -> sourceSetEnabled(一次批量)
+  //    (冒烟里没有扩展回推, 批量后手动回推一次状态, 模拟扩展刷新)
+  const baseItems = [
+    { id: 's1', name: 'A站', url: 'https://a.com', group: '玄幻', enabled: true, searchUrl: 'https://a.com/s?q={{key}}', lastCheckOk: true, lastCheckMessage: '命中 3 条', failStreak: 0 },
+    { id: 's2', name: 'B站', url: 'https://b.com', group: '', enabled: false, searchUrl: 'https://b.com/s?q={{key}}', failStreak: 0 },
+    { id: 's3', name: 'C站', url: 'https://c.com', group: '', enabled: true, searchUrl: 'https://c.com/s?q={{key}}', lastCheckOk: false, failStreak: 2, deadAt: Date.now() - 1000, deadReason: '网络错误: fetch failed (c.com)' },
+  ];
+  sendMsg({ type: 'sources', items: baseItems });
+  await sleep(30);
+
+  posted.length = 0;
+  document.querySelector('#sourcePopup [data-src-clear]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  const clearMsg = posted.filter((m) => m.type === 'sourceSetEnabled').pop();
+  assert(clearMsg && clearMsg.patches.length === 1 && clearMsg.patches[0].id === 's1' && clearMsg.patches[0].enabled === false,
+    '「全部停用」应只把仍在启用的 s1 置为 false, 实际: ' + JSON.stringify(clearMsg));
+
+  sendMsg({ type: 'sources', items: baseItems.map(function (x) { return { ...x, enabled: false }; }) });
+  await sleep(30);
+  posted.length = 0;
+  document.querySelector('#sourcePopup [data-src-all]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  const allMsg = posted.filter((m) => m.type === 'sourceSetEnabled').pop();
+  assert(allMsg && allMsg.patches.length === 2 && allMsg.patches.every((x) => x.enabled === true),
+    '全选应把 2 个存活源都启用, 实际: ' + JSON.stringify(allMsg));
+
+  // 回到初始状态继续后面的用例(s1/s2 均启用, s3 失效)
+  sendMsg({ type: 'sources', items: baseItems.map(function (x) { return { ...x, enabled: x.id !== 's3' }; }) });
+  await sleep(30);
+
+  // 6) 编辑 / 两步删除 / 导入
   document.querySelector('#sourcePopup [data-src-edit="s1"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   const editName = document.querySelector('#sourcePopup [data-src-edit-name]');
@@ -1274,7 +1310,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const srcDelBtn = document.querySelector('#sourcePopup [data-src-del="s2"]');
   srcDelBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
-  assert(srcDelBtn.textContent.includes('确认删除'), '第一次点删除应进入确认态');
+  assert(srcDelBtn.classList.contains('confirming'), '第一次点删除应进入确认态');
   assert(!posted.some((m) => m.type === 'sourceRemove'), '第一次点删除不应真的删除');
   srcDelBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
@@ -1285,20 +1321,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(20);
   assert(posted.some((m) => m.type === 'sourceImport' && m.mode === 'url'), '点「从 URL 导入」应发送 sourceImport(url)');
 
-  // 5) 搜索视图: 输入 + 回车 -> sourceSearch; 回包渲染结果
+  // 7) 搜索 Tab: 不再有选源区/picker; sourceSearch 不带 sourceIds
   document.querySelector('#sourcePopup [data-src-tab="search"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
-  assert(document.querySelectorAll('#sourcePopup .src-chip').length === 3, '书源勾选条应为「全部启用」+ 2 个启用源');
+  assert(!document.querySelector('#sourcePopup .src-chip'), '搜索 Tab 不应再有书源 chips');
+  assert(!document.querySelector('#sourcePopup [data-src-picker]'), '搜索 Tab 不应再有选择书源入口');
   const input = document.querySelector('#sourcePopup [data-src-input]');
   input.value = '遮天';
   input.dispatchEvent(new win.Event('input', { bubbles: true }));
+  posted.length = 0;
   input.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   await sleep(30);
   const searchMsg = posted.filter((m) => m.type === 'sourceSearch').pop();
   assert(searchMsg && searchMsg.key === '遮天', '回车应发送 sourceSearch');
   assert(typeof searchMsg.token === 'number', 'sourceSearch 应带 token');
-  assert(document.querySelector('#sourcePopup .src-hint').textContent.includes('正在搜索'),
-    '搜索中应显示提示');
+  assert(searchMsg.sourceIds === undefined, '搜索不应再带 sourceIds(范围由「书源」Tab 勾选)');
+  assert(document.querySelector('#sourcePopup .src-hint').textContent.includes('正在搜索 2 个书源'),
+    '搜索中应显示参与的书源数');
 
   sendMsg({ type: 'searchResults', token: searchMsg.token, done: true, errors: [
     { sourceId: 's2', sourceName: 'B站', kind: 'timeout', message: '搜索超时(10s)' },
@@ -1309,93 +1348,98 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   assert(document.querySelectorAll('#sourcePopup .src-result').length === 2, '应渲染 2 条搜索结果');
   assert(document.querySelector('#sourcePopup .src-result-title').textContent === '遮天', '结果标题应正确');
-  assert(document.querySelector('#sourcePopup .src-result-meta').textContent.includes('635 万字'),
-    '字数应折算为万字');
+  assert(document.querySelector('#sourcePopup .src-result-meta').textContent.includes('635 万字'), '字数应折算为万字');
   assert(document.querySelector('#sourcePopup .src-badge').textContent === 'A站', '应显示来源书源');
-  assert(document.querySelector('#sourcePopup .src-error').textContent.includes('搜索超时'),
-    '应展示单源错误');
-  assert(document.querySelector('#sourcePopup .src-hint').textContent.includes('找到 2 本'),
-    '结果统计应显示找到数量');
-  assert(document.querySelector('#sourcePopup .src-add').disabled, '一期「加入书架」应置灰');
+  assert(document.querySelector('#sourcePopup [data-src-errors]').textContent.includes('1 个书源搜索失败'),
+    '搜索报错应折叠成一行摘要');
+  assert(document.querySelector('#sourcePopup [data-src-error-dead]'), '摘要旁应有「查看失效书源」');
 
-  // 6) 过期回包不覆盖(新搜索清空列表后, 旧 token 的结果不应落地)
-  input.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-  await sleep(20);
-  const newer = posted.filter((m) => m.type === 'sourceSearch').pop();
-  assert(document.querySelectorAll('#sourcePopup .src-result').length === 0, '新搜索应清空上一次结果');
-  sendMsg({ type: 'searchResults', token: newer.token - 1, done: true, items: [
-    { sourceId: 's1', sourceName: 'A站', title: '旧结果', author: '', bookUrl: 'https://a.com/old' },
-  ], errors: [] });
-  await sleep(20);
-  assert(document.querySelectorAll('#sourcePopup .src-result').length === 0, '过期 token 的搜索结果不应落地');
-  sendMsg({ type: 'searchResults', token: newer.token, done: true, items: [
-    { sourceId: 's1', sourceName: 'A站', title: '新结果', author: '', bookUrl: 'https://a.com/new' },
-  ], errors: [] });
-  await sleep(20);
-  assert(document.querySelectorAll('#sourcePopup .src-result').length === 1
-    && document.querySelector('#sourcePopup .src-result-title').textContent === '新结果',
-    '当前 token 的结果应生效');
+  // 8) 点摘要里的链接 -> 跳到失效 Tab
+  document.querySelector('#sourcePopup [data-src-error-dead]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(document.querySelector('#sourcePopup [data-dead-id="s3"]'), '应跳到失效 Tab 并显示失效源');
+  assert(document.querySelector('#sourcePopup .src-dead-reason').textContent.includes('网络错误'),
+    '失效行应展示失败原因');
 
-  document.querySelector('#sourcePopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  posted.length = 0;
+  document.querySelector('#sourcePopup [data-src-recheck="s3"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceCheck' && m.id === 's3' && m.scope === 'dead'),
+    '单源重查应带 scope=dead');
 
-  // 7) 大量书源: 内联只显示前 10 个 + 独立选择弹窗(全选/反选/清空)
+  posted.length = 0;
+  document.querySelector('#sourcePopup [data-src-revive="s3"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceRevive' && m.id === 's3'), '点恢复应发送 sourceRevive');
+
+  posted.length = 0;
+  document.querySelector('#sourcePopup [data-src-recheck-all]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceCheck' && m.scope === 'dead' && m.id === undefined),
+    '「全部重查」应发送 scope=dead');
+
+  posted.length = 0;
+  document.querySelector('#sourcePopup [data-src-clear-dead]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.some((m) => m.type === 'sourceClearDead'), '「清除全部」应发送 sourceClearDead');
+
+  // 9) 失效清空后: 失效 Tab 空态
+  sendMsg({ type: 'sources', items: [
+    { id: 's1', name: 'A站', url: 'https://a.com', group: '玄幻', enabled: true, searchUrl: 'https://a.com/s?q={{key}}', lastCheckOk: true, failStreak: 0 },
+  ] });
+  await sleep(40);
+  assert(document.querySelector('#sourcePopup .src-empty'), '没有失效源时应显示空态');
+  assert(!document.querySelector('[data-src-dead-count]'), '失效角标应消失');
+
+  // 10) 全部停用 -> 搜索 Tab 提示去启用
+  sendMsg({ type: 'sources', items: [
+    { id: 's1', name: 'A站', url: 'https://a.com', group: '', enabled: false, searchUrl: 'https://a.com/s?q={{key}}', failStreak: 0 },
+  ] });
+  await sleep(30);
+  document.querySelector('#sourcePopup [data-src-tab="search"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(document.querySelector('#sourcePopup .src-empty').textContent.includes('已停用'), '应提示所有书源都已停用');
+  document.querySelector('#sourcePopup [data-src-go-manage]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(document.querySelector('#sourcePopup .src-filter'), '点「去书源勾选启用」应切到书源 Tab');
+
+  // 11) 大量书源: 60 条增量渲染 + 加载更多
   const many = Array.from({ length: 70 }, (_, i) => ({
     id: 'm' + i, name: '源' + i, url: 'https://s' + i + '.com', group: i % 2 ? 'G1' : 'G2',
-    enabled: true, searchUrl: 'https://s' + i + '.com/s?q={{key}}',
+    enabled: true, searchUrl: 'https://s' + i + '.com/s?q={{key}}', failStreak: 0,
   }));
   sendMsg({ type: 'sources', items: many });
-  menuItem('source').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(40);
-  assert(document.querySelectorAll('#sourcePopup .src-chip').length === 11,
-    '内联应只显示「全部启用」+ 前 10 个, 实际 ' + document.querySelectorAll('#sourcePopup .src-chip').length);
-  assert(document.querySelector('#sourcePopup [data-src-picker]'), '应有「选择书源…」入口');
-
-  document.querySelector('#sourcePopup [data-src-picker]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(40);
-  assert(document.querySelector('[data-src-picker-modal]'), '应打开选择书源弹窗');
-  assert(document.querySelectorAll('[data-src-picker-row]').length === 70, '弹窗应列出全部启用书源');
-  document.querySelector('[data-src-picker-all]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(20);
-  assert(document.querySelector('.src-picker-count').textContent.includes('70'), '全选后计数应为 70');
-  document.querySelector('[data-src-picker-invert]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(20);
-  assert(document.querySelector('.src-picker-count').textContent.includes('0'), '反选后应为 0');
-  document.querySelector('[data-src-picker-all]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(20);
-  document.querySelector('[data-src-picker-clear]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(20);
-  assert(document.querySelector('.src-picker-count').textContent.includes('0'), '清空后应为 0');
-  // 筛选 + 全选(只选中筛选结果)
-  document.querySelector('[data-src-picker-filter]').value = '源1';
-  document.querySelector('[data-src-picker-filter]').dispatchEvent(new win.Event('input', { bubbles: true }));
-  await sleep(20);
-  document.querySelector('[data-src-picker-all]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(20);
-  assert(document.querySelector('.src-picker-count').textContent.includes('11'),
-    '筛选「源1」应匹配 源1/源10..源19 共 11 个, 实际 ' + document.querySelector('.src-picker-count').textContent);
-  document.querySelector('[data-src-picker-ok]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(20);
-  assert(!document.querySelector('[data-src-picker-modal]'), '确定后应关闭弹窗');
-  assert(document.querySelector('#sourcePopup .src-picked').textContent.includes('11 个书源'),
-    '已选文案应显示 11 个书源');
-  posted.length = 0;
-  document.querySelector('#sourcePopup [data-src-input]').dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-  await sleep(20);
-  const picked = posted.filter((m) => m.type === 'sourceSearch').pop();
-  assert(picked && Array.isArray(picked.sourceIds) && picked.sourceIds.length === 11,
-    '搜索应带 11 个选中书源');
-
-  // 8) 管理列表增量渲染: 70 条先渲染 60 + 加载更多
-  document.querySelector('#sourcePopup [data-src-tab="manage"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  await sleep(40);
-  assert(document.querySelectorAll('#sourcePopup .src-row').length === 60,
-    '管理列表应先渲染 60 行, 实际 ' + document.querySelectorAll('#sourcePopup .src-row').length);
+  await sleep(50);
+  assert(document.querySelectorAll('#sourcePopup .src-row[data-source-id]').length === 60,
+    '管理列表应先渲染 60 行, 实际 ' + document.querySelectorAll('#sourcePopup .src-row[data-source-id]').length);
   const moreBtn = document.querySelector('#sourcePopup [data-src-load-more]');
   assert(moreBtn && moreBtn.textContent.includes('10'), '应有「加载更多（还有 10 个）」');
   moreBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(40);
-  assert(document.querySelectorAll('#sourcePopup .src-row').length === 70, '加载更多后应渲染 70 行');
+  assert(document.querySelectorAll('#sourcePopup .src-row[data-source-id]').length === 70, '加载更多后应渲染 70 行');
+
+  // 12) 滚动守卫: 弹窗内到底后吞掉滚轮, 正文不受影响
+  assert(/\.popup-body\s*\{[^}]*overscroll-behavior:\s*contain/.test(capturedHtml),
+    '弹窗体应有 overscroll-behavior: contain');
+  {
+    const bodyEl = document.querySelector('#sourcePopup .popup-body');
+    Object.defineProperty(bodyEl, 'scrollHeight', { configurable: true, value: 600 });
+    Object.defineProperty(bodyEl, 'clientHeight', { configurable: true, value: 200 });
+    let fakeTop = 400;
+    Object.defineProperty(bodyEl, 'scrollTop', { configurable: true, get: () => fakeTop, set: () => {} });
+    const atBottom = new win.WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true });
+    bodyEl.dispatchEvent(atBottom);
+    assert(atBottom.defaultPrevented, '列表已到底时滚轮应被阻断(不带动正文)');
+
+    fakeTop = 100;
+    const inMiddle = new win.WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true });
+    bodyEl.dispatchEvent(inMiddle);
+    assert(!inMiddle.defaultPrevented, '容器内仍可正常滚动');
+
+    const onReader = new win.WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true });
+    (document.querySelector('#reader') || document.body).dispatchEvent(onReader);
+    assert(!onReader.defaultPrevented, '正文区域的滚轮不应被拦截');
+  }
 
   document.querySelector('#sourcePopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
