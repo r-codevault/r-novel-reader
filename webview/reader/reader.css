@@ -837,6 +837,7 @@
     display: flex; flex-direction: column; gap: 6px;
     padding: 8px 18px 10px 39px; background: var(--sp-control-bg); border-top: 1px dashed var(--sp-border);
   }
+  .src-edit-warn { margin: 0; font-size: var(--ui-font-sub); line-height: 1.5; color: var(--danger); }
   .src-edit-actions { display: flex; gap: 6px; }
   .src-edit-actions .popup-primary { width: auto; padding: 4px 14px; }
 

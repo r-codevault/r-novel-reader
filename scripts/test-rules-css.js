@@ -7,7 +7,7 @@
 'use strict';
 const assert = require('assert');
 const { parseHtml, nodeText } = require('../dist/rules/html');
-const { selectAll, selectFirst, parseSelector, CssSyntaxError } = require('../dist/rules/css');
+const { selectAll, selectFirst, parseSelector, normalizeLegadoSelector, CssSyntaxError } = require('../dist/rules/css');
 const { SEARCH_HTML, TOC_HTML, CONTENT_HTML } = require('./fixtures-source');
 
 const search = parseHtml(SEARCH_HTML);
@@ -106,6 +106,31 @@ const texts = (nodes) => nodes.map((n) => nodeText(n).trim());
 {
   const first = selectFirst(search, '.book-item');
   assert.ok(first && nodeText(first).indexOf('遮天') >= 0);
+}
+
+// 14) legado 选择器写法: class./id./tag./text. 与 @ 链
+{
+  assert.strictEqual(normalizeLegadoSelector('class.list-group-item'), '.list-group-item');
+  assert.strictEqual(normalizeLegadoSelector('id.content'), '#content');
+  assert.strictEqual(normalizeLegadoSelector('tag.h5'), 'h5');
+  assert.strictEqual(normalizeLegadoSelector('class.mb-1@a@text'), '.mb-1 a');
+  assert.strictEqual(normalizeLegadoSelector('class.list-group@tag.h5'), '.list-group h5');
+  assert.strictEqual(normalizeLegadoSelector('text.分类@text'), '*:contains(分类)');
+  // 纯 CSS 不受影响
+  assert.strictEqual(normalizeLegadoSelector('h3.book-name a'), 'h3.book-name a');
+  assert.strictEqual(normalizeLegadoSelector('.a, .b'), '.a, .b');
+
+  const html = '<div class="list-group"><h5>一</h5><h5>二</h5></div>';
+  assert.strictEqual(selectAll(parseHtml(html), 'class.list-group').length, 1);
+  assert.strictEqual(selectAll(parseHtml(html), 'class.list-group@tag.h5').length, 2);
+  assert.strictEqual(selectAll(parseHtml(html), 'tag.h5').length, 2);
+  assert.strictEqual(selectAll(parseHtml(html), 'text.一').length >= 1, true);
+
+  // .N 序号: 取当前匹配集的第 N 个(0 基)
+  const list = parseHtml('<div class="c">1</div><div class="c">2</div><div class="c">3</div>');
+  assert.strictEqual(nodeText(selectAll(list, 'div.c:index(1)')[0]).trim(), '2');
+  assert.strictEqual(nodeText(selectAll(list, 'class.c.2')[0]).trim(), '3');
+  assert.strictEqual(selectAll(list, 'class.c.9').length, 0);
 }
 
 console.log('CSS 选择器测试全部通过 ✔');

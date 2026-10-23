@@ -108,6 +108,31 @@ const json = { json: SEARCH_JSON, baseUrl: BASE_URL };
     assert.strictEqual(v, '第2章');
   }
 
+  // 17) `##正则` 省略替换段 = 匹配即删除
+  {
+    const v = await evalRuleOne('.last@text##最新章节：', html);
+    assert.strictEqual(v, '第1888章 完美世界', '只有两段 ## 时应删除匹配内容');
+  }
+
+  // 18) legado 选择器前缀 + @ 链
+  {
+    const v = await evalRuleOne('class.book-item@tag.h3@text', html);
+    assert.strictEqual(v, '遮天', '@ 链应按逐级向下选取');
+    const href = await evalRuleOne('class.book-item@tag.h3@tag.a@href', html);
+    assert.ok(href.indexOf('https://www.example.com/book/') === 0, '链末尾 @href 应解析为绝对地址');
+  }
+
+  // 19) {{@@规则}} 内嵌模板(legado: 在当前节点上再求值并拼接)
+  {
+    const doc = '<div class="card-other"><i>12</i></div><div class="card-other"><i>3</i></div>';
+    const v = await evalRuleOne('{{@@div.card-other.0@i@text}}个收藏,{{@@div.card-other.1@i@text}}条留言',
+      { html: doc, baseUrl: '' });
+    assert.strictEqual(v, '12个收藏,3条留言');
+    // 内嵌规则为空时保留空串, 不报错
+    const empty = await evalRuleOne('{{@@.nope@text}}条', { html: doc, baseUrl: '' });
+    assert.strictEqual(empty, '条');
+  }
+
   console.log('规则求值测试全部通过 ✔');
 })().catch((err) => {
   console.error(err);

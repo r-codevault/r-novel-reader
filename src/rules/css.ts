@@ -32,6 +32,7 @@ interface Compound {
     classes: string[];
     attrs: AttrTest[];
     pseudo: string[];         // first-child / last-child / nth-child(2) / not(.x) / contains(t)
+    index?: number;           // legado 的 .N: 在当前匹配集中取第 N 个(0 基)
 }
 
 interface Part {
@@ -46,9 +47,50 @@ interface Group {
 }
 
 /** 解析一个选择器组(逗号分隔返回多个) */
+/** legado 的取值后缀(text/href/attr=…), 出现在选择器链末尾时不属于选择器 */
+const LEGADO_EXTRACT = /^(text|ownText|html|href|src|attr=[A-Za-z0-9_:-]+)$/;
+
+/** 单个逗号分组: `class.a@tag.b` -> `.a b` */
+function normalizeLegadoGroup(raw: string): string {
+    const text = raw.trim();
+    if (text.indexOf('@') < 0 && !/^(class|id|tag|text)\./.test(text)) { return text; }
+    const selectors: string[] = [];
+    for (const part of splitTopLevel(text, '@')) {
+        const seg = part.trim();
+        if (!seg) { continue; }
+        if (LEGADO_EXTRACT.test(seg)) { break; } // 值提取不是选择器
+        // text.分类 -> *:contains(分类): 按文本内容匹配(legado 的 text. 前缀)
+        const textHit = /^text\.(.+)$/.exec(seg);
+        if (textHit) {
+            selectors.push('*:contains(' + textHit[1] + ')');
+            continue;
+        }
+        let css = seg.replace(/^class\./, '.').replace(/^id\./, '#').replace(/^tag\./, '');
+        // legado 的 `.N` 序号: `div.card-other.1` -> `div.card-other:index(1)`
+        const idx = /^(.*)\.(\d+)$/.exec(css);
+        if (idx) { css = idx[1] + ':index(' + idx[2] + ')'; }
+        selectors.push(css);
+    }
+    return selectors.length ? selectors.join(' ') : text;
+}
+
+/**
+ * 兼容 legado 书源的选择器写法:
+ *   class.list-group-item -> .list-group-item
+ *   id.content            -> #content
+ *   tag.h5                -> h5
+ *   class.mb-1@a@text     -> .mb-1 a   (中间的 @ 是逐级向下选取)
+ * 纯 CSS 选择器原样返回。
+ */
+export function normalizeLegadoSelector(selector: string): string {
+    return splitTopLevel(selector, ',')
+        .map((raw) => normalizeLegadoGroup(raw))
+        .join(', ');
+}
+
 export function parseSelector(selector: string): Group[] {
     const groups: Group[] = [];
-    for (const raw of splitTopLevel(selector, ',')) {
+    for (const raw of splitTopLevel(normalizeLegadoSelector(selector), ',')) {
         const text = raw.trim();
         if (!text) { throw new CssSyntaxError('选择器为空'); }
         if (text.startsWith('//') || text.startsWith('/html')) {
@@ -102,12 +144,14 @@ function parseGroup(text: string): Group {
 
         const start = i;
         const compound: Compound = { tag: '', id: '', classes: [], attrs: [], pseudo: [] };
-        // 标签
-        if (/[a-zA-Z*]/.test(text[i])) {
+        // 标签(含通配符 `*`)
+        if (text[i] === '*') {
+            compound.tag = '';
+            i++;
+        } else if (/[a-zA-Z]/.test(text[i])) {
             let j = i;
             while (j < text.length && /[a-zA-Z0-9_-]/.test(text[j])) { j++; }
-            const tag = text.slice(i, j).toLowerCase();
-            compound.tag = tag === '*' ? '' : tag;
+            compound.tag = text.slice(i, j).toLowerCase();
             i = j;
         }
         // 简单选择器序列
@@ -152,7 +196,10 @@ function parseGroup(text: string): Group {
                     arg = text.slice(j, i - 1).trim();
                 }
                 const lower = name.toLowerCase();
-                if (lower === 'eq' || lower === 'gt' || lower === 'lt' || lower === 'first' || lower === 'last') {
+                if (lower === 'index') {
+                    const n = parseInt(arg, 10);
+                    if (!isNaN(n)) { compound.index = n; }
+                } else if (lower === 'eq' || lower === 'gt' || lower === 'lt' || lower === 'first' || lower === 'last') {
                     setFilters.push(lower + (arg ? '(' + arg + ')' : ''));
                 } else if (lower === 'first-child' || lower === 'last-child' || lower === 'nth-child'
                     || lower === 'not' || lower === 'contains') {
@@ -253,9 +300,18 @@ function descendants(node: HNode, out: HNode[]): HNode[] {
     return out;
 }
 
+/** 应用 legado 的 .N 序号(对当前匹配集取第 N 个) */
+function applyIndex(nodes: HNode[], index: number | undefined): HNode[] {
+    if (index === undefined) { return nodes; }
+    return index >= 0 && index < nodes.length ? [nodes[index]] : [];
+}
+
 function runGroup(root: HNode, group: Group): HNode[] {
     const first = group.parts[0];
-    let cur = descendants(root, []).filter((n) => matchCompound(n, first.compound));
+    let cur = applyIndex(
+        descendants(root, []).filter((n) => matchCompound(n, first.compound)),
+        first.compound.index
+    );
     for (let pi = 1; pi < group.parts.length; pi++) {
         const part = group.parts[pi];
         const next: HNode[] = [];
@@ -280,7 +336,7 @@ function runGroup(root: HNode, group: Group): HNode[] {
                 if (matchCompound(cand, part.compound)) { seen.add(cand); next.push(cand); }
             }
         }
-        cur = next;
+        cur = applyIndex(next, part.compound.index);
     }
     // 结果集伪类
     for (const f of group.setFilters) {

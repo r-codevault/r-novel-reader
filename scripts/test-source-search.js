@@ -325,6 +325,35 @@ const realFetch = globalThis.fetch;
     assert.strictEqual(item.lastCheckMessage, '命中 3 条');
   }
 
+  // 16) legado 语法书源: class./tag./@链 的 bookList 与字段规则
+  {
+    const LEGADO = {
+      bookSourceName: 'legado语法站',
+      bookSourceUrl: 'https://www.example.com',
+      searchUrl: 'https://www.example.com/search?q={{key}}',
+      ruleSearch: {
+        bookList: 'class.result-list@class.book-item',
+        name: 'class.book-name@tag.a@text',
+        author: 'class.author@tag.span@text',
+        bookUrl: 'class.book-name@tag.a@href',
+        kind: 'class.kind@text##\\[|\\]',
+      },
+    };
+    const items = await parseSearchPage(LEGADO, fx.SEARCH_HTML, 'https://www.example.com/search?q=遮天');
+    assert.strictEqual(items.length, 3, 'legado 选择器应能取到 3 本, 实际 ' + items.length);
+    assert.strictEqual(items[0].title, '遮天');
+    assert.strictEqual(items[0].author, '辰东');
+    assert.strictEqual(items[0].bookUrl, 'https://www.example.com/book/1024/');
+  }
+
+  // 17) header 里的 {{baseUrl}} 插值
+  {
+    const { interpolateHeader } = require('../dist/online/sourceHttp');
+    const out = interpolateHeader({ Referer: '{{baseUrl}}', 'User-Agent': 'x' }, 'https://a.com');
+    assert.strictEqual(out.Referer, 'https://a.com');
+    assert.strictEqual(out['User-Agent'], 'x');
+  }
+
   console.log('书源搜索测试全部通过 ✔');
 })().catch((err) => {
   globalThis.fetch = realFetch;

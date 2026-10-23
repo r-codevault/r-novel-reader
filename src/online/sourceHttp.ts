@@ -45,6 +45,15 @@ export function parseSourceHeader(header: string | undefined): Record<string, st
     }
 }
 
+/** 书源 header 里的模板变量(主要是 {{baseUrl}}) */
+export function interpolateHeader(header: Record<string, string>, sourceUrl: string): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const key of Object.keys(header)) {
+        out[key] = header[key].replace(/\{\{\s*baseUrl\s*\}\}/g, sourceUrl);
+    }
+    return out;
+}
+
 /** 某书源的请求函数(带 header / charset) */
 export async function fetchForSource(
     source: BookSource,
@@ -52,7 +61,7 @@ export async function fetchForSource(
     url: string,
     opts: HttpOptions = {}
 ): Promise<HttpResponse> {
-    const headers = { ...parseSourceHeader(source.header), ...(opts.headers || {}) };
+    const headers = { ...interpolateHeader(parseSourceHeader(source.header), source.bookSourceUrl), ...(opts.headers || {}) };
     return pool.clientFor(source.id).request(url, {
         ...opts,
         headers,

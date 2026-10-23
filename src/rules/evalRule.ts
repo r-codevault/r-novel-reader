@@ -48,6 +48,21 @@ export interface RuleContext {
     vars?: Record<string, string>;
 }
 
+/** legado 的 `{{@@规则}}`: 在当前节点/JSON 项上再求值一次并嵌入结果 */
+async function expandEmbedded(text: string, ctx: RuleContext, depth: number): Promise<string> {
+    if (depth > 3 || text.indexOf('{{@@') < 0) { return text; }
+    const re = /\{\{@@([\s\S]*?)\}\}/g;
+    let out = '';
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+        const value = await evalRuleOne(m[1], ctx, depth + 1);
+        out += text.slice(last, m.index) + value;
+        last = re.lastIndex;
+    }
+    return last > 0 ? out + text.slice(last) : text;
+}
+
 /** 按顶层 `||` 切分(尊重引号与括号) */
 export function splitFallback(rule: string): string[] {
     const out: string[] = [];
@@ -155,18 +170,26 @@ function jsonGlobals(json: unknown): Record<string, unknown> | undefined {
     return Object.keys(out).length ? out : undefined;
 }
 
-async function evalAlternative(raw: string, ctx: RuleContext): Promise<string[]> {
-    let rule = interpolate(raw.trim(), ctx);
+async function evalAlternative(raw: string, ctx: RuleContext, depth = 0): Promise<string[]> {
+    const src = raw.trim();
+    // 纯模板规则({{@@...}}{{...}} 拼接): 展开后的文本就是值, 不能再当选择器解析
+    const pureTemplate = /^\{\{[\s\S]*\}\}$/.test(src);
+    let rule = interpolate(src, ctx);
+    if (rule.indexOf('{{@@') >= 0) { rule = await expandEmbedded(rule, ctx, depth); }
+    if (src.indexOf('{{@@') >= 0 && rule.indexOf('{{') < 0) {
+        const value = rule.trim();
+        return value ? [value] : [];
+    }
     if (!rule) { return []; }
 
-    // ##正则##替换
+    // ##正则##替换: 第三段省略时表示"匹配即删除"(legado 常见写法)
     let regex: { pattern: string; repl: string } | null = null;
     const hashParts = rule.split('##');
-    if (hashParts.length >= 3) {
+    if (hashParts.length >= 2) {
         rule = hashParts[0];
         regex = {
             pattern: hashParts[1],
-            repl: hashParts.slice(2).join('##'),
+            repl: hashParts.length >= 3 ? hashParts.slice(2).join('##') : '',
         };
     }
 
@@ -242,7 +265,7 @@ async function evalAlternative(raw: string, ctx: RuleContext): Promise<string[]>
 }
 
 /** 求值一条规则, 返回所有候选值 */
-export async function evalRule(rule: string | undefined | null, ctx: RuleContext): Promise<string[]> {
+export async function evalRule(rule: string | undefined | null, ctx: RuleContext, depth = 0): Promise<string[]> {
     if (!rule) { return []; }
     const alts = splitFallback(String(rule));
     let lastErr: Error | null = null;
@@ -250,7 +273,7 @@ export async function evalRule(rule: string | undefined | null, ctx: RuleContext
         const text = alt.trim();
         if (!text) { continue; }
         try {
-            const values = await evalAlternative(text, ctx);
+            const values = await evalAlternative(text, ctx, depth);
             if (values.length) { return values; }
         } catch (err) {
             lastErr = err as Error;
@@ -261,7 +284,7 @@ export async function evalRule(rule: string | undefined | null, ctx: RuleContext
 }
 
 /** 求值并取第一个值 */
-export async function evalRuleOne(rule: string | undefined | null, ctx: RuleContext): Promise<string> {
-    const values = await evalRule(rule, ctx);
+export async function evalRuleOne(rule: string | undefined | null, ctx: RuleContext, depth = 0): Promise<string> {
+    const values = await evalRule(rule, ctx, depth);
     return values.length ? values[0] : '';
 }

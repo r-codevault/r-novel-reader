@@ -23,6 +23,14 @@ const filtered = computed(function () { return filterSources(alive.value, keywor
 const list = computed(function () { return filtered.value.slice(0, limit.value); });
 const restCount = computed(function () { return Math.max(0, filtered.value.length - limit.value); });
 const enabledCount = computed(function () { return filtered.value.filter(function (s) { return s.enabled; }).length; });
+/** 搜索地址里没有 {{key}} 也不是脚本: 提示用户关键词不会生效 */
+const searchUrlNeedsKey = computed(function () {
+  const u = editSearchUrl.value.trim();
+  if (!u) { return false; }
+  if (u.indexOf('{{key}}') >= 0) { return false; }
+  if (/^@js:/i.test(u) || /^<js>/i.test(u)) { return false; }
+  return true;
+});
 const allChecked = computed(function () { return filtered.value.length > 0 && enabledCount.value === filtered.value.length; });
 const someChecked = computed(function () { return enabledCount.value > 0 && enabledCount.value < filtered.value.length; });
 
@@ -166,6 +174,9 @@ function loadMore(): void {
       <div v-if="state.sourceEditingId === s.id" class="src-edit">
         <input v-model="editName" class="src-input" data-src-edit-name placeholder="书源名称" />
         <input v-model="editSearchUrl" class="src-input" data-src-edit-url placeholder="搜索地址, 支持 {{key}}" />
+        <p v-if="searchUrlNeedsKey" class="src-edit-warn" data-src-edit-warn>
+          地址里没有关键词占位符，搜索时不会跟随输入变化；建议保留形如双花括号 key 的占位符。
+        </p>
         <div class="src-edit-actions">
           <button class="popup-primary" data-src-edit-save @click="saveEdit">保存</button>
           <button class="popup-btn" @click="cancelEdit">取消</button>
