@@ -13,13 +13,25 @@ export interface CatalogGroup {
   items: CatalogChapter[];
 }
 
-/** 标题拆成 章节号 + 章节名 */
+/** 卷前缀(如「第二集」), 仅取标题开头 10 字内的一段 */
+export function volumeKey(title: string): string | null {
+  const m = /^(第[0-9０-９一二三四五六七八九十百千零两]+[卷部篇集])(?=[\s:：、]|$)/.exec(title.trim());
+  return m ? m[1].trim() : null;
+}
+
+/** 标题拆成 章节号 + 章节名(去掉「第二集 」这类卷前缀) */
 export function chapterParts(title: string): { no: string; name: string } {
-  const m = /^(第[0-9０-９一二三四五六七八九十百千零两]+[章节回卷部篇集])(.*)$/.exec(title.trim());
+  let t = title.trim();
+  const key = volumeKey(t);
+  if (key) {
+    const rest = t.slice(t.indexOf(key) + key.length).replace(/^[\s:：、]+/, '');
+    if (/^第[0-9０-９一二三四五六七八九十百千零两]+[章节回]/.test(rest)) { t = rest; }
+  }
+  const m = /^(第[0-9０-９一二三四五六七八九十百千零两]+[章节回卷部篇集])(.*)$/.exec(t);
   if (m) { return { no: m[1], name: m[2].trim() }; }
-  const m2 = /^(Chapter\s*\d+)(.*)$/i.exec(title.trim());
+  const m2 = /^(Chapter\s*\d+)(.*)$/i.exec(t);
   if (m2) { return { no: m2[1], name: m2[2].trim() }; }
-  return { no: '', name: title.trim() };
+  return { no: '', name: t };
 }
 
 /**
@@ -27,7 +39,11 @@ export function chapterParts(title: string): { no: string; name: string } {
  * 标记需出现在标题前部, 避免正文标题里偶尔提及"第X篇"被误判为分卷。
  */
 export function isVolumeTitle(title: string): boolean {
-  return /^.{0,10}第[0-9０-９一二三四五六七八九十百千零两]+[卷部篇集]/.test(title);
+  const key = volumeKey(title);
+  if (!key) { return false; }
+  const rest = title.trim().slice(title.trim().indexOf(key) + key.length);
+  // 「第二集 第1章 心影门」是带卷前缀的章节, 不是卷标题
+  return !/第[0-9０-９一二三四五六七八九十百千零两]+[章节回]/.test(rest);
 }
 
 /**
@@ -38,14 +54,31 @@ export function isVolumeTitle(title: string): boolean {
 export function buildCatalogGroups(chapters: CatalogChapter[]): CatalogGroup[] {
   const groups: CatalogGroup[] = [];
   let cur: CatalogGroup | null = null;
+  let curKey: string | null = null;
   for (const c of chapters) {
+    const key = volumeKey(c.title);
     if (isVolumeTitle(c.title)) {
       if (cur) { groups.push(cur); }
       cur = { name: c.title, entry: c.index, items: [] };
-    } else {
-      if (!cur) { cur = { name: '正文', entry: -1, items: [] }; }
-      cur.items.push(c);
+      curKey = key;
+      continue;
     }
+    if (key) {
+      // 带卷前缀的章节: 同卷归入一组, 卷名用 prefix(独立卷标题则保留完整标题)
+      if (!cur || curKey !== key) {
+        if (cur) { groups.push(cur); }
+        cur = { name: key, entry: c.index, items: [] };
+        curKey = key;
+      }
+      cur.items.push(c);
+      continue;
+    }
+    if (!cur || curKey !== null) {
+      if (cur) { groups.push(cur); }
+      cur = { name: '正文', entry: -1, items: [] };
+      curKey = null;
+    }
+    cur.items.push(c);
   }
   if (cur) { groups.push(cur); }
   return groups;

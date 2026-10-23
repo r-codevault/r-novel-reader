@@ -2460,6 +2460,31 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!document.querySelector('[data-preview-add]'), '加入成功后预览按钮应消失');
   console.log('在线书预览(结果行/正文按钮): 通过');
 
+  // 带卷前缀的章节: 「第二集 第1章 …」不能被当成空卷
+  sendMsg({ type: 'init', payload: {
+    filePath: 'catalog-test', bookTitle: '分卷书', author: '',
+    chapters: [
+      { index: 0, title: '第一集 第1章 初临起源大陆' },
+      { index: 1, title: '第一集 第2章 出发' },
+      { index: 2, title: '第二集 第1章 心影门' },
+      { index: 3, title: '第二集 第2章 礼物' },
+    ],
+    chapterIndex: 0, chapterTitle: '第一集 第1章 初临起源大陆', paragraphs: ['p'], totalChapters: 4,
+    totalWords: 4, scrollRatio: 0, chapterWords: 1, settings: { ...defaults }, shelf: [], libraryPath: '',
+    notes: [], sources: [],
+  } });
+  await sleep(40);
+  menuItem('catalog').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(40);
+  const groups = Array.from(document.querySelectorAll('#catalogPanel .cat-group'));
+  assert(groups.length === 2, '应分成 2 卷, 实际 ' + groups.length);
+  assert(groups[0].textContent.includes('第一集') && groups[1].textContent.includes('第二集'), '卷名应正确');
+  assert(!groups.some((g) => g.textContent.includes('共 0 章')), '不应出现 0 章的空卷');
+  assert(document.querySelectorAll('#catalogPanel .cat-item').length === 4, '4 章都应出现在目录里');
+  assert(document.querySelector('#catalogPanel .cat-sub').textContent.includes('共 4 章'), '总章数应为 4');
+  assert(document.querySelector('#catalogPanel .cat-no').textContent.includes('第1章'), '章节号应去掉卷前缀');
+  console.log('目录分卷(带卷前缀章节): 通过');
+
   console.log('\n阅读面板 Vue 冒烟测试全部通过 ✔');
   process.exit(0);
 })().catch((err) => {
