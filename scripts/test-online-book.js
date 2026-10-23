@@ -143,6 +143,29 @@ const source = {
     );
   }
 
+  // 4d) 裸属性规则: chapterUrl="href" + chapterName 带 ## 正则(言情小说阁写法)
+  {
+    const html = '<div class="panel-body"><div class="panel-body"><p>无关</p></div>'
+      + '<div class="panel-body"><ul>'
+      + '<li><a href="/c/1">第一集 第1章 正文卷. 开端</a></li>'
+      + '<li><a href="/c/2">第一集 第2章 正文. 继续</a></li>'
+      + '</ul></div></div>';
+    globalThis.fetch = async () => makeResponse(200, html);
+    const legacy = {
+      ...source,
+      ruleBookInfo: {},
+      ruleToc: {
+        chapterList: '.panel-body.2@li@a',
+        chapterName: 'text##正文卷.|正文.',
+        chapterUrl: 'href',
+      },
+    };
+    const toc = await fetchToc(legacy, BASE + '/book/legacy/', { pool: new SourceHttpPool() });
+    assert.strictEqual(toc.chapters.length, 2, '裸 href 规则应能取到章节');
+    assert.strictEqual(toc.chapters[0].title, '第一集 第1章  开端');
+    assert.strictEqual(toc.chapters[0].url, BASE + '/c/1');
+  }
+
   // 5) 缓存读写/清理
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'r-online-cache-'));
   const cache = new OnlineCache(tmp);

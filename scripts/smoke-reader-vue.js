@@ -888,6 +888,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const bks = document.querySelectorAll('#shelfPopup .bk');
   assert(bks.length === 2, '书架弹窗应渲染 2 本(实际 ' + bks.length + ')');
   assert(bks[0].classList.contains('cur'), '当前书应标记');
+  assert(Array.from(document.querySelectorAll('#shelfPopup .bk-tag')).every((t) => t.textContent === '本地'),
+    '本地书应显示「本地」标签');
   assert(document.querySelector('#shelfPopup .popup-sub').textContent.includes('共 2 本'), '应显示册数');
   posted.length = 0;
   bks[1].dispatchEvent(new win.MouseEvent('click', { bubbles: true }));

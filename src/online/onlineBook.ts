@@ -147,13 +147,15 @@ async function parseTocPage(
         }
     } else {
         for (const node of parsed.nodes) {
+            // 某些站点的 <a> 只有 title/aria-label 没有文本
+            const fallback = String(node.attrs['title'] || node.attrs['aria-label'] || '');
             await push({
                 node,
                 baseUrl: pageUrl,
                 bookUrl: source.bookSourceUrl,
                 html: outerHtml(node),
                 sourceName: source.bookSourceName,
-            }, '');
+            }, fallback);
         }
     }
     return { chapters, matched };

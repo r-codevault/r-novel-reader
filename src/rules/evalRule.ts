@@ -241,6 +241,17 @@ async function evalAlternative(raw: string, ctx: RuleContext, depth = 0): Promis
     }
 
     let values: string[] = [];
+    // 裸属性名: legado 书源里大量写法 `href` / `src`(不带 @), 取当前节点属性
+    const bareAttr = /^(href|src|html|ownText)$/i.exec(rule.trim());
+    if (bareAttr) {
+        const target = ctx.node || (ctx.html ? parseHtml(ctx.html) : null);
+        if (target) {
+            const kind = bareAttr[1].toLowerCase() as ExtractSpec['kind'];
+            values = [extractFromNode(target, { kind }, ctx.baseUrl)];
+        }
+        if (regex) { values = values.map((v) => applyRegex(v, regex!.pattern, regex!.repl)); }
+        return values.map((v) => v.trim()).filter((v) => v !== '');
+    }
     // legado 的 `text`: 取当前节点文本(不是标签选择器)
     if (rule.trim().toLowerCase() === 'text') {
         const target = ctx.node || (ctx.html ? parseHtml(ctx.html) : null);

@@ -61,6 +61,7 @@ function refreshFromLibrary(): void {
           <span class="bk-title">{{ b.title }}</span>
           <span class="bk-sub">
             <span v-if="b.online" class="bk-tag" :title="b.sourceName || '在线书'">在线</span>
+            <span v-else class="bk-tag" title="本地 txt">本地</span>
             {{ progress(b) }}{{ b.author ? ' · ' + b.author : '' }}
           </span>
         </span>
