@@ -253,14 +253,20 @@ const realFetch = globalThis.fetch;
 
     let out = await service.search('遮天');
     assert.strictEqual(out.sourceCount, 2);
-    assert.strictEqual(store.get(badId).failStreak, 1, '失败一次');
-    assert.strictEqual(store.deadList().length, 1, '一次失败就应移入失效');
+    assert.strictEqual(store.get(badId).failStreak, 1, '第 1 次失败只计数');
+    assert.strictEqual(store.deadList().length, 0, '第 1 次失败不应移入失效');
+    assert.deepStrictEqual(out.deadAdded, [], '第 1 次失败不回包失效');
+
+    out = await service.search('遮天');
+    assert.strictEqual(out.sourceCount, 2, '单次失败源仍参与第二次搜索');
+    assert.strictEqual(store.get(badId).failStreak, 2, '连续第 2 次失败');
+    assert.strictEqual(store.deadList().length, 1, '连续 2 次失败应移入失效');
     assert.deepStrictEqual(out.deadAdded, [badId], '回包应告知新失效的源');
 
     out = await service.search('遮天');
-    assert.strictEqual(out.sourceCount, 1, '失效源第二次不再参与');
+    assert.strictEqual(out.sourceCount, 1, '失效源第三次不再参与');
     assert.strictEqual(out.errors.length, 0, '不再为失效源报错');
-    assert.strictEqual(store.get(badId).failStreak, 1, '未参与搜索时不应累加');
+    assert.strictEqual(store.get(badId).failStreak, 2, '未参与搜索时不应累加');
 
     // 健康源不受影响
     const okId = store.list().find((s) => s.bookSourceName === 'HTML站').id;
@@ -457,6 +463,25 @@ const realFetch = globalThis.fetch;
       out.items.map((i) => i.bookUrl).sort(),
       '流式批次合并后应与最终结果一致'
     );
+  }
+
+  // 22) 列表 || 兜底 + 可选字段失败隔离
+  {
+    const store = await makeStore();
+    const SRC = {
+      ...HTML_SOURCE,
+      ruleSearch: { ...HTML_SOURCE.ruleSearch, bookList: '.nope||.book-item', intro: 'div[' },
+    };
+    await store.importText(JSON.stringify([SRC]));
+    globalThis.fetch = async () => makeResponse(200, fx.SEARCH_HTML);
+    const out = await new SearchService(store).search('遮天');
+    assert.ok(out.items.length > 0, 'bookList 的 || 兜底应生效');
+    assert.ok(out.items.every((i) => !i.intro), '可选字段规则报错应只留空');
+
+    const badTitle = await makeStore();
+    await badTitle.importText(JSON.stringify([{ ...SRC, ruleSearch: { ...SRC.ruleSearch, name: 'div[' } }]));
+    const out2 = await new SearchService(badTitle).search('遮天');
+    assert.strictEqual(out2.items.length, 0, 'title 规则报错应跳过条目而不是整源失败');
   }
 
   console.log('书源搜索测试全部通过 ✔');

@@ -256,16 +256,23 @@ async function evalAlternative(raw: string, ctx: RuleContext, depth = 0): Promis
         if (regex) { values = values.map((v) => applyRegex(v, regex!.pattern, regex!.repl)); }
         return values.map((v) => v.trim()).filter((v) => v !== '');
     }
-    const cssPrefix = /^@css:\s*([\s\S]*)$/.exec(rule);
-    const jsonPrefix = /^@json:\s*([\s\S]*)$/.exec(rule);
+    const cssPrefix = /^@css:\s*([\s\S]*)$/i.exec(rule);
+    const explicitJson = /^\$/.test(rule) || /^@json\b/i.test(rule);
 
-    if (cssPrefix) {
+    if (explicitJson) {
+        // 显式 JSONPath: 即使同时拿到 html/node 也必须走 JSON
+        let json = ctx.json;
+        if (json === undefined && ctx.html) {
+            try { json = JSON.parse(ctx.html); } catch { json = undefined; }
+        }
+        if (json !== undefined) {
+            const expr = rule.replace(/^@json\s*:?\s*/i, '').trim();
+            values = queryJson(json, expr).map(toStr);
+        }
+    } else if (cssPrefix) {
         if (!ctx.node && !ctx.html) { return []; }
         const nodes = selectAll(ctx.node || parseHtml(ctx.html || ''), cssPrefix[1].trim());
         values = nodes.map((n) => extractFromNode(n, spec, ctx.baseUrl));
-    } else if (jsonPrefix) {
-        const raw2 = queryJson(ctx.json, jsonPrefix[1].trim());
-        values = raw2.map(toStr);
     } else {
         // 无前缀: JSON 内容且规则像路径 -> JSON; 否则按 CSS
         const looksPath = /^[\w$.*\[\]'"-]+$/.test(rule) && (rule.indexOf('.') >= 0 || rule.indexOf('[') >= 0 || rule.startsWith('$'));
@@ -306,4 +313,61 @@ export async function evalRule(rule: string | undefined | null, ctx: RuleContext
 export async function evalRuleOne(rule: string | undefined | null, ctx: RuleContext, depth = 0): Promise<string> {
     const values = await evalRule(rule, ctx, depth);
     return values.length ? values[0] : '';
+}
+
+/** 列表规则结果: HTML 节点或 JSON 项 */
+export type RuleListResult =
+    | { kind: 'html'; nodes: HNode[] }
+    | { kind: 'json'; items: unknown[] };
+
+/**
+ * 列表规则统一入口(搜索 bookList / 目录 chapterList).
+ * - 按顶层 `||` 兜底逐段尝试
+ * - `@css:` 强制 CSS; `$` / `@json:` 强制 JSON; 其它按 CSS
+ * - 返回第一个非空结果; 全部失败抛最后一个错误(源级失败)
+ */
+export async function evalRuleList(
+    rule: string | undefined | null,
+    ctx: RuleContext
+): Promise<RuleListResult> {
+    const text = String(rule || '').trim();
+    if (!text) { return { kind: 'html', nodes: [] }; }
+    let lastErr: Error | null = null;
+    for (const alt of splitFallback(text)) {
+        const item = alt.trim();
+        if (!item) { continue; }
+        try {
+            // 内容本身是 JSON 且规则像路径(如 data.books)时也走 JSON
+            let contentJson = ctx.json;
+            if (contentJson === undefined && ctx.html) {
+                const t = ctx.html.trim();
+                if (t.startsWith('{') || t.startsWith('[')) {
+                    try { contentJson = JSON.parse(t); } catch { contentJson = undefined; }
+                }
+            }
+            const looksPath = /^[\w$.*\[\]'"-]+$/.test(item)
+                && (item.indexOf('.') >= 0 || item.indexOf('[') >= 0 || item.startsWith('$'));
+            const isJson = /^\$/.test(item) || /^@json\b/i.test(item) || (contentJson !== undefined && looksPath);
+            if (isJson) {
+                const json = contentJson;
+                if (json === undefined) { continue; }
+                const expr = item.replace(/^@json\s*:?\s*/i, '').trim();
+                const values = queryJson(json, expr);
+                const items: unknown[] = [];
+                for (const v of values) {
+                    if (Array.isArray(v)) { items.push(...v); } else { items.push(v); }
+                }
+                if (items.length) { return { kind: 'json', items }; }
+                continue;
+            }
+            const cssRule = item.replace(/^@css:\s*/i, '');
+            if (!ctx.node && !ctx.html) { continue; }
+            const nodes = selectAll(ctx.node || parseHtml(ctx.html || ''), cssRule);
+            if (nodes.length) { return { kind: 'html', nodes }; }
+        } catch (err) {
+            lastErr = err as Error;
+        }
+    }
+    if (lastErr) { throw lastErr; }
+    return { kind: 'html', nodes: [] };
 }

@@ -9,8 +9,8 @@
  */
 import * as crypto from 'crypto';
 
-/** 连续失败多少次判定失效(1 = 失败一次即移入失效, 成功一次自动恢复) */
-export const FAIL_THRESHOLD = 1;
+/** 连续失败多少次判定失效(2 = 连续两次, 成功一次自动恢复) */
+export const FAIL_THRESHOLD = 2;
 
 /** 失效判定: deadAt 是唯一事实源 */
 export function isDead(s: { deadAt?: number }): boolean {
@@ -306,12 +306,15 @@ function hydrate(items: BookSource[]): BookSource[] {
     return items.map((s) => {
         const streak = failStreakOf(s);
         const dead = isDead(s);
-        const legacyDead = !dead && s.lastCheckOk === false && streak >= 1;
+        // 阈值从 1 调到 2: 只失败过 1 次的旧 dead 一次性恢复, >=2 的继续保留
+        const reviveOneFail = dead && streak === 1;
+        const keepDead = dead && !reviveOneFail;
+        const legacyDead = !keepDead && !dead && s.lastCheckOk === false && streak >= FAIL_THRESHOLD;
         return {
             ...s,
-            failStreak: streak,
-            deadAt: dead ? s.deadAt : legacyDead ? (s.lastCheck ?? s.addedAt ?? 1) : undefined,
-            deadReason: dead
+            failStreak: reviveOneFail ? 0 : streak,
+            deadAt: keepDead ? s.deadAt : legacyDead ? (s.lastCheck ?? s.addedAt ?? 1) : undefined,
+            deadReason: keepDead
                 ? (typeof s.deadReason === 'string' && s.deadReason ? s.deadReason : undefined)
                 : legacyDead
                     ? (typeof s.deadReason === 'string' && s.deadReason ? s.deadReason : '升级前已判定不可用，可重查恢复')
@@ -487,15 +490,25 @@ export class BookSourceStore {
 
     /** 恢复: 清失效标记与失败计数, 保留 lastCheck*(作为历史参考) */
     async revive(id: string): Promise<boolean> {
+        return (await this.reviveMany([id])) > 0;
+    }
+
+    /** 批量恢复; ids 省略/空数组 = 全部失效。只清标记, 不改 enabled。一次写盘。 */
+    async reviveMany(ids?: string[]): Promise<number> {
         return this._enqueue(async () => {
             const items = this._read();
-            const target = items.find((s) => s.id === id);
-            if (!target) { return false; }
-            target.failStreak = 0;
-            delete target.deadAt;
-            delete target.deadReason;
-            await this._write(items);
-            return true;
+            const set = ids && ids.length ? new Set(ids) : null;
+            let n = 0;
+            for (const target of items) {
+                if (!isDead(target)) { continue; }
+                if (set && !set.has(target.id)) { continue; }
+                target.failStreak = 0;
+                delete target.deadAt;
+                delete target.deadReason;
+                n += 1;
+            }
+            if (n > 0) { await this._write(items); }
+            return n;
         });
     }
 

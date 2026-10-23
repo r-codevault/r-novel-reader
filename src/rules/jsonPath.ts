@@ -16,6 +16,7 @@ export class JsonPathError extends Error {
 type Seg =
     | { kind: 'key'; key: string }
     | { kind: 'index'; index: number }
+    | { kind: 'slice'; start?: number; end?: number }
     | { kind: 'wildcard' }
     | { kind: 'recursive'; key: string };
 
@@ -56,6 +57,13 @@ export function parseJsonPath(path: string): Seg[] {
             i = end + 1;
             if (body === '*') { segs.push({ kind: 'wildcard' }); continue; }
             if (/^-?\d+$/.test(body)) { segs.push({ kind: 'index', index: parseInt(body, 10) }); continue; }
+            if (/^-?\d*:-?\d*$/.test(body)) {
+                const parts = body.split(':');
+                const start = parts[0] === '' ? undefined : parseInt(parts[0], 10);
+                const end = parts[1] === '' ? undefined : parseInt(parts[1], 10);
+                segs.push({ kind: 'slice', start, end });
+                continue;
+            }
             if ((body[0] === '"' || body[0] === "'") && body[body.length - 1] === body[0]) {
                 segs.push({ kind: 'key', key: body.slice(1, -1) });
                 continue;
@@ -102,6 +110,17 @@ export function queryJson(data: unknown, path: string): unknown[] {
                 if (Array.isArray(v)) {
                     const idx = seg.index < 0 ? v.length + seg.index : seg.index;
                     if (idx >= 0 && idx < v.length) { next.push(v[idx]); }
+                }
+            } else if (seg.kind === 'slice') {
+                if (Array.isArray(v)) {
+                    const len = v.length;
+                    let start = seg.start === undefined ? 0 : seg.start;
+                    let end = seg.end === undefined ? len : seg.end;
+                    if (start < 0) { start += len; }
+                    if (end < 0) { end += len; }
+                    start = Math.max(0, Math.min(len, start));
+                    end = Math.max(0, Math.min(len, end));
+                    if (start < end) { next.push(...v.slice(start, end)); }
                 }
             } else if (seg.kind === 'wildcard') {
                 if (Array.isArray(v)) { next.push(...v); }

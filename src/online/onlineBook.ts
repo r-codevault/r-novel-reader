@@ -4,11 +4,9 @@
  * 只负责「拿规则 + 请求 + 解析」, 缓存与书架由上层(extension)编排。
  */
 import { BookSource } from '../bookSource';
-import { HNode, nodeText, outerHtml, parseHtml } from '../rules/html';
+import { HNode, nodeText, outerHtml } from '../rules/html';
 import { decodeEntities } from '../rules/entities';
-import { evalRuleOne, RuleContext, UnsupportedRuleError, interpolate } from '../rules/evalRule';
-import { selectAll } from '../rules/css';
-import { queryJson } from '../rules/jsonPath';
+import { evalRuleList, evalRuleOne, RuleContext, UnsupportedRuleError, interpolate } from '../rules/evalRule';
 import { runJsScript } from '../rules/jsSandbox';
 import { resolveUrl } from '../rules/url';
 import { splitUrlOptions } from './searchUrl';
@@ -73,22 +71,6 @@ async function resolveRuleUrl(
     return resolveUrl(ctx.baseUrl || source.bookSourceUrl, clean);
 }
 
-function looksJsonRule(rule: string): boolean {
-    const t = (rule || '').trim();
-    return t.startsWith('$') || t === '@json' || t.startsWith('@json:');
-}
-
-function jsonList(json: unknown, rule: string): unknown[] {
-    let expr = rule.trim();
-    if (expr === '@json' || expr === '@json:') { return Array.isArray(json) ? json : [json]; }
-    if (expr.startsWith('@json:')) { expr = expr.slice(6).trim(); }
-    try {
-        return queryJson(json, expr);
-    } catch {
-        return [];
-    }
-}
-
 /** 从一页目录里取章节(HTML 或 JSON) */
 async function parseTocPage(
     source: BookSource,
@@ -105,37 +87,45 @@ async function parseTocPage(
     const urlRule = (toc.chapterUrl || 'a@href').trim();
     const chapters: OnlineChapter[] = [];
 
-    if (looksJsonRule(listRule)) {
-        let json: unknown;
-        try { json = JSON.parse(html); } catch { return []; }
-        for (const item of jsonList(json, listRule)) {
-            const ctx: RuleContext = { json: item, baseUrl: pageUrl, bookUrl: source.bookSourceUrl, sourceName: source.bookSourceName };
-            const title = (await evalRuleOne(nameRule, ctx)).trim();
-            const rawUrl = splitUrlOptions((await evalRuleOne(urlRule, ctx)).trim()).url.trim();
-            if (!title || !rawUrl) { continue; }
-            const url = resolveUrl(pageUrl, rawUrl);
-            if (!/^https?:\/\//i.test(url)) { continue; }
-            chapters.push({ index: chapters.length, title, url });
-        }
-        return chapters;
-    }
-
-    const root = parseHtml(html);
-    const nodes = selectAll(root, listRule);
-    for (const node of nodes) {
-        const ctx: RuleContext = {
-            node,
-            baseUrl: pageUrl,
-            bookUrl: source.bookSourceUrl,
-            html: outerHtml(node),
-            sourceName: source.bookSourceName,
-        };
-        const title = (await evalRuleOne(nameRule, ctx)).trim();
-        const rawUrl = splitUrlOptions((await evalRuleOne(urlRule, ctx)).trim()).url.trim();
-        if (!title || !rawUrl) { continue; }
+    const push = async (ctx: RuleContext, fallbackTitle: string): Promise<void> => {
+        let title = '';
+        try { title = (await evalRuleOne(nameRule, ctx)).trim(); } catch { title = ''; }
+        if (!title) { title = fallbackTitle; }
+        let rawUrl = '';
+        try { rawUrl = splitUrlOptions((await evalRuleOne(urlRule, ctx)).trim()).url.trim(); } catch { rawUrl = ''; }
+        if (!title || !rawUrl) { return; }
         const url = resolveUrl(pageUrl, rawUrl);
-        if (!/^https?:\/\//i.test(url)) { continue; }
+        if (!/^https?:\/\//i.test(url)) { return; }
         chapters.push({ index: chapters.length, title, url });
+    };
+
+    const parsed = await evalRuleList(listRule, {
+        html,
+        baseUrl: pageUrl,
+        bookUrl: source.bookSourceUrl,
+        sourceName: source.bookSourceName,
+    });
+
+    if (parsed.kind === 'json') {
+        for (const item of parsed.items) {
+            if (!item || typeof item !== 'object') { continue; }
+            const obj = item as Record<string, unknown>;
+            const fallback = String(obj.name || obj.title || obj.chapterName || '');
+            await push(
+                { json: item, baseUrl: pageUrl, bookUrl: source.bookSourceUrl, sourceName: source.bookSourceName },
+                fallback
+            );
+        }
+    } else {
+        for (const node of parsed.nodes) {
+            await push({
+                node,
+                baseUrl: pageUrl,
+                bookUrl: source.bookSourceUrl,
+                html: outerHtml(node),
+                sourceName: source.bookSourceName,
+            }, '');
+        }
     }
     return chapters;
 }

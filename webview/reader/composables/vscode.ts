@@ -229,6 +229,8 @@ export const state = reactive({
   onlineAddPending: [] as string[],
   /** 加入书架/预览失败原因(搜索结果顶部提示) */
   onlineError: '',
+  /** 当前打开/预览中的在线书地址(搜索结果高亮用) */
+  previewBookUrl: '',
   /** 在线章节加载中 */
   chapterLoading: null as null | { index: number; title: string },
   /** 在线章节加载失败 */

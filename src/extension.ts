@@ -808,6 +808,7 @@ export function activate(context: vscode.ExtensionContext): void {
         savePreview: () => savePreview(),
         exportText: () => bookSources.exportText(),
         revive: (id) => bookSources.revive(id),
+        reviveMany: (ids) => bookSources.reviveMany(ids),
         clearDead: () => bookSources.clearDead(),
         deadCount: () => bookSources.deadList().length,
         setEnabledMany: (patches) => bookSources.setEnabledMany(patches),

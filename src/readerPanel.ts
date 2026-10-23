@@ -100,6 +100,7 @@ type WebviewMessage =
     | { type: 'sourceCheckPause'; scope: 'active' | 'dead'; paused: boolean; runId?: number }
     | { type: 'sourceCheckCancel'; scope: 'active' | 'dead'; runId?: number }
     | { type: 'sourceRevive'; id: string }
+    | { type: 'sourceReviveMany'; ids?: string[] }
     | { type: 'sourceClearDead' }
     | { type: 'sourceSetEnabled'; patches: { id: string; enabled: boolean }[] };
 
@@ -141,6 +142,8 @@ export interface BookSourceApi {
     exportText(): string;
     /** 恢复失效源(清标记, 不检查) */
     revive(id: string): Promise<boolean>;
+    /** 批量恢复; 省略 ids = 全部 */
+    reviveMany?(ids?: string[]): Promise<number>;
     /** 清除全部失效源(删除数据), 返回删除条数 */
     clearDead(): Promise<number>;
     /** 失效源数量(清除前确认用) */
@@ -874,6 +877,9 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             case 'sourceRevive':
                 void ReaderPanel.bookSources?.revive(msg.id).then(() => this.postSources());
                 break;
+            case 'sourceReviveMany':
+                void this._reviveDeadSources(msg.ids);
+                break;
             case 'sourceClearDead':
                 void this._clearDeadSources();
                 break;
@@ -883,6 +889,26 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                     .then(() => this.postSources());
                 break;
         }
+    }
+
+    /** 批量恢复失效书源: 全部恢复需二次确认; 恢复只清标记, 不改启用状态 */
+    private async _reviveDeadSources(ids?: string[]): Promise<void> {
+        const api = ReaderPanel.bookSources;
+        if (!api?.reviveMany) { return; }
+        const all = !ids || ids.length === 0;
+        const total = all ? api.deadCount() : ids.length;
+        if (total <= 0) { return; }
+        if (all) {
+            const pick = await vscode.window.showWarningMessage(
+                '确定恢复全部 ' + total + ' 个失效书源吗？恢复后它们会重新参与搜索，下次检查仍可能再次失效。',
+                { modal: true },
+                '全部恢复'
+            );
+            if (pick !== '全部恢复') { return; }
+        }
+        const count = await api.reviveMany(all ? undefined : ids);
+        this.postSources();
+        void vscode.window.showInformationMessage('已恢复 ' + count + ' 个书源');
     }
 
     /** 清除全部失效书源: 模态确认后删除 */

@@ -65,4 +65,15 @@ const { SEARCH_JSON, NESTED_JSON } = require('./fixtures-source');
   assert.throws(() => parseJsonPath(''), JsonPathError);
 }
 
+// 11) 数组切片
+{
+  const data = { a: [0, 1, 2, 3, 4, 5] };
+  assert.deepStrictEqual(queryJson(data, '$.a[1:3]'), [1, 2]);
+  assert.deepStrictEqual(queryJson(data, '$.a[:2]'), [0, 1]);
+  assert.deepStrictEqual(queryJson(data, '$.a[4:]'), [4, 5]);
+  assert.deepStrictEqual(queryJson(data, '$.a[-2:]'), [4, 5]);
+  assert.deepStrictEqual(queryJson(data, '$.a[1:-1]'), [1, 2, 3, 4]);
+  assert.deepStrictEqual(queryJson(data, '$.a[3:1]'), []);
+}
+
 console.log('JSONPath 测试全部通过 ✔');

@@ -51,6 +51,12 @@ function isAdded(item: { bookUrl: string }): boolean {
   return state.onlineAdded.indexOf(item.bookUrl) >= 0;
 }
 
+/** 当前行徽标: 已打开的正式书显示「在读」, 其余(含加载中)显示「预览中」 */
+function currentLabel(item: { bookUrl: string }): string {
+  const online = state.novel && state.novel.online;
+  return online && online.bookUrl === item.bookUrl && !online.preview ? '在读' : '预览中';
+}
+
 function isPending(item: { bookUrl: string }): boolean {
   return state.onlineAddPending.indexOf(item.bookUrl) >= 0;
 }
@@ -60,6 +66,7 @@ function previewBook(item: { bookUrl: string } & Record<string, unknown>): void 
   // 切书前先把上一本的章节/章内位置发给扩展(此时面板仍指向旧书)
   flushProgress();
   state.onlineError = '';
+  state.previewBookUrl = item.bookUrl;
   send({ type: 'previewOnlineBook', item: plainSearchBook(item as never) });
   state.sourceOpen = false;
 }
@@ -285,13 +292,13 @@ function goDead(): void {
       </div>
       <div v-else-if="state.searchDone" class="src-hint">
         {{ resultSummary(state.searchResults, state.searchErrors.length) }}
-        <span v-if="state.searchDeadAdded > 0" class="src-skip">· {{ state.searchDeadAdded }} 个源失败已移入失效</span>
+        <span v-if="state.searchDeadAdded > 0" class="src-skip">· {{ state.searchDeadAdded }} 个源连续失败已移入失效</span>
         <span v-if="state.searchSkipped > 0" class="src-skip">（另有 {{ state.searchSkipped }} 个书源未参与）</span>
       </div>
 
       <div v-if="state.searchDone && state.searchErrors.length" class="src-errors" data-src-errors>
         <span class="src-error-line">
-          {{ state.searchErrors.length }} 个书源搜索失败{{ errorNames }}；失败的源已移入失效
+          {{ state.searchErrors.length }} 个书源搜索失败{{ errorNames }}；连续失败 2 次的源已移入失效
         </span>
         <button class="src-link" data-src-error-dead @click="goDead">查看失效书源</button>
       </div>
@@ -300,12 +307,17 @@ function goDead(): void {
         <div class="src-pane src-pane-current" data-src-pane="current"
           :style="{ maxHeight: alloc.curRender * 44 + 'px' }">
           <div v-for="(item, i) in state.searchResults" :key="item.bookUrl + i" class="src-result"
-            :data-src-result="i" :title="'点击预览: ' + item.title" @click="previewBook(item)">
+            :class="{ cur: state.previewBookUrl === item.bookUrl }"
+            :data-src-result="i" :data-src-current="state.previewBookUrl === item.bookUrl ? '1' : undefined"
+            :title="'点击预览: ' + item.title" @click="previewBook(item)">
             <div class="src-result-main">
               <div class="src-result-title">{{ item.title }}</div>
               <div class="src-result-meta">{{ resultMeta(item) }}</div>
             </div>
             <div class="src-result-side">
+              <span v-if="state.previewBookUrl === item.bookUrl" class="src-cur-badge" data-src-cur-badge>
+                {{ currentLabel(item) }}
+              </span>
               <span class="src-badge">{{ sourceLabel(item) }}</span>
               <button class="popup-btn src-add" :class="{ added: isAdded(item) }"
                 :disabled="isAdded(item) || isPending(item)"

@@ -1537,7 +1537,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '搜索报错应折叠成一行摘要');
   assert(document.querySelector('#sourcePopup [data-src-errors]').textContent.includes('已移入失效'),
     '摘要应说明失败源已移入失效');
-  assert(document.querySelector('#sourcePopup .src-hint').textContent.includes('1 个源失败已移入失效'),
+  assert(document.querySelector('#sourcePopup .src-hint').textContent.includes('1 个源连续失败已移入失效'),
     '结果行应提示新移入失效的数量');
   assert(document.querySelector('#sourcePopup [data-src-error-dead]'), '摘要旁应有「查看失效书源」');
 
@@ -1547,10 +1547,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#sourcePopup [data-dead-id="s3"]'), '应跳到失效 Tab 并显示失效源');
   assert(document.querySelector('#sourcePopup .src-dead-reason').textContent.includes('网络错误'),
     '失效行应展示失败原因');
-  assert(!document.querySelector('#sourcePopup .src-risk').textContent.includes('连续 2 次'),
-    '失效说明不应再写「连续 2 次」');
-  assert(document.querySelector('#sourcePopup .src-risk').textContent.includes('任意一次失败'),
-    '失效说明应改为「任意一次失败」');
+  assert(document.querySelector('#sourcePopup .src-risk').textContent.includes('连续 2 次'),
+    '失效说明应写「连续 2 次」');
+  assert(!document.querySelector('#sourcePopup .src-risk').textContent.includes('任意一次失败'),
+    '失效说明不应再写「任意一次失败」');
 
   // 7e) 全部重查: 运行中可暂停/继续 (失效 Tab 自己的状态)
   posted.length = 0;
@@ -1609,6 +1609,49 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(20);
   assert(posted.some((m) => m.type === 'sourceClearDead'), '「清除全部」应发送 sourceClearDead');
 
+  // 8c) 失效列表: 15 条 + 触底 + 全选/反选/批量恢复
+  {
+    const deadMany = Array.from({ length: 18 }, (_, i) => ({
+      id: 'd' + i, name: '失效源' + i, url: 'https://d' + i + '.com', group: '', enabled: true,
+      searchUrl: 'https://d' + i + '.com/s', failStreak: 2, deadAt: Date.now(), deadReason: 'HTTP 404',
+    }));
+    sendMsg({ type: 'sources', items: deadMany });
+    await sleep(40);
+    assert(document.querySelectorAll('#sourcePopup [data-dead-id]').length === 15,
+      '失效列表首屏应渲染 15 行, 实际 ' + document.querySelectorAll('#sourcePopup [data-dead-id]').length);
+    assert(!document.querySelector('#sourcePopup [data-src-load-more]'), '失效列表不应有加载更多按钮');
+    const deadList = document.querySelector('#sourcePopup [data-src-dead-list]');
+    Object.defineProperty(deadList, 'scrollHeight', { configurable: true, value: 1200 });
+    Object.defineProperty(deadList, 'clientHeight', { configurable: true, value: 384 });
+    Object.defineProperty(deadList, 'scrollTop', { configurable: true, value: 816 });
+    deadList.dispatchEvent(new win.Event('scroll'));
+    await sleep(40);
+    assert(document.querySelectorAll('#sourcePopup [data-dead-id]').length === 18, '触底后应渲染 18 行');
+
+    const boxes = Array.from(document.querySelectorAll('#sourcePopup [data-src-dead-check]'));
+    boxes[0].dispatchEvent(new win.Event('change', { bubbles: true }));
+    boxes[1].dispatchEvent(new win.Event('change', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('#sourcePopup .src-bulk-count').textContent.includes('2'), '应显示已选 2');
+    posted.length = 0;
+    document.querySelector('#sourcePopup [data-src-revive-selected]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    const rev = posted.filter((m) => m.type === 'sourceReviveMany').pop();
+    assert(rev && Array.isArray(rev.ids) && rev.ids.length === 2, '恢复所选应带 2 个 id');
+
+    document.querySelector('#sourcePopup [data-src-dead-all]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('#sourcePopup .src-bulk-count').textContent.includes('18'), '全选应覆盖全部失效源');
+    document.querySelector('#sourcePopup [data-src-dead-invert]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('#sourcePopup .src-bulk-count').textContent.includes('0'), '反选后应清空选择');
+    posted.length = 0;
+    document.querySelector('#sourcePopup [data-src-revive-all]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    const revAll = posted.filter((m) => m.type === 'sourceReviveMany').pop();
+    assert(revAll && revAll.ids === undefined, '全部恢复不应带 ids');
+  }
+
   // 9) 失效清空后: 失效 Tab 空态
   sendMsg({ type: 'sources', items: [
     { id: 's1', name: 'A站', url: 'https://a.com', group: '玄幻', enabled: true, searchUrl: 'https://a.com/s?q={{key}}', lastCheckOk: true, failStreak: 0 },
@@ -1638,12 +1681,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(50);
   assert(document.querySelectorAll('#sourcePopup .src-row[data-source-id]').length === 60,
     '管理列表应先渲染 60 行, 实际 ' + document.querySelectorAll('#sourcePopup .src-row[data-source-id]').length);
-  const moreBtn = document.querySelector('#sourcePopup [data-src-load-more]');
-  assert(moreBtn && moreBtn.textContent.includes('10'), '应有「加载更多（还有 10 个）」');
-  assert(!moreBtn.closest('[data-src-list]'), '「加载更多」应放在滚动列表之外(不占 15 行名额)');
-  moreBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  assert(!document.querySelector('#sourcePopup [data-src-load-more]'), '触底加载后不应再有「加载更多」按钮');
+  {
+    const listEl = document.querySelector('#sourcePopup [data-src-list]');
+    Object.defineProperty(listEl, 'scrollHeight', { configurable: true, value: 1200 });
+    Object.defineProperty(listEl, 'clientHeight', { configurable: true, value: 480 });
+    Object.defineProperty(listEl, 'scrollTop', { configurable: true, value: 720 });
+    listEl.dispatchEvent(new win.Event('scroll'));
+  }
   await sleep(40);
-  assert(document.querySelectorAll('#sourcePopup .src-row[data-source-id]').length === 70, '加载更多后应渲染 70 行');
+  assert(document.querySelectorAll('#sourcePopup .src-row[data-source-id]').length === 70, '触底后应渲染 70 行');
 
   // 11b) 列表限高 15 行: 行都在 list 内, 列表自身滚动
   assert(document.querySelector('[data-src-list]'), '管理列表应有独立滚动容器 [data-src-list]');
@@ -1871,10 +1918,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const saveIdx = posted.findIndex((m) => m.type === 'saveProgress');
   const previewIdx = posted.findIndex((m) => m.type === 'previewOnlineBook');
   assert(saveIdx >= 0 && saveIdx < previewIdx, '切书前应先发 saveProgress(旧书进度)');
+  const previewRow = document.querySelector('#sourcePopup [data-src-result="0"]');
+  assert(previewRow.classList.contains('cur') && previewRow.getAttribute('data-src-current') === '1',
+    '被预览的结果行应高亮');
+  assert(previewRow.querySelector('.src-cur-badge').textContent.includes('预览中'),
+    '高亮行应显示「预览中」');
   assert(!$('#sourcePopup').classList.contains('open'), '预览后应关闭书源弹窗');
   sendMsg({ type: 'previewError', message: '目录解析结果为空' });
   await sleep(30);
   assert($('#sourcePopup').classList.contains('open'), '预览失败应重开搜索弹窗');
+  assert(!document.querySelector('#sourcePopup [data-src-result="0"]').classList.contains('cur'),
+    '预览失败后应清除高亮');
   assert(document.querySelector('#sourcePopup [data-src-op-error]').textContent.includes('目录解析结果为空'),
     '预览失败应显示原因');
 
@@ -2356,6 +2410,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(40);
   const previewBtn = document.querySelector('[data-preview-add]');
   assert(previewBtn && previewBtn.textContent.includes('加入书架'), '预览书应显示「加入书架」按钮');
+  assert(previewBtn.style.right && previewBtn.style.right !== 'auto',
+    '加入书架应跟随右侧章节箭头定位(下方)');
+  assert(!/\.preview-add\{[^}]*top:\s*16px/.test(capturedHtml), '不应再固定在右上角');
   posted.length = 0;
   previewBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);

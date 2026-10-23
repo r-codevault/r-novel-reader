@@ -17,11 +17,11 @@ const editSearchUrl = ref('');
 /** 增量渲染: 几千条书源一次全渲染会卡 */
 const PAGE = 60;
 const limit = ref(PAGE);
+const listRef = ref<HTMLElement | null>(null);
 
 const alive = computed(function () { return aliveSources(state.sources); });
 const filtered = computed(function () { return filterSources(alive.value, keyword.value); });
 const list = computed(function () { return filtered.value.slice(0, limit.value); });
-const restCount = computed(function () { return Math.max(0, filtered.value.length - limit.value); });
 const enabledCount = computed(function () { return filtered.value.filter(function (s) { return s.enabled; }).length; });
 /** 搜索地址里没有 {{key}} 也不是脚本: 提示用户关键词不会生效 */
 const searchUrlNeedsKey = computed(function () {
@@ -148,8 +148,15 @@ function askDelete(s: BookSourceView): void {
   pendingDeleteId.value = s.id;
 }
 
-function loadMore(): void {
-  limit.value += PAGE;
+/** 触底自动加载: 距底 32px 内追加一页 */
+function onListScroll(): void {
+  const el = listRef.value;
+  if (!el || filtered.value.length <= limit.value) { return; }
+  // happy-dom 没有真实布局(scrollHeight/clientHeight 常为 0), 此时不自动全量渲染
+  if (el.scrollHeight <= el.clientHeight) { return; }
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 32) {
+    limit.value += PAGE;
+  }
 }
 </script>
 
@@ -190,7 +197,7 @@ function loadMore(): void {
     </div>
     <div v-else-if="!filtered.length" class="popup-empty src-empty">没有匹配的书源</div>
 
-    <div class="src-list" data-src-list>
+    <div ref="listRef" class="src-list" data-src-list @scroll.passive="onListScroll">
     <template v-for="s in list" :key="s.id">
       <div class="src-row" :data-source-id="s.id">
         <input type="checkbox" class="src-check" :checked="s.enabled" :data-src-toggle="s.id"
@@ -226,9 +233,6 @@ function loadMore(): void {
     </template>
     </div>
 
-    <button v-if="restCount > 0" class="popup-btn src-load-more" data-src-load-more @click="loadMore">
-      加载更多（还有 {{ restCount }} 个）
-    </button>
-    <p class="src-risk">勾选 = 启用并参与搜索；失败一次的书源会自动移到「失效」Tab（可重查恢复）。书源来自第三方，只导入你信任的。</p>
+    <p class="src-risk">勾选 = 启用并参与搜索；连续 2 次失败的书源会自动移到「失效」Tab（可重查恢复）。书源来自第三方，只导入你信任的。</p>
   </div>
 </template>

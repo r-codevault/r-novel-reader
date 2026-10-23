@@ -133,4 +133,22 @@ const texts = (nodes) => nodes.map((n) => nodeText(n).trim());
   assert.strictEqual(selectAll(list, 'class.c.9').length, 0);
 }
 
+  // 15) legado 结果集后置操作: !N / 负数 / 切片
+  {
+    const html = '<div class="c">' + Array.from({ length: 6 }, (_, i) => '<a>' + i + '</a>').join('') + '</div>';
+    const root = parseHtml(html);
+    const vals = (sel) => selectAll(root, sel).map((n) => nodeText(n).trim());
+    assert.deepStrictEqual(vals('.c a!0'), ['1', '2', '3', '4', '5']);
+    assert.deepStrictEqual(vals('.c a!0:1:2'), ['3', '4', '5']);
+    assert.deepStrictEqual(vals('.c a.-1'), ['5']);
+    assert.deepStrictEqual(vals('.c a.-2'), ['4']);
+    assert.deepStrictEqual(vals('.c a:index(-2)'), ['4']);
+    assert.deepStrictEqual(vals('.c a[1:3]'), ['1', '2']);
+    assert.deepStrictEqual(vals('.c a[:2]'), ['0', '1']);
+    assert.deepStrictEqual(vals('.c a[4:]'), ['4', '5']);
+    assert.deepStrictEqual(vals('.c a[-2:]'), ['4', '5']);
+    assert.deepStrictEqual(vals('.c a[9:20]'), []);
+    assert.deepStrictEqual(vals('.c a.2'), ['2'], '旧 .N 语义不变');
+  }
+
 console.log('CSS 选择器测试全部通过 ✔');

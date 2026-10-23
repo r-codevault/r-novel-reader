@@ -112,6 +112,7 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
         online: p.online,
       };
       document.title = (p.bookTitle as string) + ' - 小说阅读';
+      state.previewBookUrl = (p.online && (p.online as { bookUrl?: string }).bookUrl) || '';
       state.chapters = (p.chapters as { index: number; title: string }[]) || [];
       state.catReverse = false;
       state.catCollapsed = [];
@@ -204,6 +205,7 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
     case 'previewError': {
       const m = msg as { message?: string };
       state.onlineError = m.message || '预览失败';
+      state.previewBookUrl = '';
       state.sourceOpen = true;
       break;
     }

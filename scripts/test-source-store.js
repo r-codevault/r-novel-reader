@@ -176,7 +176,7 @@ const SRC_B = {
     assert.strictEqual(await empty.store.migrateLegacy(legacy), 0, '已有数据时不应重复迁移');
   }
 
-  // 10) 失效判定: 一次失败即失效, 成功清零并可自动恢复
+  // 10) 失效判定: 连续 2 次失败才失效, 成功清零并可自动恢复
   {
     const { store } = await makeStore();
     await store.importText(JSON.stringify([{ ...SRC_A, enabled: true }, SRC_B]));
@@ -187,18 +187,24 @@ const SRC_B = {
     assert.strictEqual(store.deadList().length, 0);
 
     let out = await store.recordResults([{ id: a.id, ok: false, message: '网络错误: fetch failed' }]);
-    assert.deepStrictEqual(out.died, [a.id], '第 1 次失败就应判失效');
+    assert.deepStrictEqual(out.died, [], '第 1 次失败不应判失效');
     assert.strictEqual(store.get(a.id).failStreak, 1);
+    assert.strictEqual(store.get(a.id).deadAt, undefined);
+    assert.strictEqual(store.deadList().length, 0);
+    assert.strictEqual(store.searchable().length, 2, '单次失败仍参与搜索');
+
+    out = await store.recordResults([{ id: a.id, ok: false, message: 'HTTP 503' }]);
+    assert.deepStrictEqual(out.died, [a.id], '连续第 2 次失败应判失效');
     assert.ok(store.get(a.id).deadAt > 0, '应写入失效时间');
-    assert.strictEqual(store.get(a.id).deadReason, '网络错误: fetch failed');
+    assert.strictEqual(store.get(a.id).deadReason, 'HTTP 503');
     assert.strictEqual(store.deadList().length, 1);
     assert.strictEqual(store.searchable().length, 1, '失效源应退出搜索');
 
     // 已失效源再次失败: 计数累加、原因更新, 不重复进 died
-    out = await store.recordResults([{ id: a.id, ok: false, message: 'HTTP 503' }]);
+    out = await store.recordResults([{ id: a.id, ok: false, message: 'HTTP 504' }]);
     assert.deepStrictEqual(out.died, [], '不应重复判定失效');
-    assert.strictEqual(store.get(a.id).failStreak, 2, '再次失败应累加次数');
-    assert.strictEqual(store.get(a.id).deadReason, 'HTTP 503');
+    assert.strictEqual(store.get(a.id).failStreak, 3, '再次失败应累加次数');
+    assert.strictEqual(store.get(a.id).deadReason, 'HTTP 504');
 
     // 成功清零(未失效的 b)
     await store.recordResults([{ id: b.id, ok: false, message: 'x' }]);
@@ -332,7 +338,7 @@ const SRC_B = {
     assert.strictEqual(store.deadList().length, 0, '旧数据不应被判失效');
     assert.strictEqual(store.searchable().length, 1);
 
-    // v1.46.2 的「不可用」数据(1 次失败, 没有 deadAt) 升级后应归入失效
+    // v1.46.2 的「不可用」数据: failStreak=1 在新阈值下不再判死
     const legacyBad = JSON.stringify({ v: 1, items: [{
       id: 'old2', bookSourceName: '旧不可用源', bookSourceUrl: 'https://old3.com',
       enabled: true, addedAt: 1, lastCheck: 1740000000000, lastCheckOk: false,
@@ -340,10 +346,45 @@ const SRC_B = {
     }] });
     const bad = await makeStore(legacyBad);
     const b0 = bad.store.get('old2');
-    assert.strictEqual(b0.deadAt, 1740000000000, '旧不可用数据应补上 deadAt(取 lastCheck)');
-    assert.ok(/升级前/.test(b0.deadReason || ''), '应给出可读的失效原因');
-    assert.strictEqual(bad.store.deadList().length, 1);
-    assert.strictEqual(bad.store.searchable().length, 0);
+    assert.strictEqual(b0.deadAt, undefined, '只失败 1 次的旧数据不应判死');
+    assert.strictEqual(b0.failStreak, 1);
+    assert.strictEqual(bad.store.searchable().length, 1);
+
+    // failStreak=2 的旧数据应判死
+    const legacyBad2 = JSON.stringify({ v: 1, items: [{
+      id: 'old3', bookSourceName: '旧失效源', bookSourceUrl: 'https://old4.com',
+      enabled: true, addedAt: 1, lastCheck: 1740000000000, lastCheckOk: false,
+      lastCheckMessage: 'HTTP 403', failStreak: 2,
+    }] });
+    const bad2 = await makeStore(legacyBad2);
+    assert.ok(bad2.store.get('old3').deadAt > 0, '连续失败 2 次的旧数据应补 deadAt');
+    assert.strictEqual(bad2.store.deadList().length, 1);
+
+    // 已标 dead 但 failStreak=1 的旧数据应一次性恢复
+    const legacyDead = JSON.stringify({ v: 1, items: [{
+      id: 'old4', bookSourceName: '旧单次失效', bookSourceUrl: 'https://old5.com',
+      enabled: true, addedAt: 1, lastCheck: 1740000000000, lastCheckOk: false,
+      failStreak: 1, deadAt: 1740000000000, deadReason: '网络错误',
+    }] });
+    const revived = await makeStore(legacyDead);
+    assert.strictEqual(revived.store.get('old4').deadAt, undefined, 'failStreak=1 的旧 dead 应自动恢复');
+    assert.strictEqual(revived.store.get('old4').failStreak, 0);
+  }
+
+  // 10b) reviveMany: 批量/全部/幂等
+  {
+    const { store } = await makeStore();
+    const mk = (id, dead) => ({
+      id, bookSourceName: id, bookSourceUrl: 'https://' + id + '.com', enabled: true,
+      failStreak: dead ? 2 : 0, ...(dead ? { deadAt: Date.now(), deadReason: 'x' } : {}),
+    });
+    await store.importText(JSON.stringify([mk('r1', true), mk('r2', true), mk('r3', true), mk('r4', false)]));
+    const ids = store.deadList().map((s) => s.id);
+    assert.strictEqual(await store.reviveMany([ids[0], ids[1]]), 2, '应恢复所选 2 个');
+    assert.strictEqual(store.deadList().length, 1, '剩余 1 个失效');
+    assert.strictEqual(await store.reviveMany(), 1, '全部恢复应返回 1');
+    assert.strictEqual(store.deadList().length, 0);
+    assert.strictEqual(await store.reviveMany(), 0, '重复恢复应为 0');
   }
 
   console.log('书源存储测试全部通过 ✔');

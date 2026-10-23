@@ -6,11 +6,9 @@
  * 缺书名或书地址的条目直接丢弃(真实书源里很常见)。
  */
 import { BookSource, RuleSearch } from '../bookSource';
-import { HNode, nodeText, parseHtml, outerHtml } from '../rules/html';
-import { selectAll } from '../rules/css';
-import { queryJson } from '../rules/jsonPath';
+import { HNode, nodeText, outerHtml } from '../rules/html';
 import { collapseSpace } from '../rules/entities';
-import { evalRuleOne, looksLikeJson, RuleContext, UnsupportedRuleError } from '../rules/evalRule';
+import { evalRuleList, evalRuleOne, RuleContext, UnsupportedRuleError } from '../rules/evalRule';
 import { resolveUrl } from '../rules/url';
 import { SandboxHttp } from '../rules/jsSandbox';
 
@@ -38,18 +36,6 @@ function toNumber(text: string): number | undefined {
     return n;
 }
 
-function jsonItems(root: unknown, bookList: string): unknown[] {
-    const path = (bookList || '').trim();
-    if (!path) { return []; }
-    const values = queryJson(root, path);
-    const out: unknown[] = [];
-    for (const v of values) {
-        if (Array.isArray(v)) { out.push(...v); }
-        else { out.push(v); }
-    }
-    return out;
-}
-
 export async function parseSearchPage(
     source: BookSource,
     content: string,
@@ -60,7 +46,6 @@ export async function parseSearchPage(
     if (!rule.bookList) {
         throw new UnsupportedRuleError('书源未配置 ruleSearch.bookList');
     }
-    const isJson = looksLikeJson(content);
     const baseUrl = pageUrl || source.bookSourceUrl;
     const out: SearchBookItem[] = [];
     const seen = new Set<string>();
@@ -74,30 +59,35 @@ export async function parseSearchPage(
         out.push(item);
     };
 
+    // 字段级隔离: 可选字段规则写错(如 XPath/残缺选择器)不应让整源判死
     const readFields = async (ctx: RuleContext) => {
-        const title = collapseSpace(await evalRuleOne(rule.name, ctx));
+        const safe = async (r?: string): Promise<string> => {
+            if (!r) { return ''; }
+            try { return await evalRuleOne(r, ctx); } catch { return ''; }
+        };
+        const title = collapseSpace(await safe(rule.name));
         if (!title) { return null; }
-        const author = collapseSpace(await evalRuleOne(rule.author, ctx));
-        const rawBookUrl = (await evalRuleOne(rule.bookUrl, ctx)).trim();
+        const rawBookUrl = (await safe(rule.bookUrl)).trim();
         const bookUrl = rawBookUrl ? resolveUrl(baseUrl, rawBookUrl) : '';
-        const coverRaw = (await evalRuleOne(rule.coverUrl, ctx)).trim();
+        if (!bookUrl) { return null; }
+        const coverRaw = (await safe(rule.coverUrl)).trim();
         const coverUrl = coverRaw ? resolveUrl(baseUrl, coverRaw) : '';
-        const intro = collapseSpace(await evalRuleOne(rule.intro, ctx));
-        const kind = collapseSpace(await evalRuleOne(rule.kind, ctx));
-        const lastChapter = collapseSpace(await evalRuleOne(rule.lastChapter, ctx));
-        const wordCount = toNumber(await evalRuleOne(rule.wordCount, ctx));
-        return { title, author, bookUrl, coverUrl, intro, kind, lastChapter, wordCount };
+        const intro = collapseSpace(await safe(rule.intro));
+        const kind = collapseSpace(await safe(rule.kind));
+        const lastChapter = collapseSpace(await safe(rule.lastChapter));
+        const wordCount = toNumber(await safe(rule.wordCount));
+        return { title, author: collapseSpace(await safe(rule.author)), bookUrl, coverUrl, intro, kind, lastChapter, wordCount };
     };
 
-    if (isJson) {
-        let json: unknown;
-        try {
-            json = JSON.parse(content);
-        } catch {
-            return [];
-        }
-        const items = jsonItems(json, rule.bookList);
-        for (const item of items) {
+    const parsed = await evalRuleList(rule.bookList, {
+        html: content,
+        baseUrl,
+        http,
+        sourceName: source.bookSourceName,
+    });
+
+    if (parsed.kind === 'json') {
+        for (const item of parsed.items) {
             if (out.length >= MAX_RESULTS_PER_SOURCE) { break; }
             if (!item || typeof item !== 'object') { continue; }
             const fields = await readFields({ json: item, baseUrl, http, sourceName: source.bookSourceName });
@@ -107,9 +97,7 @@ export async function parseSearchPage(
         return out;
     }
 
-    const root = parseHtml(content);
-    const nodes: HNode[] = selectAll(root, rule.bookList);
-    for (const node of nodes) {
+    for (const node of parsed.nodes) {
         if (out.length >= MAX_RESULTS_PER_SOURCE) { break; }
         // 节点上下文: CSS 直接在节点子树上求值, 避免整页重复解析
         const ctx: RuleContext = { node, baseUrl, http, sourceName: source.bookSourceName, html: outerHtml(node) };

@@ -3,7 +3,7 @@
  */
 'use strict';
 const assert = require('assert');
-const { evalRule, evalRuleOne, interpolate, splitFallback } = require('../dist/rules/evalRule');
+const { evalRule, evalRuleOne, evalRuleList, interpolate, splitFallback } = require('../dist/rules/evalRule');
 const { SEARCH_HTML, SEARCH_JSON, BASE_URL } = require('./fixtures-source');
 
 const html = { html: SEARCH_HTML, baseUrl: BASE_URL };
@@ -131,6 +131,22 @@ const json = { json: SEARCH_JSON, baseUrl: BASE_URL };
     // 内嵌规则为空时保留空串, 不报错
     const empty = await evalRuleOne('{{@@.nope@text}}条', { html: doc, baseUrl: '' });
     assert.strictEqual(empty, '条');
+  }
+
+  // 20) 列表规则: `||` 兜底不再进 CSS; 显式 JSON 即使有 html 也走 JSON
+  {
+    const html = '<div class="a"><ul><li>1</li></ul></div>'
+      + '<div class="b"><div class="list"><li>2</li><li>3</li></div></div>';
+    const parsed = await evalRuleList('.nope||.b .list li', { html, baseUrl: BASE_URL });
+    assert.strictEqual(parsed.kind, 'html');
+    assert.strictEqual(parsed.nodes.length, 2, '|| 后面的选择器应生效');
+
+    const json = { data: { books: [{ title: 'A' }, { title: 'B' }] } };
+    const vals = await evalRule('$.data.books[*].title', { html: '<div>x</div>', json, baseUrl: BASE_URL });
+    assert.deepStrictEqual(vals, ['A', 'B'], '显式 JSONPath 不应被 html 带偏');
+
+    const upper = await evalRule('@JSon:$.data.books[0].title', { json, baseUrl: BASE_URL });
+    assert.deepStrictEqual(upper, ['A'], '@JSon: 前缀应大小写不敏感');
   }
 
   console.log('规则求值测试全部通过 ✔');

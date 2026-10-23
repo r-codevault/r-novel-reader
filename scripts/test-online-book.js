@@ -92,6 +92,22 @@ const source = {
   assert.strictEqual(toc2.chapters.length, 3, '翻页应合并并去重, 实际 ' + toc2.chapters.length);
   assert.deepStrictEqual(toc2.chapters.map((c) => c.url), [BASE + '/c/1', BASE + '/c/2', BASE + '/c/3']);
 
+  // 4b) 目录列表: || 兜底 / !0 排除 / 切片
+  {
+    globalThis.fetch = async (url) => {
+      const u = String(url);
+      if (u.indexOf('/book/1024/') >= 0) { return makeResponse(200, fx.TOC_HTML); }
+      return makeResponse(404, 'not found');
+    };
+    const withRule = (rule) => ({ ...source, ruleToc: { ...source.ruleToc, chapterList: rule } });
+    const a = await fetchToc(withRule('.nope||.listmain dd a'), BASE + '/book/1024/', { pool: new SourceHttpPool() });
+    assert.strictEqual(a.chapters.length, 3, '|| 兜底应命中 3 章');
+    const b = await fetchToc(withRule('.listmain dd a!0'), BASE + '/book/1024/', { pool: new SourceHttpPool() });
+    assert.strictEqual(b.chapters.length, 2, '!0 应排除第 1 条');
+    const c = await fetchToc(withRule('.listmain dd a[0:2]'), BASE + '/book/1024/', { pool: new SourceHttpPool() });
+    assert.strictEqual(c.chapters.length, 2, '[0:2] 应取前 2 条');
+  }
+
   // 5) 缓存读写/清理
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'r-online-cache-'));
   const cache = new OnlineCache(tmp);

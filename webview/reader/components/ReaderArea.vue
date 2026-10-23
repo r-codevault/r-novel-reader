@@ -18,6 +18,8 @@ const handleLeftRef = ref<HTMLElement | null>(null);
 const handleRightRef = ref<HTMLElement | null>(null);
 const handleLeftStyle = reactive({ left: 'auto', right: 'auto' });
 const handleRightStyle = reactive({ left: 'auto', right: 'auto' });
+/** 预览「加入书架」: 跟随右侧「下一章」箭头列的中心线, 放在箭头下方 */
+const previewAddStyle = reactive({ right: 'auto', top: 'calc(50% + 102px)' });
 
 /** 只显示当前章的错误/加载态(切章后旧状态不残留) */
 const chapterError = computed(function () {
@@ -177,8 +179,12 @@ function positionHandles(): void {
   const NAV_GAP = 6;
   sidePrevStyle.left = Math.max(4, rect.left - NAV_W - NAV_GAP) + 'px';
   sidePrevStyle.right = 'auto';
-  sideNextStyle.right = Math.max(4, window.innerWidth - rect.right - NAV_W - NAV_GAP) + 'px';
+  const navRight = Math.max(4, window.innerWidth - rect.right - NAV_W - NAV_GAP);
+  sideNextStyle.right = navRight + 'px';
   sideNextStyle.left = 'auto';
+  // 与箭头列同中心线: right + NAV_W/2, 再用 translateX(50%) 把自身宽度回拉
+  // 窄窗口/内容贴边时, 保证按钮不越出视口(按钮宽约 100, 右边缘至少留 8)
+  previewAddStyle.right = Math.max(navRight + NAV_W / 2, 64) + 'px';
 }
 
 let widthDrag: { side: 'left' | 'right'; startX: number; startW: number; handle: HTMLElement } | null = null;
@@ -242,8 +248,8 @@ defineExpose({ positionHandles, scrollToParagraph });
 
 <template>
   <main id="reader" ref="readerRef" :class="{ 'resizing-width': resizingWidth }">
-    <button v-if="previewing" class="preview-add" data-preview-add title="把这本书加入书架"
-      @click.stop="savePreview">＋ 加入书架</button>
+    <button v-if="previewing" class="preview-add" data-preview-add :style="previewAddStyle"
+      title="把这本书加入书架" @click.stop="savePreview">＋ 加入书架</button>
     <article id="content" ref="contentRef">
       <h2 class="chapter-title">{{ chapter ? chapter.title : '' }}</h2>
       <div v-if="chapterError" class="empty-tip reader-error" data-chapter-error>

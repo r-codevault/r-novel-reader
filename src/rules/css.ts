@@ -53,7 +53,10 @@ const LEGADO_EXTRACT = /^(text|ownText|html|href|src|attr=[A-Za-z0-9_:-]+)$/;
 /** 单个逗号分组: `class.a@tag.b` -> `.a b` */
 function normalizeLegadoGroup(raw: string): string {
     const text = raw.trim();
-    if (text.indexOf('@') < 0 && !/^(class|id|tag|text)\./.test(text)) { return text; }
+    // 纯 CSS 也支持 legado 的 `.N` / `.-N` 序号(转成 :index)
+    const withIndex = (css: string): string =>
+        css.replace(/\.(-?\d+)(?=$|[\s>+~])/g, ':index($1)');
+    if (text.indexOf('@') < 0 && !/^(class|id|tag|text)\./.test(text)) { return withIndex(text); }
     const selectors: string[] = [];
     for (const part of splitTopLevel(text, '@')) {
         const seg = part.trim();
@@ -67,11 +70,11 @@ function normalizeLegadoGroup(raw: string): string {
         }
         let css = seg.replace(/^class\./, '.').replace(/^id\./, '#').replace(/^tag\./, '');
         // legado 的 `.N` 序号: `div.card-other.1` -> `div.card-other:index(1)`
-        const idx = /^(.*)\.(\d+)$/.exec(css);
+        const idx = /^(.*)\.(-?\d+)$/.exec(css);
         if (idx) { css = idx[1] + ':index(' + idx[2] + ')'; }
-        selectors.push(css);
+        selectors.push(withIndex(css));
     }
-    return selectors.length ? selectors.join(' ') : text;
+    return selectors.length ? selectors.join(' ') : withIndex(text);
 }
 
 /**
@@ -172,8 +175,21 @@ function parseGroup(text: string): Group {
             } else if (ch === '[') {
                 const end = text.indexOf(']', i);
                 if (end < 0) { throw new CssSyntaxError('属性选择器未闭合'); }
-                compound.attrs.push(parseAttr(text.slice(i + 1, end)));
+                const body = text.slice(i + 1, end);
+                if (/^-?\d*:-?\d*$/.test(body)) {
+                    // legado 结果集切片: [1:3] / [:2] / [4:]
+                    setFilters.push('slice(' + body + ')');
+                } else {
+                    compound.attrs.push(parseAttr(body));
+                }
                 i = end + 1;
+            } else if (ch === '!') {
+                // legado 排除索引链: !0 / !0:1:2
+                i++;
+                const m = /^\d+(?::\d+)*/.exec(text.slice(i));
+                if (!m) { throw new CssSyntaxError('排除索引为空'); }
+                setFilters.push('exclude(' + m[0].replace(/:/g, ',') + ')');
+                i += m[0].length;
             } else if (ch === ':') {
                 i++;
                 let name = '';
@@ -304,7 +320,8 @@ function descendants(node: HNode, out: HNode[]): HNode[] {
 /** 应用 legado 的 .N 序号(对当前匹配集取第 N 个) */
 function applyIndex(nodes: HNode[], index: number | undefined): HNode[] {
     if (index === undefined) { return nodes; }
-    return index >= 0 && index < nodes.length ? [nodes[index]] : [];
+    const i = index < 0 ? nodes.length + index : index;
+    return i >= 0 && i < nodes.length ? [nodes[i]] : [];
 }
 
 function runGroup(root: HNode, group: Group): HNode[] {
@@ -339,8 +356,26 @@ function runGroup(root: HNode, group: Group): HNode[] {
         }
         cur = applyIndex(next, part.compound.index);
     }
-    // 结果集伪类
+    // 结果集后置操作(exclude/slice) + 伪类
     for (const f of group.setFilters) {
+        if (f.startsWith('exclude(')) {
+            const set = new Set(f.slice(8, -1).split(',').map(function (v) { return parseInt(v, 10); }));
+            cur = cur.filter(function (_, i) { return !set.has(i); });
+            continue;
+        }
+        if (f.startsWith('slice(')) {
+            const body = f.slice(6, -1);
+            const parts = body.split(':');
+            const len = cur.length;
+            let start = parts[0] === '' ? 0 : parseInt(parts[0], 10);
+            let end = parts[1] === '' || parts[1] === undefined ? len : parseInt(parts[1], 10);
+            if (start < 0) { start += len; }
+            if (end < 0) { end += len; }
+            start = Math.max(0, Math.min(len, start));
+            end = Math.max(0, Math.min(len, end));
+            cur = start >= end ? [] : cur.slice(start, end);
+            continue;
+        }
         const m = /^([a-z]+)(?:\((-?\d+)\))?$/.exec(f);
         if (!m) { continue; }
         const n = m[2] === undefined ? 0 : parseInt(m[2], 10);
