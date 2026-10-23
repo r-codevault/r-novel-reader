@@ -28,6 +28,10 @@ const progressPercent = computed(function () {
 const errorNames = computed(function () {
   return failedNames(state.searchErrors.map(function (e) { return e.sourceName; }));
 });
+/** 是否正在搜「输入框里这个词」(改词后按钮应恢复可点) */
+const searchingThis = computed(function () {
+  return state.searching && state.searchKeyword.trim() === state.searchKey;
+});
 
 /** 历史搜索(仅上一次) */
 const hasHistory = computed(function () {
@@ -69,8 +73,15 @@ function addOnline(item: { bookUrl: string } & Record<string, unknown>): void {
 }
 
 function doSearch(): void {
-  const key = state.searchKeyword.trim();
-  if (!key || state.searching) { return; }
+  // 直接读输入框实际值: 中文输入法下 v-model 可能还没同步到 state
+  const key = (inputRef.value ? inputRef.value.value : state.searchKeyword).trim();
+  if (!key) { return; }
+  if (state.searchKeyword !== key) { state.searchKeyword = key; }
+  if (state.searching) {
+    if (key === state.searchKey) { return; }
+    // 搜索中换了关键词: 取消旧轮, 接着发起新搜索
+    cancelSearch();
+  }
 
   // 上一次的结果归档为「历史搜索」(同词重搜不覆盖, 空结果不覆盖)
   if (state.searchResults.length > 0 && state.searchKey && state.searchKey !== key) {
@@ -114,7 +125,21 @@ function cancelSearch(): void {
   state.searchDeadAdded = 0;
 }
 
-/** 搜索中/暂停时改写关键词 -> 取消本轮, 回到未搜索状态(结果保留) */
+/** 输入框一变就取消旧搜索: 让按钮立即从「搜索中…」恢复, 不必先点取消 */
+function onKeywordInput(e: Event): void {
+  const target = e.target as HTMLInputElement | null;
+  const value = target ? target.value : state.searchKeyword;
+  if (state.searching && value.trim() !== state.searchKey) { cancelSearch(); }
+}
+
+/** 输入法确认候选的回车不触发搜索 */
+function onEnter(e: KeyboardEvent): void {
+  // isComposing / keyCode 229 都是输入法组合态(Chrome/Electron 两者都可能出现)
+  if (e.isComposing || e.keyCode === 229) { return; }
+  doSearch();
+}
+
+/** 兜底: 程序化改 state.searchKeyword 时同样取消旧搜索 */
 watch(function () { return state.searchKeyword; }, function (v) {
   if (state.searching && v.trim() !== state.searchKey) { cancelSearch(); }
 });
@@ -216,9 +241,10 @@ function goDead(): void {
   <div class="popup-body src-search-body">
     <div class="src-search">
       <input ref="inputRef" v-model="state.searchKeyword" class="src-input" type="text"
-        placeholder="输入书名或作者, 回车搜索" data-src-input @keydown.enter="doSearch" />
-      <button class="src-go" :disabled="state.searching || noSearchable" data-src-go @click="doSearch">
-        {{ state.searching ? '搜索中…' : '搜索' }}
+        placeholder="输入书名或作者, 回车搜索" data-src-input
+        @input="onKeywordInput" @keydown.enter="onEnter" />
+      <button class="src-go" :disabled="searchingThis || noSearchable" data-src-go @click="doSearch">
+        {{ searchingThis ? '搜索中…' : '搜索' }}
       </button>
       <button v-if="state.searching" class="src-pause" data-src-pause @click="togglePause">
         {{ state.searchPaused ? '继续' : '暂停' }}

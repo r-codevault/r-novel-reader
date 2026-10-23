@@ -1767,6 +1767,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!document.querySelector('#sourcePopup [data-src-progress]'), '改写后进度行应消失');
   assert(document.querySelector('#sourcePopup [data-src-go]').textContent.includes('搜索'),
     '改写后状态应回到「搜索」');
+  assert(!document.querySelector('#sourcePopup [data-src-go]').disabled,
+    '改写后「搜索」按钮应立即可点(不必先点取消)');
 
   // 15) 再搜: 上一轮 1 条进历史, 本次 6 条 -> 6/1 行
   posted.length = 0;
@@ -1849,6 +1851,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // 18) 历史收起后不渲染历史行
   assert(!document.querySelector('#sourcePopup [data-src-history-result]'),
     '历史收起后不渲染历史行');
+
+  // 18.5) 输入法确认候选的回车(composing)不应触发搜索
+  posted.length = 0;
+  searchInput.value = '吞噬星空';
+  const imeEnter = new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+  Object.defineProperty(imeEnter, 'isComposing', { value: true });
+  searchInput.dispatchEvent(imeEnter);
+  await sleep(20);
+  assert(!posted.some((m) => m.type === 'sourceSearch'), '输入法组合中的回车不应发起搜索');
 
   // 19) 点击结果行 -> 临时预览(不加入书架)
   posted.length = 0;
