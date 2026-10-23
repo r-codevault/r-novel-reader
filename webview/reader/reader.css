@@ -228,8 +228,7 @@
   }
   /* 预览模式: 正文右上角的「加入书架」 */
   .preview-add {
-    position: fixed; top: calc(50% + 102px); right: auto; z-index: 29;
-    transform: translateX(50%);
+    position: fixed; top: calc(50% + 102px); left: auto; right: auto; z-index: 29;
     padding: 5px 12px; white-space: nowrap;
     cursor: pointer; font-family: inherit; font-size: var(--ui-font);
     color: var(--accent-fg); background: var(--accent);
@@ -875,6 +874,9 @@
     border: 1px solid var(--sp-border-strong); border-radius: 4px;
   }
   .src-bulk-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .src-bulk-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .src-bulk-danger { color: var(--danger); border-color: var(--danger); }
+  .src-bulk-danger:hover { color: var(--danger); border-color: var(--danger); background: var(--danger-bg, transparent); }
 
   /* manage 视图: 工具条/批量条/筛选/底部固定, 只有列表滚 */
   #sourcePopup .src-manage-body { display: flex; flex-direction: column; overflow: hidden; }

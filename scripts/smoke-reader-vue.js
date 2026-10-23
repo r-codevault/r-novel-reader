@@ -2448,8 +2448,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(40);
   const previewBtn = document.querySelector('[data-preview-add]');
   assert(previewBtn && previewBtn.textContent.includes('加入书架'), '预览书应显示「加入书架」按钮');
-  assert(previewBtn.style.right && previewBtn.style.right !== 'auto',
-    '加入书架应跟随右侧章节箭头定位(下方)');
+  assert(previewBtn.style.left && previewBtn.style.left !== 'auto',
+    '加入书架应在正文右边缘外侧(下一章下方)');
   assert(!/\.preview-add\{[^}]*top:\s*16px/.test(capturedHtml), '不应再固定在右上角');
   posted.length = 0;
   previewBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));

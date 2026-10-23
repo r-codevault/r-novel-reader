@@ -812,6 +812,7 @@ export function activate(context: vscode.ExtensionContext): void {
         list: () => bookSources.list().map(toSourceView),
         importText: (text) => bookSources.importText(text),
         remove: (id) => bookSources.remove(id),
+        removeMany: (ids) => bookSources.removeMany(ids),
         setEnabled: (id, enabled) => bookSources.setEnabled(id, enabled),
         update: async (id, patch) => {
             const current = bookSources.get(id);

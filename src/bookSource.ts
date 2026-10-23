@@ -444,8 +444,19 @@ export class BookSourceStore {
     }
 
     async remove(id: string): Promise<void> {
-        await this._enqueue(async () => {
-            await this._write(this._read().filter((s) => s.id !== id));
+        await this.removeMany([id]);
+    }
+
+    /** 批量删除; 一次写盘, 返回实际删除数 */
+    async removeMany(ids: string[]): Promise<number> {
+        if (!ids.length) { return 0; }
+        return this._enqueue(async () => {
+            const set = new Set(ids);
+            const items = this._read();
+            const next = items.filter((s) => !set.has(s.id));
+            const n = items.length - next.length;
+            if (n > 0) { await this._write(next); }
+            return n;
         });
     }
 

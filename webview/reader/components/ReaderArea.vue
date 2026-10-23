@@ -19,7 +19,7 @@ const handleRightRef = ref<HTMLElement | null>(null);
 const handleLeftStyle = reactive({ left: 'auto', right: 'auto' });
 const handleRightStyle = reactive({ left: 'auto', right: 'auto' });
 /** 预览「加入书架」: 跟随右侧「下一章」箭头列的中心线, 放在箭头下方 */
-const previewAddStyle = reactive({ right: 'auto', top: 'calc(50% + 102px)' });
+const previewAddStyle = reactive({ left: 'auto', top: 'calc(50% + 102px)' });
 
 /** 只显示当前章的错误/加载态(切章后旧状态不残留) */
 const chapterError = computed(function () {
@@ -182,9 +182,9 @@ function positionHandles(): void {
   const navRight = Math.max(4, window.innerWidth - rect.right - NAV_W - NAV_GAP);
   sideNextStyle.right = navRight + 'px';
   sideNextStyle.left = 'auto';
-  // 与箭头列同中心线: right + NAV_W/2, 再用 translateX(50%) 把自身宽度回拉
-  // 窄窗口/内容贴边时, 保证按钮不越出视口(按钮宽约 100, 右边缘至少留 8)
-  previewAddStyle.right = Math.max(navRight + NAV_W / 2, 64) + 'px';
+  // 贴在纸面右边缘外侧(不进入正文); 窄窗口时向内收, 保证不出视口
+  const buttonW = 104;
+  previewAddStyle.left = Math.max(4, Math.min(rect.right + 8, window.innerWidth - buttonW - 4)) + 'px';
 }
 
 let widthDrag: { side: 'left' | 'right'; startX: number; startW: number; handle: HTMLElement } | null = null;

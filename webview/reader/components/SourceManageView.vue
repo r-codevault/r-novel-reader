@@ -148,6 +148,13 @@ function askDelete(s: BookSourceView): void {
   pendingDeleteId.value = s.id;
 }
 
+/** 删除所选: 当前勾选(=启用)的书源; 扩展侧二次确认后批量删除 */
+function removeSelected(): void {
+  const ids = filtered.value.filter(function (s) { return s.enabled; }).map(function (s) { return s.id; });
+  if (!ids.length) { return; }
+  send({ type: 'sourceRemoveMany', ids });
+}
+
 /** 触底自动加载: 距底 32px 内追加一页 */
 function onListScroll(): void {
   const el = listRef.value;
@@ -187,6 +194,8 @@ function onListScroll(): void {
       <span class="spacer"></span>
       <button class="src-bulk-btn" data-src-invert @click="invertAll">反选</button>
       <button class="src-bulk-btn" data-src-clear @click="disableAll">全部停用</button>
+      <button class="src-bulk-btn src-bulk-danger" data-src-remove-selected :disabled="!enabledCount"
+        title="删除当前勾选的 N 个书源" @click="removeSelected">删除所选</button>
     </div>
 
     <input v-model="keyword" class="src-input src-filter" type="text" placeholder="筛选书源(名称/分组/地址)"

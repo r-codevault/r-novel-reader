@@ -387,6 +387,16 @@ const SRC_B = {
     assert.strictEqual(await store.reviveMany(), 0, '重复恢复应为 0');
   }
 
+  // 10c) removeMany: 批量一次删除
+  {
+    const { store } = await makeStore();
+    await store.importText(JSON.stringify([SRC_A, SRC_B, { ...SRC_A, bookSourceName: 'C站', bookSourceUrl: 'https://c.com' }]));
+    const ids = store.list().map((x) => x.id);
+    assert.strictEqual(await store.removeMany([ids[0], ids[1]]), 2, '应删除 2 个');
+    assert.strictEqual(store.list().length, 1, '剩 1 个');
+    assert.strictEqual(await store.removeMany(['missing']), 0, '不存在 id 应为 0');
+  }
+
   console.log('书源存储测试全部通过 ✔');
 })().catch((err) => {
   console.error(err);

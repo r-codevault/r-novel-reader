@@ -94,6 +94,7 @@ type WebviewMessage =
     | { type: 'sourceImport'; mode: 'url' | 'clipboard' | 'file' }
     | { type: 'sourceToggle'; id: string; enabled: boolean }
     | { type: 'sourceRemove'; id: string }
+    | { type: 'sourceRemoveMany'; ids: string[] }
     | { type: 'sourceUpdate'; id: string; name?: string; searchUrl?: string }
     | { type: 'sourceExport' }
     | { type: 'sourceCheck'; id?: string; scope?: 'active' | 'dead' | 'all'; runId?: number }
@@ -137,6 +138,8 @@ export interface BookSourceApi {
     /** 导入文本; 弹窗交互(URL/剪贴板/文件)由扩展命令完成, 这里只处理内容 */
     importText(text: string): Promise<ImportResult>;
     remove(id: string): Promise<void>;
+    /** 批量删除; 返回实际删除数 */
+    removeMany?(ids: string[]): Promise<number>;
     setEnabled(id: string, enabled: boolean): Promise<void>;
     update(id: string, patch: { name?: string; searchUrl?: string }): Promise<BookSourceView | undefined>;
     exportText(): string;
@@ -888,6 +891,9 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             case 'sourceRemove':
                 void ReaderPanel.bookSources?.remove(msg.id).then(() => this.postSources());
                 break;
+            case 'sourceRemoveMany':
+                void this._removeSourcesMany(msg.ids);
+                break;
             case 'sourceUpdate':
                 void ReaderPanel.bookSources
                     ?.update(msg.id, { name: msg.name, searchUrl: msg.searchUrl })
@@ -922,6 +928,21 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                     .then(() => this.postSources());
                 break;
         }
+    }
+
+    /** 批量删除书源: 二次确认后一次写盘 */
+    private async _removeSourcesMany(ids: string[]): Promise<void> {
+        const api = ReaderPanel.bookSources;
+        if (!api?.removeMany || !ids.length) { return; }
+        const pick = await vscode.window.showWarningMessage(
+            '确定删除选中的 ' + ids.length + ' 个书源吗？删除后需要重新导入才能恢复。',
+            { modal: true },
+            '删除'
+        );
+        if (pick !== '删除') { return; }
+        const n = await api.removeMany(ids);
+        this.postSources();
+        void vscode.window.showInformationMessage('已删除 ' + n + ' 个书源');
     }
 
     /** 批量恢复失效书源: 全部恢复需二次确认; 恢复只清标记, 不改启用状态 */
