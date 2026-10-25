@@ -89,7 +89,7 @@
 | `webview/reader/components/CatalogPanel.vue` | 修改。分卷/章节 button 化 + `aria-expanded/aria-controls/aria-current`；窄屏「更多」折叠容器；下载控件 `filePath`；进度区 `role=status`/`progressbar`；下载终态就地可见 | 中高。目录是高频面板 |
 | `webview/reader/components/ShelfPopup.vue` | 修改。行 → 容器 + `button.bk-main` + 独立删除按钮（`aria-label="从书架移除《书名》"`、`aria-current`）；批量复选框原生；危险操作走确认框 + `opId` 终态 | 中 |
 | `webview/reader/components/HistoryPopup.vue` | 修改。同上（行主按钮 + 批量复选框 + 确认框 + 终态） | 中 |
-| `webview/reader/components/NotesPopup.vue` | 修改。书/章组头拆为并列控件（展开 button + 原生 checkbox + 删除 button）；`indeterminate` 半选；条目「更多」常显按钮；textarea `aria-label`；确认框 + 终态 | **高**。现有 DOM 是 button 内嵌可聚焦 span（`:352-392`），拆分会改变 Tab 序与样式，需回归 |
+| `webview/reader/components/NotesPopup.vue` | 修改。书/章组头拆为并列控件（展开 button + 原生 checkbox + 删除 button）；`indeterminate` 半选；条目操作组常显（定位原文/编辑/删除，无「更多」开关）；textarea `aria-label`；确认框 + 终态 | **高**。现有 DOM 是 button 内嵌可聚焦 span（`:352-392`），拆分会改变 Tab 序与样式，需回归 |
 | `webview/reader/components/NoteComposer.vue` | 修改。`aria-label="笔记内容"`、错误 `role="alert"`、保存中禁用、失败保留草稿（现有逻辑已对，只补语义） | 低 |
 | `webview/reader/components/ReaderArea.vue` | 修改。段落笔记按钮 + roving tabindex + `data-note-mode`；已有笔记可见标记；空态文案区分 | 中 |
 | `webview/reader/components/SettingsPanel.vue` | 修改。主题预设 → `role="radio"` 组（保留 `.sp-dot[data-theme]` 便于既有测试）、可见名称、方向键；三个下拉 + `settingsOpen` 统一 `restoreTheme()`；宽度档位名；自定义输入 `label`；`handleEscape()` 暴露 | **高**。预览/主题/下拉三者耦合，是 R8 全部风险的集中点 |
@@ -848,9 +848,9 @@ CSS 接入（写死 `#fff`/`#2ea043` 全部清除）：
 
 ### 5.6 书源主次操作与 hover 依赖（R11）
 
-- 工具条三层：`[导入书源 ▾]`（唯一主操作，`popup-primary`，展开子菜单：从 URL / 粘贴 JSON / 本地文件，`role="menu"` + 子项 `role="menuitem"`）｜`[检查全部]`（次操作，`popup-secondary`）｜`[更多 ▾]`（导出、全部停用）。子菜单键盘可达：`Enter` 展开、`ArrowUp/Down` 移项、`Esc` 收起（走 `handleEscape` 第一层）。
+- 工具条三层：`[导入书源 ▾]`（唯一主操作，`popup-primary`，展开子菜单：从 URL / 粘贴 JSON / 本地文件，`role="menu"` + 子项 `role="menuitem"`）｜`[检查全部]`（次操作，`popup-secondary`）｜`[更多 ▾]`（导出、全部停用/全部启用）。子菜单绝对定位在工具条下方，不参与 flex 排版；键盘可达：`Enter` 展开、`ArrowUp/Down` 移项、`Esc` 收起（走 `handleEscape` 第一层）。
 - 批量条（`.src-bulk`，含"删除所选"）**仅管理模式可见**：`SourceManageView` 增加 `managing` ref + 头部「管理/完成」按钮（与书架/历史同构）；危险区用 `.src-danger-zone` 包裹并加 `border-top` 分隔（R11-02）。
-- 笔记「更多」（R11-03/04）：`.nt-item` 内新增常显 `button.nt-more[aria-expanded]`；`.nt-acts` 显示条件改为 `.nt-item.more-open .nt-acts, .nt-item:focus-within .nt-acts`；`@media (pointer: coarse){ .nt-item .nt-acts{display:flex} }`。`display:none` 不再是唯一手段（有「更多」按钮这一显式入口）。
+- 笔记操作组（R11-03/04）：`.nt-item` 内的定位原文/编辑/删除常显，`.nt-acts{display:flex}`，不再渲染 `nt-more` / `more-open`，也不依赖 hover、`:focus-within` 或粗指针媒体查询才出现。
 - 保留点击笔记正文定位原文（R11-05）：`.nt-text`/`.nt-meta` 区域仍是主点击区（`onNoteClick`），新增的三个动作有独立按钮。
 - 状态双通道（R11-06）：当前/半选/失败/下载四类状态除颜色外均带文字（在读/已存书架/失败/已下载）或形状（`✓ / ∅ / ▲`）。
 
@@ -930,7 +930,7 @@ CSS 接入（写死 `#fff`/`#2ea043` 全部清除）：
 | 优先级 | P1（R8/R10）/ P2（R11） |
 | 依赖 | T03（共用 `reader.css` 分区；`--ui-font` 已固定）、T04（README 的"首次书源入口"文案以 T04 的行为为准） |
 | 源文件 | `src/settings.ts`、`webview/reader/store.ts`、`src/readerPanel.ts`（首帧 `:root` 变量）、`SettingsPanel.vue`、`SourceManageView.vue`、`NotesPopup.vue`、`reader.css`（令牌与层级分区）、`scripts/test-theme-presets.js`、`test-province-theme.js`、`test-term-theme.js`、`test-festival-theme.js`、`README.md`（仅两处）、`scripts/smoke-reader-vue.js` |
-| 内容 | ① 主题预设 radio 组 + 可见名称 + 方向键 + 预览统一 `restoreTheme` + 档位名（窄/标准/宽/特宽）+ 自定义 label + 勾选标记（R8-01~07）；② `dangerFg`/`success` 令牌（7 预设 + 派生自动）+ 四处 CSS 接入 + 4 个测试断言（R10-01~04）；③ 书源主次操作三层 + 管理态批量条 + 危险区 + 笔记「更多」+ 非 hover 可达 + 状态双通道（R11-01~06）；④ README 卡位名与首次书源入口文案同步 |
+| 内容 | ① 主题预设 radio 组 + 可见名称 + 方向键 + 预览统一 `restoreTheme` + 档位名（窄/标准/宽/特宽）+ 自定义 label + 勾选标记（R8-01~07）；② `dangerFg`/`success` 令牌（7 预设 + 派生自动）+ 四处 CSS 接入 + 4 个测试断言（R10-01~04）；③ 书源主次操作三层 + 管理态批量条 + 危险区 + 笔记操作组常显 + 状态双通道（R11-01~06）；④ README 卡位名与首次书源入口文案同步 |
 | 验收（PRD） | R8-01 ~ R8-07、R10-01 ~ R10-04、R11-01 ~ R11-06 |
 | 测试 | `npm test`（4 个主题脚本的 `dangerFg/danger ≥4.5`、`success/chromeBg ≥4.5` 必须全绿）；`smoke-reader-vue.js` 更新宽度档位断言（`窄,标准,宽,特宽` + `data-ratio`）、主题 radio `aria-checked`/方向键、下拉关闭后主题回到保存值 |
 | 风险 | 中。新增令牌断言会立刻让"未达标主题"暴露，需逐个校准（先跑脚本列出清单再改值）；`.sp-dot` 结构变更需保证冒烟测试的三条既有断言仍成立 |
@@ -949,7 +949,7 @@ CSS 接入（写死 `#fff`/`#2ea043` 全部清除）：
 | R8-01 ~ R8-07 设置控件 | T05 | 全部 |
 | R9-01 ~ R9-07 加载/失败/保存终态 | T04 | 明细/播报/写操作终态 |
 | R10-01 ~ R10-04 对比度令牌 | T05 | 令牌 + 4 个测试 |
-| R11-01 ~ R11-06 层级与 hover | T05 | 书源主次、笔记「更多」、双通道 |
+| R11-01 ~ R11-06 层级与 hover | T05 | 书源主次、笔记操作组常显、双通道 |
 | R12-01 ~ R12-06 小控件与名称 | T03 | 尺寸 + label + 名称 |
 
 ### 6.7 任务依赖图

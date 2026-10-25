@@ -8,6 +8,8 @@ export interface CatalogChapter {
 }
 
 export interface CatalogGroup {
+  /** 稳定标识: 卷名可能重复(多个「正文」/同名篇), 折叠状态不能拿 name 当 key */
+  id: string;
   name: string;
   entry: number; // 卷标题对应正文章节的 index(-1 表示无)
   items: CatalogChapter[];
@@ -55,11 +57,17 @@ export function buildCatalogGroups(chapters: CatalogChapter[]): CatalogGroup[] {
   const groups: CatalogGroup[] = [];
   let cur: CatalogGroup | null = null;
   let curKey: string | null = null;
+  /** 同一份章节列表 → 同一批 id; 反转/筛选都带着 id 走, 折叠状态不会串到别的卷 */
+  let seq = 0;
+  function makeGroup(name: string, entry: number): CatalogGroup {
+    seq += 1;
+    return { id: 'g' + seq, name: name, entry: entry, items: [] };
+  }
   for (const c of chapters) {
     const key = volumeKey(c.title);
     if (isVolumeTitle(c.title)) {
       if (cur) { groups.push(cur); }
-      cur = { name: c.title, entry: c.index, items: [] };
+      cur = makeGroup(c.title, c.index);
       curKey = key;
       continue;
     }
@@ -67,7 +75,7 @@ export function buildCatalogGroups(chapters: CatalogChapter[]): CatalogGroup[] {
       // 带卷前缀的章节: 同卷归入一组, 卷名用 prefix(独立卷标题则保留完整标题)
       if (!cur || curKey !== key) {
         if (cur) { groups.push(cur); }
-        cur = { name: key, entry: c.index, items: [] };
+        cur = makeGroup(key, c.index);
         curKey = key;
       }
       cur.items.push(c);
@@ -75,7 +83,7 @@ export function buildCatalogGroups(chapters: CatalogChapter[]): CatalogGroup[] {
     }
     if (!cur || curKey !== null) {
       if (cur) { groups.push(cur); }
-      cur = { name: '正文', entry: -1, items: [] };
+      cur = makeGroup('正文', -1);
       curKey = null;
     }
     cur.items.push(c);

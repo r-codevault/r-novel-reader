@@ -38,6 +38,13 @@ const alive = computed(function () { return aliveSources(state.sources); });
 const filtered = computed(function () { return filterSources(alive.value, keyword.value); });
 const list = computed(function () { return filtered.value.slice(0, limit.value); });
 const enabledCount = computed(function () { return filtered.value.filter(function (s) { return s.enabled; }).length; });
+/** 当前筛选下一条都没启用: 批量按钮从「全部停用」切到「全部启用」 */
+const filteredNoneEnabled = computed(function () {
+  return filtered.value.length > 0 && enabledCount.value === 0;
+});
+const bulkToggleLabel = computed(function () {
+  return filteredNoneEnabled.value ? '全部启用' : '全部停用';
+});
 /** 搜索地址里没有 {{key}} 也不是脚本: 提示用户关键词不会生效 */
 const searchUrlNeedsKey = computed(function () {
   const u = editSearchUrl.value.trim();
@@ -209,10 +216,11 @@ function toggle(s: BookSourceView): void {
   send({ type: 'sourceToggle', id: s.id, enabled: !s.enabled });
 }
 
-/** 批量启停: 只把真正变化的条目发给扩展(一次写盘) */
-function bulkSet(valueOf: (s: BookSourceView) => boolean): void {
+/** 批量启停: 只把真正变化的条目发给扩展(一次写盘)；scope 可选，默认当前筛选结果 */
+function bulkSet(valueOf: (s: BookSourceView) => boolean, scope?: BookSourceView[]): void {
+  const list = scope || filtered.value;
   const patches: { id: string; enabled: boolean }[] = [];
-  for (const s of filtered.value) {
+  for (const s of list) {
     const next = valueOf(s);
     if (next !== s.enabled) { patches.push({ id: s.id, enabled: next }); }
   }
@@ -230,6 +238,20 @@ function invertAll(): void {
 
 function disableAll(): void {
   closeMenus();
+  bulkSet(function () { return false; });
+}
+
+/**
+ * 批量启停：当前筛选已全停用时切到「全部启用」。
+ * 用户明确选择“全库可用书源”范围：启用时忽略筛选，但不动已失效(source deadAt)的源。
+ * 停用方向仍只处理当前筛选，避免在筛选态下误伤全库。
+ */
+function toggleAllAlive(): void {
+  closeMenus();
+  if (filteredNoneEnabled.value) {
+    bulkSet(function () { return true; }, alive.value);
+    return;
+  }
   bulkSet(function () { return false; });
 }
 
@@ -334,7 +356,7 @@ defineExpose({ handleEscape });
         <button type="button" role="menuitem" class="src-menu-item" data-src-export
           @click="exportAll">导出书源</button>
         <button type="button" role="menuitem" class="src-menu-item" data-src-disable-all
-          @click="disableAll">全部停用</button>
+          @click="toggleAllAlive">{{ bulkToggleLabel }}</button>
       </div>
     </div>
 
@@ -354,7 +376,11 @@ defineExpose({ handleEscape });
       <span class="src-bulk-count">{{ enabledCount }} / {{ filtered.length }} 启用</span>
       <span class="spacer"></span>
       <button class="src-bulk-btn" data-src-invert @click="invertAll">反选</button>
-      <button class="src-bulk-btn" data-src-clear @click="disableAll">全部停用</button>
+      <button class="src-bulk-btn" data-src-clear
+        :data-src-bulk-mode="filteredNoneEnabled ? 'enable' : 'disable'"
+        :disabled="!filtered.length"
+        :title="filteredNoneEnabled ? '启用全部可用书源（忽略当前筛选）' : '停用当前筛选结果中的书源'"
+        @click="toggleAllAlive">{{ bulkToggleLabel }}</button>
       <span class="src-danger-zone">
         <button class="src-bulk-btn src-bulk-danger" data-src-remove-selected :disabled="!enabledCount"
           title="删除当前勾选的 N 个书源" @click="removeSelected">删除所选</button>

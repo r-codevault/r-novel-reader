@@ -91,7 +91,7 @@
 | R8 设置控件与预览 | **PASS** | radiogroup + 7 radio + `aria-checked` + roving + 可见名称；方向键→实时应用→`updateSettings` 三者一致；预览三层收尾无回弹；档位名 + `data-ratio`；自定义宽度 `label[for]` |
 | R9 加载/失败/保存终态 | **PASS（含唯一 P3-1 观察）** | 失败明细展开 + 类别映射 + 单源重试去重/保留；`progressbar` 数值；`role=status` 节流 + 可见区 `aria-live=off`；写操作 `opId` + pending + 失败保留 + 可重试；笔记保存失败 `role=alert` 保留草稿 |
 | R10 状态色令牌 | **PASS** | 88 套主题独立复算全 ≥4.5（最差 4.53）；黑夜 `dangerFg=#191919`；4 处 CSS 接令牌；产物无 `#2ea043`/`charts-green` |
-| R11 层级与 hover | **PASS** | 书源三层工具 + 键盘子菜单；批量条仅管理模式；危险区；笔记「更多」常显 + `:focus-within` + `pointer:coarse`；状态双通道 |
+| R11 层级与 hover | **PASS** | 书源三层工具 + 键盘子菜单；批量条仅管理模式；危险区；笔记操作组常显（定位原文/编辑/删除，无「更多/收起」）；状态双通道 |
 | R12 小控件与名称 | **PASS** | `.src-check`/`.src-ico` 24×24、粗指针 40×40；书源 `label` 扩大命中区；输入/图标按钮名称含对象；笔记条目复选框原生 + 有名 + 24×24 命中区整块可用 |
 
 **12 类：全部 PASS，无 FAIL。**
@@ -137,8 +137,28 @@
 
 **PASS**
 
-- 四条命令串行退出码全 0：`tsc` 0 / `vite build` 0 / `npm test` 0（31 条脚本，`✘` 计数 0）/ `test-ui-ux-qa` 0（85 条断言）。
+- 四条命令串行退出码全 0：`tsc` 0 / `vite build` 0 / `npm test` 0（31 条脚本，`✘` 计数 0）/ `test-ui-ux-qa` 0（v1.48.8 为 85 条断言；v1.48.9 增补后为 91 条）。
 - `dist-webview` 为构建产物（sha256 可复现），无手改。
 - 第 1 轮 5 个缺陷 + I1 全部关闭；P3-2、P3-3 已关闭；**仅 P3-1 作为观察项保留**（判定理由见 §4）。
 - 冻结后两处收尾已核对：smoke 弱断言是**收紧**（双向白名单）；`ops.ts`/`vscode.ts` 字段清理**无功能回归**（四个关键状态与失败提示链路完整，测试全绿）。
 - 无 P0/P1/P2 未闭环；9 项真机手工验收明确未执行，未列入通过。
+
+---
+
+## 10. v1.48.9 修复回归补充（2026-10-25）
+
+本轮针对实际使用截图修复 6 组问题：笔记复选框状态不同步、确认框 mousedown 提前关浮窗、移除笔记“更多/收起”、目录左右留白丢失、书源下拉菜单挤压/重叠、书源全停用时批量按钮改为“全部启用”，以及书源关闭按钮改为文字。
+
+自动化结果：
+
+- `npm test` 通过（31 条脚本，含本次扩充后的 smoke 与 QA）。
+- `node scripts/test-ui-ux-qa.js` 通过，共 **91** 条断言。
+- 新增覆盖：checkbox `click` 不得 `preventDefault`；确认按钮先 `mousedown` 再 `click` 时笔记/历史浮窗仍打开；点确认遮罩只关确认框；笔记操作组常显；目录 padding/卷头底色；书源菜单 absolute + nowrap；书源全库启用排除失效源。
+
+仍需真实 VS Code 手工确认：鼠标/Space 操作真实原生 checkbox；确认按钮按下不关面板；0/1 个书源时下拉菜单完整可见；目录留白；筛选状态下“全部启用”的范围与当前列表全选。
+
+### v1.48.10 目录视觉与动画
+
+- 分卷头改为圆角卡片、圆形描边箭头与章数徽标；目录正文左右 14px 留白，章节行增加分隔线与行距。
+- 折叠实现由 `display:none` 改为 `grid-template-rows: 0fr/1fr` 过渡；收起后 `visibility:hidden`，内部章节退出 Tab/读屏顺序；支持 `prefers-reduced-motion`。
+- 冒烟测试验证 `.cat-group-body.open` 与 `aria-expanded` 同步、CSS transition 包含 `grid-template-rows`；QA 静态审计覆盖留白、卡片 padding 与动画声明。`npm test` 全量通过。

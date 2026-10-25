@@ -921,13 +921,13 @@ function dismissNoteReturn(): void {
 function onDocMouseDown(e: MouseEvent): void {
   const target = e.target as Node;
   const el = e.target as HTMLElement;
-  // 确认框是"浮层内的确认层": 点它在对话框之外 = 取消（执行中不允许取消）
-  if (state.confirm && !(el.closest && el.closest('.confirm-dlg'))) {
-    const pending = !!state.pendingOps[state.confirm.opId];
-    if (!pending) {
-      state.confirm = null;
-      return;
-    }
+  // 确认框是"浮层内的确认层": 层内点击交给按钮自己处理, 不能继续走到 closeAllPopups。
+  // 否则 mousedown 早于 click, 用户按下「删除」的瞬间就会先关掉发起操作的浮窗。
+  if (state.confirm) {
+    if (el.closest && el.closest('.confirm-dlg')) { return; }
+    // 点遮罩只取消确认框; 执行中不允许取消。两种情况都必须 return, 保留原浮层。
+    if (!state.pendingOps[state.confirm.opId]) { state.confirm = null; }
+    return;
   }
   // 新建笔记卡片: 点卡片外任意处即关闭。
   // 关闭后吞掉紧随的一次段落 click —— 本次点击只"关而不选", 再点一次才选中新段落

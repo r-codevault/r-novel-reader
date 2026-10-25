@@ -284,6 +284,88 @@ check('R3-06 长章节名省略、副标题两行截断', function () {
         '.src-result-title 应 text-overflow:ellipsis');
 });
 
+// A10. 目录行内边距不能被通用 button reset 抹平
+check('目录卷头/章节恢复左右内边距与卷头浅底（1.48.9 回归）', function () {
+    assert.strictEqual(baseValue('.cat-item', 'padding'), '9px 6px',
+        '.cat-item padding 被重置, 实际 ' + baseValue('.cat-item', 'padding'));
+    assert.strictEqual(baseValue('.cat-group-head', 'padding'), '10px 12px',
+        '.cat-group-head padding 被重置, 实际 ' + baseValue('.cat-group-head', 'padding'));
+    assert(/var\(--input-bg\)/.test(baseValue('.cat-group-head', 'background') || ''),
+        '.cat-group-head 卷头浅底丢失');
+    const zeroPad = rules.filter(function (r) {
+        return (r.selectors.indexOf('.cat-item') >= 0 || r.selectors.indexOf('.cat-group-head') >= 0);
+    }).some(function (r) {
+        return r.decls.some(function (d) { return d.prop === 'padding' && /^0(\s|$)/.test(d.value); });
+    });
+    assert(!zeroPad, '仍有规则把目录卷头/条目的 padding 归零');
+    assert.strictEqual(baseValue('.cat-body', 'padding'), '10px 14px 12px',
+        '目录列表缺少左右留白, 实际 ' + baseValue('.cat-body', 'padding'));
+    // 折叠只认两个终态: 收起 0 高度 / 展开 auto; 中间过程由 JS 用 px 高度跑
+    assert.strictEqual(baseValue('.cat-group-body', 'height'), '0',
+        '收起的卷内容应为 0 高度, 实际 ' + baseValue('.cat-group-body', 'height'));
+    assert.strictEqual(baseValue('.cat-group-body', 'overflow'), 'hidden',
+        '折叠容器要 overflow:hidden 才能裁剪内容');
+    assert.strictEqual(baseValue('.cat-group-body.open', 'height'), 'auto',
+        '展开态应回到自然高度, 实际 ' + baseValue('.cat-group-body.open', 'height'));
+    assert.strictEqual(baseValue('.cat-group-body', 'visibility'), 'hidden',
+        '收起动画结束后应 visibility:hidden');
+    assert.strictEqual(baseValue('.cat-group-body.open', 'visibility'), 'visible',
+        '展开态应可见');
+});
+
+// A10b. 目录卷卡片整行单列（展开不重排）+ 章名不带外框（1.48.14 视觉）
+check('目录卷卡片整行单列，展开只动高度，章名不带外框', function () {
+    // 两列卡片在展开时要把"半宽卡片"变成整行 -> 整片重排, 视觉上会闪
+    assert.strictEqual(baseValue('.cat-body', 'grid-template-columns'), null,
+        '.cat-body 不应再是网格(两列卡片展开会重排), 实际 ' +
+        baseValue('.cat-body', 'grid-template-columns'));
+    assert.strictEqual(baseValue('.cat-group', 'grid-column'), null,
+        '卷分组不应再声明 grid-column');
+    assert.strictEqual(baseValue('.cat-group-head', 'width'), '100%',
+        '.cat-group-head 应撑满整行, 实际 ' + baseValue('.cat-group-head', 'width'));
+    // 展开动画只允许动高度: 再叠 opacity 淡入会有"重影/闪一下"的观感
+    assert.strictEqual(baseValue('.cat-group-body', 'opacity'), null,
+        '展开态不应再叠 opacity 动画');
+    assert.strictEqual(baseValue('.cat-group-body', 'display'), null,
+        '折叠容器不应再用 grid 行高撑开(动画改由 JS 的 px 高度驱动)');
+    // 章名行: 平时 1px 透明占位(看不出边框, 也不会在 hover 时挤动文字);
+    // 悬浮 = 淡色底不描边, 描边只留给当前章（1.48.13）
+    assert.strictEqual(baseValue('.cat-item', 'border'), '1px solid transparent',
+        '.cat-item 应留 1px 透明描边占位, 实际 ' + baseValue('.cat-item', 'border'));
+    assert(/var\(--sp-hover\)/.test(baseValue('.cat-item:hover', 'background') || ''),
+        '悬浮应铺淡色底 var(--sp-hover), 实际 ' + baseValue('.cat-item:hover', 'background'));
+    assert.strictEqual(baseValue('.cat-item:hover', 'border-color'), null,
+        '悬浮不应再描边, 实际 ' + baseValue('.cat-item:hover', 'border-color'));
+    assert(/var\(--accent\)/.test(baseValue('.cat-item.cur', 'border-color') || ''),
+        '当前章应用强调色描边, 实际 ' + baseValue('.cat-item.cur', 'border-color'));
+    const curBg = rules.filter(function (r) {
+        return r.selectors.some(function (s) { return /\.cat-item\.cur$/.test(s); });
+    }).reduce(function (acc, r) {
+        return acc.concat(r.decls.filter(function (d) {
+            return d.prop === 'background' || d.prop === 'background-color';
+        }));
+    }, []);
+    assert.strictEqual(curBg.length, 0, '当前章不应铺底色: ' + JSON.stringify(curBg));
+});
+
+// A11. 书源子菜单必须脱离文档流，不能挤压工具条
+check('书源下拉菜单为锚定浮层且不被面板裁剪', function () {
+    assert.strictEqual(lastValue('.src-tools', 'position'), 'relative',
+        '.src-tools 应作为菜单定位上下文');
+    assert.strictEqual(lastValue('.src-menu', 'position'), 'absolute',
+        '.src-menu 必须绝对定位，否则参与 flex 排版');
+    assert.strictEqual(lastValue('.src-menu', 'white-space'), 'nowrap',
+        '.src-menu 不应允许菜单项换行');
+    assert(/calc\(100% \+ 6px\)/.test(lastValue('.src-menu', 'top') || ''),
+        '.src-menu 应在工具条下方锚定, 实际 top=' + lastValue('.src-menu', 'top'));
+    assert.strictEqual(lastValue('#srcMoreMenu', 'right'), '18px',
+        '右侧「更多」菜单应右对齐');
+    assert.strictEqual(lastValue('.src-tools .popup-primary', 'width'), 'auto',
+        '工具条主按钮不能继承 width:100%');
+    assert.strictEqual(lastValue('#sourcePopup .src-manage-body', 'overflow'), 'visible',
+        'src-manage-body 不应裁掉下拉菜单');
+});
+
 // ================================================================ B. 对比度独立复算
 console.log('[B. 主题令牌对比度(独立实现 WCAG)]');
 
@@ -431,6 +513,10 @@ const QA_NOVEL = {
     let notesAlertCount = 0;
     const click = function (el) {
         el.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    };
+    /** 真实指针序列的第一步：确认框内 mousedown 不能触发"点浮层外关闭" */
+    const down = function (el) {
+        el.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     };
     const menuItem = function (name) { return $('.menu-item[data-menu="' + name + '"]'); };
 
@@ -722,6 +808,19 @@ const QA_NOVEL = {
         assert(cb, '条目应有原生复选框');
         assert((cb.getAttribute('aria-label') || '').length > 0, '条目复选框应有可访问名称');
     });
+    // 真实浏览器的坑：click.preventDefault 会让浏览器在派发尾部回滚 checked。
+    const cbN2 = $('#notesPopup [data-note-id="n2"] [data-note-check]');
+    const cbBefore = cbN2.checked;
+    const cbClick = new win.MouseEvent('click', { bubbles: true, cancelable: true });
+    cbN2.dispatchEvent(cbClick);
+    await sleep(30);
+    check('R12-03 条目复选框 click 不得 preventDefault（否则视觉与状态分叉）', function () {
+        assert.strictEqual(cbClick.defaultPrevented, false,
+            'checkbox click 被 preventDefault，Chromium 会回滚原生 checked');
+        assert.strictEqual(cbN2.checked, !cbBefore, '点击后原生 checkbox 状态应正常翻转');
+    });
+    click(cbN2);
+    await sleep(30);
 
     // ------------------------------------------------ C5b 笔记批量删除必须有统一确认 + 终态
     posted.length = 0;
@@ -1026,7 +1125,14 @@ const QA_NOVEL = {
         assert(/不可恢复/.test(text), '应说明不可恢复');
         assert(/QA 之书/.test(text) && /另一本书/.test(text), '应列出涉及的书名');
     });
-    click($('[data-confirm-ok]'));
+    const noteOk = $('[data-confirm-ok]');
+    down(noteOk);
+    await sleep(20);
+    check('R7-03 确认框内 mousedown 不得关闭笔记浮窗', function () {
+        assert($('#notesPopup').classList.contains('open'), 'mousedown 提前关掉了笔记浮窗');
+        assert($('.confirm-dlg'), 'mousedown 不应取消确认框');
+    });
+    click(noteOk);
     await sleep(40);
     check('R9-05 确认后只发一次请求、按钮进入 pending（不可重复提交）', function () {
         const sends = posted.filter(function (m) { return m.type === 'removeNotes'; });
@@ -1118,6 +1224,29 @@ const QA_NOVEL = {
         assert(!$('.confirm-dlg'), '成功后确认框应关闭');
         assert(!$('#notesPopup [data-note-remove-selected]'), '成功后应退出管理模式');
         assert(!$('#notesPopup [data-note-op-error]'), '成功后不应残留错误条');
+        assert($('#notesPopup').classList.contains('open'), '成功后应保留笔记浮窗');
+    });
+    // 退出管理后分组会回到原折叠态，先展开书/章再检查常显操作组
+    const noteBookExpand = $('#notesPopup .nt-book-head .nt-expand');
+    if (noteBookExpand && noteBookExpand.getAttribute('aria-expanded') === 'false') {
+        click(noteBookExpand);
+        await sleep(30);
+    }
+    const noteChapExpand = $('#notesPopup .nt-chap-head .nt-expand');
+    if (noteChapExpand && noteChapExpand.getAttribute('aria-expanded') === 'false') {
+        click(noteChapExpand);
+        await sleep(30);
+    }
+    check('R11-03/R11-04 笔记操作组常显，不再需要「更多/收起」', function () {
+        const item = $('#notesPopup .nt-item');
+        assert(item, '前置: 应存在笔记条目');
+        assert(!item.querySelector('.nt-more'), '不应再有「更多」开关');
+        const acts = item.querySelector('.nt-acts');
+        assert(acts, '动作组应存在');
+        assert.strictEqual(win.getComputedStyle(acts).display, 'flex', '动作组应默认显示');
+        const labels = Array.from(acts.querySelectorAll('.nt-act')).map(function (b) { return b.textContent.trim(); });
+        assert(labels.indexOf('编辑') >= 0 && labels.indexOf('删除') >= 0,
+            '定位原文/编辑/删除应常显, 实际 ' + labels.join('|'));
     });
     click($('#notesPopup .popup-close'));
     await sleep(30);
@@ -1185,6 +1314,12 @@ const QA_NOVEL = {
             assert(!posted.some(function (m) { return m.type === 'removeHistory'; }), '未确认前不得发 removeHistory');
         });
         if (okH) {
+            down(okH);
+            await sleep(20);
+            check('R7-03 确认框内 mousedown 不得关闭历史浮窗', function () {
+                assert($('#historyPopup').classList.contains('open'), 'mousedown 提前关掉了历史浮窗');
+                assert($('.confirm-dlg'), 'mousedown 不应取消历史确认框');
+            });
             click(okH);
             await sleep(40);
             const histMsg = posted.filter(function (m) { return m.type === 'removeHistory'; })[0];

@@ -26,7 +26,6 @@ function handleEscape(): boolean {
   if (editingId.value) { cancelEdit(); return true; }
   if (pendingDeleteId.value) { cancelDelete(); return true; }
   if (pendingGroupKey.value) { cancelGroupDelete(); return true; }
-  if (moreOpenId.value) { moreOpenId.value = ''; return true; }
   return false;
 }
 
@@ -37,14 +36,7 @@ function itemsIdOf(key: string): string {
   return 'ntItems-' + key.replace(/[^A-Za-z0-9_-]+/g, '_');
 }
 
-/**
- * 笔记条目「更多」：常显入口，展开动作组。
- * 以前 `.nt-acts` 只在 hover 时 display:flex —— 触屏与键盘用户永远看不到「编辑/删除」（R11-03/04）。
- */
-const moreOpenId = ref('');
-function toggleMore(id: string): void {
-  moreOpenId.value = moreOpenId.value === id ? '' : id;
-}
+// 条目动作组常显：定位原文 / 编辑 / 删除不再藏进「更多/收起」开关。
 
 const groups = computed<NoteBookGroup[]>(function () {
   const shelfPaths = new Set(state.shelf.map(function (b) { return b.filePath; }));
@@ -501,20 +493,18 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
             <div v-if="!isChapCollapsed(g.bookPath, c)" class="nt-items"
               :id="itemsIdOf('c:' + g.bookPath + ':' + c.chapterTitle)">
           <div v-for="n in c.items" :key="n.id" class="nt-item" :data-note-id="n.id"
-            :class="{ editing: editingId === n.id, managing: managing, sel: managing && isSelectedNote(n), 'more-open': moreOpenId === n.id }"
+            :class="{ editing: editingId === n.id, managing: managing, sel: managing && isSelectedNote(n) }"
             @click="onNoteClick(n)"
             @mouseenter="showPreview(n, $event)" @mouseleave="hideSoon()">
             <!-- 条目级勾选用原生 checkbox: 可 Tab 到达、有含上下文的名称(R12-03/R12-04)。
-                 I1 修复: label 必须自己 @click.stop。
-                 - 点 16px 框: input 的 .stop.prevent 吃掉事件 → 只切换一次;
-                 - 点 label 外圈: 浏览器的"label→input 激活"会合成一次 input click → 切换一次,
-                   若 label 不 stop, 原始 click 还会冒泡到整行触发 onNoteClick → 净效果为 0(命中区等于失效)。
-                   这里只 stop 不 prevent, 原生激活必须保留。 -->
+                 label 只 stop 冒泡：既阻断整行 onNoteClick，又保留浏览器把 label 点击激活到 input。
+                 input 必须监听 change，不能 click.preventDefault —— 后者会让 Chromium 在 click
+                 派发尾部回滚原生 checked，表现为计数已变、方框仍为空。 -->
             <label v-if="managing" class="nt-check-label" @click.stop>
               <input type="checkbox" class="bk-check nt-check" data-note-check
                 :checked="isSelectedNote(n)"
                 :aria-label="'选择笔记：' + noteSnippet(n)"
-                @click.stop.prevent="toggleNote(n)" />
+                @change="toggleNote(n)" />
             </label>
             <template v-if="editingId === n.id">
               <textarea class="nt-edit-area" v-model="editingText" rows="3"
@@ -532,14 +522,8 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
                 <span class="nt-quote">原文：{{ n.quote }}</span>
                 <span class="nt-time">{{ relativeTime(n.updatedAt) }}</span>
               </div>
-              <!-- 「更多」常显入口: 触屏/键盘不再依赖 hover 才能看到动作组(R11-03/04)。
-                   点击笔记正文定位原文的行为保持不变(正文与 meta 仍是主点击区)。 -->
-              <div v-if="!managing" class="nt-more-row">
-                <button type="button" class="nt-more" :data-note-more="n.id"
-                  :aria-expanded="moreOpenId === n.id ? 'true' : 'false'"
-                  :aria-label="'更多操作：' + (n.text || n.quote).slice(0, 12)"
-                  @click.stop="toggleMore(n.id)">{{ moreOpenId === n.id ? '收起' : '更多' }}</button>
-              </div>
+              <!-- 操作组常显: 触屏/键盘不再依赖 hover 或「更多」开关(R11-03/04)。
+                   点笔记正文定位原文的行为保持不变(正文与 meta 仍是主点击区)。 -->
               <div v-if="!managing" class="nt-acts">
                 <button class="nt-act nt-go" @click.stop="jumpTo(n)">定位到原文</button>
                 <span class="spacer"></span>

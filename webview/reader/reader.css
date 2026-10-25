@@ -36,13 +36,21 @@
   #catalogPanel.open { display: flex; }
   .cat-head {
     flex: none;
-    display: flex; align-items: baseline; gap: 10px;
+    display: flex; align-items: center; gap: 12px;
     /* 上间距与左边距一致(18px) */
-    padding: 18px 18px 12px;
+    padding: 15px 18px 12px;
     border-bottom: 1px solid var(--chrome-border);
   }
   /* 目录字号与阅读区同步: 章节条目 = 正文字号; 分卷名/面板标题 ≈ 章节标题字号 */
-  .cat-title { font-size: var(--ui-font-title); font-weight: 600; }
+  .cat-title {
+    position: relative; padding-bottom: 5px;
+    font-size: calc(var(--ui-font-title) + 3px); font-weight: 600;
+  }
+  /* 参考起点目录: 标题下一条短的强调色下划线 */
+  .cat-title::after {
+    content: ''; position: absolute; left: 0; bottom: 0;
+    width: 26px; height: 2px; border-radius: 2px; background: var(--accent);
+  }
   .cat-sub { font-size: var(--ui-font-sub); color: var(--fg-muted); }
   .cat-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
   .cat-btn {
@@ -58,45 +66,99 @@
     opacity: .65; font-size: 15px; line-height: 1; padding: 2px 6px; border-radius: 4px;
   }
   .cat-close:hover { opacity: 1; background: var(--input-bg); }
-  .cat-body { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 4px 0 10px; }
-  .cat-group { border-bottom: 1px solid var(--chrome-border); }
-  .cat-group:last-child { border-bottom: none; }
+  /* 列表整体左右留白: 分卷卡片不再贴住浮层边框。
+     卷卡片一律**整行一条**: 展开/收起只改高度, 后面的卡片平滑下移,
+     不会因为"半宽卡片撑成整行"而整片重排(那正是之前的闪烁来源)。
+     章节列表仍是两列(见 .cat-items), 一张卡片里能扫到更多章。 */
+  .cat-body {
+    flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain;
+    padding: 10px 14px 12px;
+  }
+  .cat-group { margin: 0 0 10px; min-width: 0; }
+  .cat-group:last-child { margin-bottom: 0; }
+  /* 参考起点目录: 分卷头是一块独立的圆角卡片, 章节区作为可折叠内容 */
   .cat-group-head {
-    display: flex; align-items: center; gap: 8px;
-    padding: 9px 16px; cursor: pointer; user-select: none;
+    display: flex; align-items: center; gap: 10px;
+    width: 100%;                 /* 撑满整列: 不再被原生按钮的收缩尺寸带窄 */
+    appearance: none; -webkit-appearance: none;
+    padding: 10px 12px; cursor: pointer; user-select: none;
     background: var(--input-bg);
+    border: 1px solid var(--chrome-border);
+    border-radius: 8px;
+    transition: border-color .18s ease, background-color .18s ease;
   }
-  .cat-group-head:hover { color: var(--accent); }
+  .cat-group-head:hover { border-color: var(--accent); }
+  .cat-group-head:hover .cat-group-name { color: var(--accent); }
   .cat-group-name { font-size: var(--ui-font-title); font-weight: 600; }
-  .cat-group-count { font-size: var(--ui-font-sub); color: var(--fg-muted); }
+  .cat-group-count {
+    padding: 1px 7px;
+    border: 1px solid var(--chrome-border); border-radius: 999px;
+    font-size: var(--ui-font-sub); color: var(--fg-muted); white-space: nowrap;
+  }
   .cat-group-toggle {
-    margin-left: auto; opacity: .6;
+    margin-left: auto; opacity: .85;
     display: inline-flex; align-items: center; justify-content: center;
-    /* 纯图标容器: 不带内边距/底色(box-sizing:border-box 下 padding 会挤掉图标) */
-    width: 38px; height: 38px; flex: none;
+    width: 28px; height: 28px; flex: none;
+    border: 1px solid var(--chrome-border); border-radius: 50%;
+    background: var(--chrome-bg); color: var(--fg-muted);
+    transition: border-color .18s ease, color .18s ease, background-color .18s ease;
   }
-  .cat-group-head:hover .cat-group-toggle { opacity: 1; }
-  .cat-group-toggle svg { width: 36px; height: 36px; }
+  .cat-group-head:hover .cat-group-toggle {
+    opacity: 1; color: var(--accent); border-color: var(--accent);
+  }
+  .cat-group-toggle svg {
+    width: 16px; height: 16px;
+    /* 与 JS 高度动画同一条时长/缓动(220ms), 箭头和内容一起走才不"抢拍" */
+    transition: transform .22s cubic-bezier(.4, 0, .2, 1);
+  }
   .cat-group.collapsed .cat-group-toggle svg { transform: rotate(180deg); }
-  .cat-group.collapsed .cat-items { display: none; }
-  .cat-items {
-    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 2px 14px; padding: 8px 16px 12px;
+  /* 折叠容器: 静/动态都只认两个终态(0 / auto), **动画交给 JS 用 px 高度跑**。
+     为什么不用 grid-template-rows 过渡: 那样每一帧都要按新行高重新排版整段章节,
+     章节一多就掉帧, 收尾还会"残留一小条再突然消失"。
+     改成裁剪框变高、内容保持自然高度后, 动画期间内容完全不重排。
+     收起动画结束才把 visibility 置 hidden(让章节退出 Tab/读屏顺序);
+     不能用 display:none, 否则动画跑不了。 */
+  .cat-group-body {
+    height: 0; overflow: hidden;
+    visibility: hidden;
+    /* 与 JS 收起动画(190ms)对齐: 高度归零之后才真正隐藏, 不会"先消失再收完" */
+    transition: visibility 0s linear .2s;
   }
+  .cat-group-body.open {
+    height: auto;
+    visibility: visible;
+    transition: none;
+  }
+  .cat-items {
+    min-height: 0; overflow: hidden;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 24px; padding: 2px 4px 4px;
+  }
+  /* 窄屏: 章节退回单列 */
   @media (max-width: 720px) { .cat-items { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: reduce) {
+    .cat-group-head, .cat-group-toggle, .cat-group-toggle svg, .cat-group-body { transition: none; }
+  }
   .cat-item {
-    display: flex; align-items: baseline; gap: 6px;
-    padding: 6px 8px; border-radius: 4px; cursor: pointer;
+    display: flex; align-items: center; gap: 7px;
+    padding: 9px 6px; border-radius: 4px; cursor: pointer;
+    /* 平时不画边框(只留 1px 透明占位): hover / 当前章只换描边色,
+       既不加底色, 也不会因为多出一圈 border 把文字挤动 1px。
+       原生 <button> 的四边描边必须显式覆盖, 否则会跑出浏览器默认的灰框。 */
+    border: 1px solid transparent;
+    appearance: none; -webkit-appearance: none;
     white-space: nowrap; overflow: hidden;
   }
-  .cat-item:hover { background: var(--input-bg); }
+  /* 悬浮: 铺一层淡色底(--sp-hover 随主题走), 不描边 —— 描边只表示"当前章" */
+  .cat-item:hover { background: var(--sp-hover); }
   /* 条目字号与正文一致 */
   .cat-item .cat-no { font-size: var(--ui-font); color: var(--fg-muted); flex: none; }
   .cat-item .cat-name { font-size: var(--ui-font); overflow: hidden; text-overflow: ellipsis; }
   /* 已读: 压灰一档(必须写在 .cur 之前, 否则会盖掉当前章的高亮) */
   .cat-item.read .cat-no { opacity: .45; }
   .cat-item.read .cat-name { color: var(--fg-muted); }
-  .cat-item.cur { background: var(--input-bg); }
+  /* 当前章: 强调色描边 + 强调色文字(同样不用底色) */
+  .cat-item.cur { border-color: var(--accent); }
   .cat-item.cur .cat-no { color: var(--accent); opacity: 1; font-weight: 600; }
   .cat-item.cur .cat-name { color: var(--accent); font-weight: 600; }
   .cat-foot {
@@ -187,7 +249,6 @@
   }
   /* 圆点统一贴右缘: 几百章时纵向扫一眼就能看出哪些断网可读 */
   .cat-item .cat-dot { margin-left: auto; }
-  .cat-item.cur .cat-dot { box-shadow: 0 0 0 1px var(--input-bg); }
 
   /* ---------- 设置面板(起点风格; 黑夜模式沿用深色面板) ---------- */
   #settingsPanel {
@@ -763,9 +824,7 @@
     --input-fg: var(--fg);
     --sp-fg: var(--fg);
   }
-  /* 目录条目 hover/当前章的选中底 */
-  #catalogPanel .cat-item:hover { background: var(--page-bg); }
-  #catalogPanel .cat-item.cur { background: var(--page-bg); }
+  /* 目录条目的 hover/当前章改用描边表达(见 .cat-item:hover / .cat-item.cur), 这里不再铺底色 */
   #catalogPanel .cat-btn { background: var(--page-bg); color: var(--fg); }
   #catalogPanel .cat-btn:hover { border-color: var(--accent); color: var(--accent); }
   #catalogPanel .cat-head, #catalogPanel .cat-foot { color: var(--fg); }
@@ -1130,7 +1189,8 @@
   .src-bulk-danger:hover { color: var(--danger); border-color: var(--danger); background: var(--danger-bg, transparent); }
 
   /* manage 视图: 工具条/批量条/筛选/底部固定, 只有列表滚 */
-  #sourcePopup .src-manage-body { display: flex; flex-direction: column; overflow: hidden; }
+  /* 子菜单绝对定位在工具条下方；body 不能裁剪它（列表自身已有 max-height + 内滚） */
+  #sourcePopup .src-manage-body { display: flex; flex-direction: column; overflow: visible; }
   .src-manage-body > .src-tools,
   .src-manage-body > .src-bulk,
   .src-manage-body > .src-filter,
@@ -1321,12 +1381,11 @@
   .nt-time { flex: none; color: var(--fg-muted); font-size: var(--ui-font-sub); }
 
   .nt-acts {
-    /* 不占位高度: 悬浮/聚焦时才渲染出来, 避免未显示时留一大块空白 */
-    display: none;
+    /* 常显: 定位原文/编辑/删除始终可见, 不再依赖 hover 或「更多」开关 */
+    display: flex;
     align-items: center; gap: 6px; justify-content: flex-end;
     margin-top: 6px;
   }
-  .nt-item:hover .nt-acts, .nt-item:focus-within .nt-acts { display: flex; }
   .nt-go {
     background: transparent; color: var(--accent);
     border: 0; padding: 2px 0; cursor: pointer;
@@ -1590,7 +1649,18 @@
   /* ---------------- 1. 行条目 button 语义重置 (T02: R1-01 R1-03 R1-07) ----------------
      原生的 <button> 自带 Enter/Space、disabled、读屏角色与 :focus-visible 支持,
      代价是要把 button 的默认外观整套重置回"这是一行文字"。 */
-  .cat-item, .cat-group-head, .bk-main, .hist-row-main, .src-result-main, .nt-expand {
+  /* 目录的行条目自带内边距/底色：只重置按钮外壳，不能把 padding/background 归零，
+     否则卷头贴边、灰色卷带消失、章节行距被压扁（1.48.9 回归修复）。 */
+  .cat-item {
+    font: inherit; color: inherit;
+    text-align: left; cursor: pointer; background: none;
+  }
+  .cat-group-head {
+    font: inherit; color: inherit;
+    text-align: left; cursor: pointer;
+    /* 不声明 background/border: 保留基础规则的卷头浅底与圆角描边 */
+  }
+  .bk-main, .hist-row-main, .src-result-main, .nt-expand {
     font: inherit; color: inherit; background: none; border: 0; padding: 0;
     text-align: left; cursor: pointer;
   }
@@ -1750,13 +1820,21 @@
   .confirm-foot .popup-btn, .confirm-foot .popup-primary { flex: none; width: auto; padding: 4px 14px; }
 
   /* ---------------- 7. 层级: 书源主次操作 / 危险区 / 笔记更多 (T05: R11) ---------------- */
-  .src-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .src-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; position: relative; }
   .src-tools .spacer { flex: 1 1 auto; }
+  /* .popup-primary 默认 width:100%，在工具条里会撑满一行并挤掉其它按钮 */
+  .src-tools .popup-primary { flex: none; width: auto; padding-left: 14px; padding-right: 14px; }
+  /* 下拉菜单必须脱离文档流，否则会作为 flex 子项参与换行/压缩并与按钮重叠 */
   .src-menu {
+    position: absolute; top: calc(100% + 6px); left: 18px; right: auto; z-index: 30;
+    width: max-content; min-width: 138px; max-width: calc(100% - 36px);
+    max-height: calc(100vh - 160px); overflow-y: auto; overscroll-behavior: contain;
+    white-space: nowrap;
     display: flex; flex-direction: column; gap: 2px; padding: 4px;
     background: var(--sp-bg); border: 1px solid var(--sp-border-strong); border-radius: 8px;
     box-shadow: 0 8px 20px var(--shadow-color, rgba(0, 0, 0, .22));
   }
+  #srcMoreMenu { left: auto; right: 18px; }
   .src-menu-item {
     padding: 5px 10px; text-align: left; font-family: inherit; font-size: var(--ui-font-sub);
     color: var(--fg); background: none; border: 0; border-radius: 5px; cursor: pointer;
@@ -1772,16 +1850,7 @@
   /* 行内复选框 + 名称的 label 承担剩余宽度, 名称仍要能省略 */
   .src-row .src-check-label { flex: 1 1 auto; min-width: 0; }
   .src-row .src-check-label .src-row-name { flex: 1 1 auto; min-width: 0; }
-  /* 笔记条目「更多」: 常显入口, 不再只靠 hover 才能看到动作(R11-03/04) */
-  .nt-more {
-    flex: none; padding: 0 6px; font-family: inherit; font-size: var(--ui-font-sub);
-    color: var(--fg-muted); background: none;
-    border: 1px solid transparent; border-radius: 4px; cursor: pointer;
-  }
-  .nt-more:hover { color: var(--accent); border-color: var(--accent); }
-  .nt-item .nt-acts { display: none; }
-  .nt-item.more-open .nt-acts, .nt-item:focus-within .nt-acts { display: flex; }
-  @media (pointer: coarse) { .nt-item .nt-acts { display: flex; } }
+  /* 笔记条目动作组常显（定位原文/编辑/删除），不再有「更多/收起」开关 */
 
   /* 组头三件套(展开按钮 + 原生复选框 + 删除按钮) */
   /* 容器不再是按钮: 点击目标下移到 .nt-expand, 容器自己不响应点击 */
@@ -1792,7 +1861,6 @@
   }
   .nt-book-head.managing { padding-left: 16px; }
   .nt-chap-head.managing { padding-left: 26px; }
-  .nt-more-row { display: flex; justify-content: flex-end; }
   .nt-head-group { display: flex; align-items: center; gap: 6px; }
   .nt-head-check { flex: none; width: 24px; height: 24px; margin: 0; accent-color: var(--accent); }
 

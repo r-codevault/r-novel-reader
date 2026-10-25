@@ -15,7 +15,7 @@ interface DisplayItem {
   read: boolean;
 }
 interface DisplayGroup {
-  name: string; entry: number; collapsed: boolean; total: number;
+  id: string; name: string; entry: number; collapsed: boolean; total: number;
   items: DisplayItem[];
 }
 
@@ -116,9 +116,11 @@ const groups = computed<DisplayGroup[]>(function () {
         })
         .filter(function (it) { return inFilter(it.index); });
       return {
+        id: g.id,
         name: g.name,
         entry: g.entry,
-        collapsed: (state.catCollapsed || []).indexOf(g.name) >= 0,
+        // 按 id 判收起: 同名卷(多个「正文」)各自独立开合
+        collapsed: (state.catCollapsed || []).indexOf(g.id) >= 0,
         // 卷头的「共 N 章」跟随筛选后的条数, 否则筛完还显示原卷规模会很怪
         total: items.length,
         items,
@@ -143,15 +145,86 @@ const posText = computed(function () {
   return '第 ' + (state.chapter.index + 1) + ' / ' + state.chapters.length + ' 章';
 });
 
-function toggleGroup(g: DisplayGroup): void {
-  const list = state.catCollapsed || [];
-  const at = list.indexOf(g.name);
+// ---------------------------------------------------------------- 展开 / 收起动画
+
+/** 展开 220ms / 收起 190ms(收要利落一点); 箭头旋转同一条时长, 免得箭头先停、内容还在动 */
+const CAT_ANIM_OPEN_MS = 220;
+const CAT_ANIM_CLOSE_MS = 190;
+/** 每个折叠容器正在跑的动画(高度 + 淡出两条): 连点时先全部取消, 从当前高度接着走, 不跳变 */
+const bodyAnims = new WeakMap<HTMLElement, Animation[]>();
+
+function stopBodyAnims(body: HTMLElement): void {
+  const list = bodyAnims.get(body);
+  if (!list) { return; }
+  bodyAnims.delete(body);
+  list.forEach(function (a) { a.cancel(); });
+}
+
+/** 卷头按钮 → 紧随其后的折叠容器 */
+function bodyOf(target: EventTarget | null): HTMLElement | null {
+  const el = target as HTMLElement | null;
+  const next = el ? (el.nextElementSibling as HTMLElement | null) : null;
+  return next && next.classList.contains('cat-group-body') ? next : null;
+}
+
+/**
+ * 用**高度**做展开/收起, 而不是 grid-template-rows:
+ * 内容始终保持自然高度, 动画只改外层裁剪框, 所以动画期间章节一次都不重排,
+ * 收尾也能一路平滑到 0 像素, 不会"残留一丢丢再突然收起"。
+ * 环境不支持 Web Animations 时(测试/老内核)直接落到 CSS 终态。
+ */
+function animateBody(body: HTMLElement, from: number, to: number): void {
+  stopBodyAnims(body);
+  if (typeof body.animate !== 'function' || from === to) { return; }
+
+  const expanding = to > from;
+  const duration = expanding ? CAT_ANIM_OPEN_MS : CAT_ANIM_CLOSE_MS;
+
+  // 高度: 展开用强 ease-out(快速铺开后缓落); 收起用"缓出但不拖尾"的曲线 ——
+  // 常规 ease-out 到终点速度是 0, 最后十几像素要磨掉四分之一时长, 就是那下卡顿。
+  const heightAnim = body.animate(
+    [{
+      height: from + 'px',
+      easing: expanding ? 'cubic-bezier(.33, 1, .68, 1)' : 'cubic-bezier(.25, .5, .7, .85)',
+    }, { height: to + 'px' }],
+    { duration: duration, fill: 'both' },
+  );
+
+  // 只在**收起**时补一条淡出: 任何平滑缓动在终点速度都是 0, 最后几像素会拖一小段,
+  // 看着就像"残留一小条 → 顿一下 → 才收完"; 让内容在后半程淡掉, 残留就看不出来了。
+  // 展开不加淡入 —— 内容跟着裁剪框一起长出来更自然, 也不会像"整段淡入"那样发虚。
+  const anims: Animation[] = [heightAnim];
+  if (!expanding) {
+    anims.push(body.animate(
+      // 前 75% 保持不透明, 只在收尾那几十像素上淡出 —— 既遮住残留, 也不会"整段发虚"
+      [{ opacity: '1', offset: 0.75 }, { opacity: '0' }],
+      { duration: duration, fill: 'both' },
+    ));
+  }
+
+  bodyAnims.set(body, anims);
+  heightAnim.onfinish = function () {
+    // 取消填充, 交还给 CSS 终态(height:0 / auto); 此时高度已经等于终值, 不会跳
+    stopBodyAnims(body);
+  };
+}
+
+function toggleGroup(g: DisplayGroup, ev: MouseEvent): void {
+  const body = bodyOf(ev.currentTarget);
+  // 高度必须在改状态**之前**量: class 一变就会被 CSS 拉到终态
+  const from = body ? body.getBoundingClientRect().height : 0;
+  const to = body ? (g.collapsed ? body.scrollHeight : 0) : 0;
+
+  const list = (state.catCollapsed || []).slice();
+  const at = list.indexOf(g.id);
   if (g.collapsed) {
     if (at >= 0) { list.splice(at, 1); }
   } else {
-    if (at < 0) { list.push(g.name); }
+    if (at < 0) { list.push(g.id); }
   }
   state.catCollapsed = list.slice();
+
+  if (body) { animateBody(body, from, to); }
 }
 
 function onItemClick(item: DisplayItem): void {
@@ -249,28 +322,47 @@ function togglePause(): void {
   if (dlPaused.value) { resumeDownload(); } else { pauseDownload(); }
 }
 
-/** 当前章变化: 高亮/展开由响应式 class 驱动; 面板开着时滚到当前章 */
-watch(function () { return state.chapter && state.chapter.index; }, function () {
-  if (!catBodyRef.value) { return; }
-  const cur = catBodyRef.value.querySelector('.cat-item.cur');
-  if (cur) {
-    const group = cur.closest('.cat-group');
-    if (group && group.classList.contains('collapsed')) {
-      const name = (group as HTMLElement).dataset.g as string;
-      const list = state.catCollapsed || [];
-      const at = list.indexOf(name);
-      if (at >= 0) { list.splice(at, 1); state.catCollapsed = list.slice(); }
+/**
+ * 默认开合: 只展开「当前阅读章所在的那一卷/篇」, 其余全部收起。
+ * 卷标题行本身也算在它自己那一卷里(entry === 当前章), 否则刚点到篇名时会全收起。
+ * 面板每次打开、以及每次切章都按这条默认重算 —— 目录始终指向"我在哪一篇"。
+ */
+function resetCollapsedToCurrent(): void {
+  const gs = buildCatalogGroups(state.chapters);
+  if (gs.length === 0) { return; }
+  const cur = state.chapter ? state.chapter.index : -1;
+  // 还没有当前章(切书/加载中): 不做收敛, 免得整本目录全被收起
+  if (cur < 0) { return; }
+  let keep = '';
+  for (const g of gs) {
+    if (g.entry === cur || g.items.some(function (it) { return it.index === cur; })) {
+      keep = g.id;
+      break;
     }
   }
+  state.catCollapsed = gs
+    .filter(function (g) { return g.id !== keep; })
+    .map(function (g) { return g.id; });
+}
+
+/** 当前章变化: 高亮由响应式 class 驱动, 开合状态重新回到「当前章所在卷」 */
+watch(function () { return state.chapter && state.chapter.index; }, function () {
+  resetCollapsedToCurrent();
+});
+
+/** 换书/重新载入章节: 分组 id 会重新分配, 旧的开合状态必须重算(否则会按 id 串到新书) */
+watch(function () { return state.chapters; }, function () {
+  resetCollapsedToCurrent();
 });
 
 watch(function () { return state.catalogOpen; }, function (open) {
-  if (open && state.chapters.length > 0) {
-    nextTick(function () {
-      const el = catBodyRef.value && catBodyRef.value.querySelector('.cat-item.cur');
-      if (el) { el.scrollIntoView({ block: 'center' }); }
-    });
-  }
+  if (!open || state.chapters.length === 0) { return; }
+  // 先收紧到当前卷, 再滚动: 顺序反了会去滚一个正在收起的容器
+  resetCollapsedToCurrent();
+  nextTick(function () {
+    const el = catBodyRef.value && catBodyRef.value.querySelector('.cat-item.cur');
+    if (el) { el.scrollIntoView({ block: 'center' }); }
+  });
 });
 </script>
 
@@ -338,10 +430,10 @@ watch(function () { return state.catalogOpen; }, function (open) {
       <div v-if="state.chapters.length === 0" class="empty-tip">尚未打开小说</div>
       <div v-else-if="groups.length === 0" class="empty-tip" data-cat-empty>没有符合条件的章节</div>
       <template v-else>
-        <div v-for="(g, gi) in groups" :key="g.name" class="cat-group" :class="{ collapsed: g.collapsed }" :data-g="g.name">
+        <div v-for="(g, gi) in groups" :key="g.id" class="cat-group" :class="{ collapsed: g.collapsed }" :data-g="g.id">
           <!-- 卷头是原生 button: 自带 Enter/Space, aria-expanded/aria-controls 让读屏知道它控制哪一块 -->
           <button type="button" class="cat-group-head" :aria-expanded="!g.collapsed"
-            :aria-controls="'cat-items-' + gi" title="展开 / 收起本卷" @click="toggleGroup(g)">
+            :aria-controls="'cat-items-' + gi" title="展开 / 收起本卷" @click="toggleGroup(g, $event)">
             <span class="cat-group-name">{{ g.name }}</span>
             <span class="cat-group-count">共 {{ g.total }} 章</span>
             <span class="cat-group-toggle" aria-hidden="true">
@@ -350,19 +442,23 @@ watch(function () { return state.catalogOpen; }, function (open) {
               </svg>
             </span>
           </button>
-          <div class="cat-items" :id="'cat-items-' + gi">
-            <!-- 卷/篇标题行不再作为目录条目(它是分组头, 不是一章);
-                 其卷首引子内容仍保留在章节流里, 从组内第一章「上一章」可达 -->
-            <button v-for="c in g.items" :key="c.index" type="button" class="cat-item" :data-i="c.index"
-              :class="{ cur: state.chapter && state.chapter.index === c.index, read: c.read }"
-              :aria-current="state.chapter && state.chapter.index === c.index ? 'true' : undefined"
-              :title="c.title + (c.mark === 'offline' ? ' · 已下载（断网可读）' : c.mark === 'cache' ? ' · 已缓存（断网可读）' : '')"
-              @click="onItemClick(c)">
-              <span v-if="c.no" class="cat-no">{{ c.no }}</span>
-              <span class="cat-name">{{ c.name }}</span>
-              <span v-if="c.mark" class="cat-dot" :class="'is-' + c.mark" :data-cat-mark="c.mark"
-                :title="c.mark === 'offline' ? '已下载' : '已缓存（临时）'"></span>
-            </button>
+          <!-- aria-controls 指向这个高度动画容器；收起后 visibility:hidden，
+               既完成过渡，也让内部章节退出 Tab/读屏顺序。 -->
+          <div class="cat-group-body" :class="{ open: !g.collapsed }" :id="'cat-items-' + gi">
+            <div class="cat-items">
+              <!-- 卷/篇标题行不再作为目录条目(它是分组头, 不是一章);
+                   其卷首引子内容仍保留在章节流里, 从组内第一章「上一章」可达 -->
+              <button v-for="c in g.items" :key="c.index" type="button" class="cat-item" :data-i="c.index"
+                :class="{ cur: state.chapter && state.chapter.index === c.index, read: c.read }"
+                :aria-current="state.chapter && state.chapter.index === c.index ? 'true' : undefined"
+                :title="c.title + (c.mark === 'offline' ? ' · 已下载（断网可读）' : c.mark === 'cache' ? ' · 已缓存（断网可读）' : '')"
+                @click="onItemClick(c)">
+                <span v-if="c.no" class="cat-no">{{ c.no }}</span>
+                <span class="cat-name">{{ c.name }}</span>
+                <span v-if="c.mark" class="cat-dot" :class="'is-' + c.mark" :data-cat-mark="c.mark"
+                  :title="c.mark === 'offline' ? '已下载' : '已缓存（临时）'"></span>
+              </button>
+            </div>
           </div>
         </div>
       </template>

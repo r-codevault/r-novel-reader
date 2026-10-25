@@ -53,7 +53,7 @@ watch(function () { return state.sourceOpen; }, function (open) {
         {{ searchableCount }} 个可搜<template v-if="deadCount"> · {{ deadCount }} 个失效</template>
       </span>
       <span class="spacer"></span>
-      <button class="popup-close" title="关闭" @click="state.sourceOpen = false">✕</button>
+      <button class="popup-close" @click="state.sourceOpen = false">关闭</button>
     </div>
     <div class="src-tabs">
       <button class="src-tab" :class="{ on: state.sourceView === 'search' }" data-src-tab="search"
