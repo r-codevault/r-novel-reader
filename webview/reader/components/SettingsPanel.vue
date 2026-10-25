@@ -3,12 +3,79 @@
  * SettingsPanel.vue — 设置面板(起点风格)
  * 面板定位(贴合悬浮球)由 App 协调, 本组件暴露根元素
  */
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { state, THEMES, PROVINCES, SOLAR_TERMS, FESTIVALS, CONTENT_WIDTH, persistSettings, previewTheme, restoreTheme, stepFontSize, stepSetting, resetSettings } from '../store';
 import { shortcutLabel } from '../composables/shortcut';
 
 const rootRef = ref<HTMLElement | null>(null);
-defineExpose({ el: rootRef });
+/**
+ * 宽度档位**只改展示层**：内部存储值仍是 33.33/55.55/66.66/77.77，不迁移、不改名，
+ * 只把按钮文案换成「窄/标准/宽/特宽」并补上真实比例说明（PRD Q5 / R8-04）。
+ */
+const WIDTH_TIERS = [
+  { ratio: 0.3333, name: '窄', pct: '33.33%' },
+  { ratio: 0.5555, name: '标准', pct: '55.55%' },
+  { ratio: 0.6666, name: '宽', pct: '66.66%' },
+  { ratio: 0.7777, name: '特宽', pct: '77.77%' },
+];
+
+function tierOf(ratio: number): { name: string; pct: string } {
+  const hit = WIDTH_TIERS.find(function (t) { return Math.abs(t.ratio - ratio) < 0.0001; });
+  const pct = (Math.round(ratio * 10000) / 100) + '%';
+  return hit ? { name: hit.name, pct: hit.pct } : { name: pct, pct: pct };
+}
+
+/**
+ * 主题单选组的方向键: 选中即提交（"实时预览选中项"）。
+ * roving tabindex 由模板的 :tabindex 控制，这里只负责移动焦点与提交。
+ */
+function onThemeKey(currentId: string, e: KeyboardEvent): void {
+  const idx = THEMES.findIndex(function (t) { return t.id === currentId; });
+  if (idx < 0) { return; }
+  let next = idx;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { next = (idx + 1) % THEMES.length; }
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { next = (idx - 1 + THEMES.length) % THEMES.length; }
+  else if (e.key === 'Home') { next = 0; }
+  else if (e.key === 'End') { next = THEMES.length - 1; }
+  else { return; }
+  e.preventDefault();
+  const target = THEMES[next];
+  choosePreset(target.id);
+  const el = document.querySelector('[data-theme="' + target.id + '"]') as HTMLElement | null;
+  if (el && typeof el.focus === 'function') { el.focus(); }
+}
+
+/**
+ * Esc 分层: 三个下拉全关后本层才让位给"关面板"。
+ * 每次关下拉都 restoreTheme()，避免留下未提交的预览色（R8-03）。
+ */
+function handleEscape(): boolean {
+  if (festivalOpen.value) { festivalOpen.value = false; restoreTheme(); return true; }
+  if (termOpen.value) { termOpen.value = false; restoreTheme(); return true; }
+  if (provinceOpen.value) { provinceOpen.value = false; restoreTheme(); return true; }
+  return false;
+}
+
+/**
+ * 关闭面板时统一收尾（R8-03 / R8-06）：
+ * 以前只有 provinceOpen 的 watcher 会 restoreTheme，于是"键盘聚焦色块 → Esc 关面板"
+ * 这条路径会把**未提交的预览色**留在页面上：重开面板时高亮的是已保存主题，
+ * 正文却还是预览色，两边错位。现在三个下拉 + settingsOpen 统一监听。
+ *
+ * 顺序很重要: 先关下拉(避免下拉的 watcher 再 restore 一次), 再 restoreTheme()。
+ */
+watch(function () { return state.settingsOpen; }, function (open) {
+  if (open) { return; }
+  provinceOpen.value = false;
+  termOpen.value = false;
+  festivalOpen.value = false;
+  restoreTheme();
+});
+
+// 组件被卸载(切到别的浮层/换书)时同样不能留预览色
+onBeforeUnmount(function () { restoreTheme(); });
+
+defineExpose({ el: rootRef, handleEscape });
 
 /** 当前选中省份(未启用地域主题时也回退到已选省, 便于预览) */
 const provinceCode = computed(function () {
@@ -176,21 +243,30 @@ const shortcutHintText = computed(function () {
 </script>
 
 <template>
-  <section id="settingsPanel" ref="rootRef" class="settings-panel" :class="{ open: state.settingsOpen }">
+  <section id="settingsPanel" ref="rootRef" class="settings-panel" :class="{ open: state.settingsOpen }"
+    role="dialog" aria-modal="false" aria-labelledby="settingsPanelTitle">
     <div class="sp-head">
-      <b class="sp-title">设置</b>
+      <h2 class="sp-title" id="settingsPanelTitle" tabindex="-1">设置</h2>
       <span class="spacer"></span>
       <button class="popup-close" @click.stop="state.settingsOpen = false">关闭</button>
     </div>
     <div class="sp-row sp-row-theme">
       <span class="sp-label">阅读主题</span>
       <div class="sp-themes" @mouseleave="endPreview()">
-        <div class="sp-theme-dots">
-          <span v-for="t in THEMES" :key="t.id" class="sp-dot" :data-theme="t.id" :title="t.name"
-            :style="{ background: t.bg, color: t.fg, '--sp-check': t.fg }"
+        <!-- 主题预设是单选组: role=radiogroup/radio + 可见名称 + roving tabindex + 方向键 -->
+        <div class="sp-theme-dots" role="radiogroup" aria-label="阅读主题">
+          <button v-for="t in THEMES" :key="t.id" type="button" class="sp-dot" :data-theme="t.id"
+            role="radio" :aria-checked="settings && settings.theme === t.id ? 'true' : 'false'"
+            :aria-label="t.name" :title="t.name"
+            :tabindex="settings && settings.theme === t.id ? 0 : -1"
+            :style="{ '--sp-check': t.fg }"
             :class="{ active: settings && settings.theme === t.id }"
             @mouseenter="previewPreset(t.id)" @focus="previewPreset(t.id)"
-            @click="choosePreset(t.id)"></span>
+            @keydown="onThemeKey(t.id, $event)"
+            @click="choosePreset(t.id)">
+            <span class="sp-dot-swatch" :style="{ background: t.bg, color: t.fg }"></span>
+            <span class="sp-dot-name">{{ t.name }}</span>
+          </button>
         </div>
         <!-- 第二行: 地域色彩 / 廿四节气 / 节日色彩 三个选择器(仍归属于「阅读主题」行) -->
         <div class="sp-theme-extra">
@@ -294,8 +370,11 @@ const shortcutHintText = computed(function () {
           title="正文两侧箭头常驻显示"
           @click="persistSettings({ sideNavMode: 'always' })">常驻</button>
         <button class="sp-seg-btn" :class="{ active: settings && settings.sideNavMode === 'hover' }"
-          title="鼠标移到两侧箭头区域时才显示"
-          @click="persistSettings({ sideNavMode: 'hover' })">悬浮显示</button>
+          title="鼠标移到两侧箭头区域时才淡入（默认，不打扰阅读）"
+          @click="persistSettings({ sideNavMode: 'hover' })">悬浮</button>
+        <button class="sp-seg-btn" :class="{ active: settings && settings.sideNavMode === 'hidden' }"
+          title="不显示两侧箭头：用底部「上一章/下一章」或键盘快捷键翻章"
+          @click="persistSettings({ sideNavMode: 'hidden' })">隐藏</button>
       </div>
     </div>
     <!-- 页面宽度: 与「阅读主题」同构 —— 第一行比例档, 第二行自定义输入(标签只占第一行) -->
@@ -304,13 +383,17 @@ const shortcutHintText = computed(function () {
       <div class="sp-stack-box">
         <div class="sp-seg">
           <button v-for="r in CONTENT_WIDTH.ratios" :key="r" class="sp-seg-btn"
-            :class="{ active: curRatio === r }"
-            :title="'视口宽度的 ' + pctText(r)"
-            @click="persistSettings({ widthRatio: r })">{{ pctText(r) }}</button>
+            :class="{ active: curRatio === r }" :data-ratio="r" :data-width-tier="tierOf(r).name"
+            :aria-pressed="curRatio === r ? 'true' : 'false'"
+            :title="'视口宽度的 ' + tierOf(r).pct"
+            @click="persistSettings({ widthRatio: r })">
+            {{ tierOf(r).name }}<span class="sr-only">{{ '视口宽度的' + tierOf(r).pct }}</span>
+          </button>
         </div>
         <div class="sp-width-custom">
+          <label class="sr-only" for="spWidthInput">自定义宽度（{{ CONTENT_WIDTH.min }}–{{ CONTENT_WIDTH.max }} 像素）</label>
           <!-- 用 text + inputmode=numeric 而非 number: number 输入框不支持 select(), 聚焦无法全选 -->
-          <input ref="customInputRef" class="sp-width-input" type="text" inputmode="numeric"
+          <input id="spWidthInput" ref="customInputRef" class="sp-width-input" type="text" inputmode="numeric"
             pattern="[0-9]*" autocomplete="off"
             :value="customValue" :min="CONTENT_WIDTH.min" :max="CONTENT_WIDTH.max" step="10"
             :title="'自定义 ' + CONTENT_WIDTH.min + '–' + CONTENT_WIDTH.max + 'px, 聚焦后直接输入, 回车或失焦生效'"

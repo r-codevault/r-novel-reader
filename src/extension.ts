@@ -10,12 +10,13 @@
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { parseNovel, deriveTitleAuthor, Novel } from './novelParser';
-import { ReaderPanel, ShelfItemView, DrawerTab, ReaderPanelState } from './readerPanel';
+import { parseNovel, deriveTitleAuthor, createEmptyNovel, Novel } from './novelParser';
+import { ReaderPanel, ShelfItemView, DrawerTab, ReaderPanelState, OfflineStatusView, ChapterMarksView } from './readerPanel';
 import { ShelfStore } from './shelf';
-import { HistoryStore } from './history';
+import { HistoryStore, buildOpenEntry } from './history';
 import { NotesStore } from './notes';
 import { ensureInLibrary, isInsideDir } from './library';
 import { shelfBookKey, planDuplicateRemoval } from './shelfMaintenance';
@@ -31,6 +32,13 @@ import { fetchForSource, sandboxHttpFor, SourceHttpPool } from './online/sourceH
 import { fetchChapter, fetchToc, OnlineChapter } from './online/onlineBook';
 import { OnlineCache } from './onlineCache';
 import { isOnlinePath, onlineKey, OnlineRef } from './onlinePath';
+import { OfflineStore } from './offline/offlineStore';
+import { DownloadService } from './offline/downloadService';
+import type { DownloadProgressEvent, DownloadResult } from './offline/downloadService';
+import { exportOfflineTxt, safeFileName, uniquePath } from './offline/exportTxt';
+import { SingleFlight } from './util/async';
+import type { DownloadTaskView, ShelfRefreshPlan, ShelfRefreshResult } from './protocol';
+import { planShelfRefresh, applyShelfRefresh, type FsProbe, type PlanInput, type ProbeCode } from './shelfRefresh';
 
 interface LoadOptions {
     chapterIndex?: number;
@@ -43,6 +51,8 @@ interface LoadOptions {
 }
 
 let historyStore: HistoryStore | undefined;
+/** 插件卸载时要停掉后台下载(队列挂在 activate 作用域, 这里留一个引用) */
+let downloadQueue: DownloadService | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
     const store = new SettingsStore(context.globalState);
@@ -59,6 +69,28 @@ export function activate(context: vscode.ExtensionContext): void {
     // 章节位置记忆(书架 chapterRatios): 目录切走再切回时恢复原阅读位置
     ReaderPanel.getChapterRatio = (filePath: string, chapterIndex: number) =>
         shelf.getRatio(filePath, chapterIndex);
+
+    /**
+     * 离线下载区与临时读缓存**分目录**:
+     * online-cache 只放"读过就缓存"的章, 删书架时一起清掉;
+     * offline-cache 是用户主动下载的内容, 删书架时可选择保留。
+     * 混在一起的话, "保留离线内容"和"清临时缓存"两种语义会互相踩。
+     *
+     * 声明放在 shelfItems 之前: 书架列表要读 offlineIndex 打「离线 N」标签。
+     */
+    const offlineStore = new OfflineStore(path.join(context.globalStorageUri.fsPath, 'offline-cache'));
+    /** 阅读侧与下载侧的同一章请求去重 */
+    const inflightChapters = new SingleFlight<string, string[]>();
+    /** 内存索引: filePath(online://伪路径) → 状态快照 */
+    const offlineIndex = new Map<string, OfflineStatusView>();
+    let offlineGlobalStats: { bytes: number; books: number } = { bytes: 0, books: 0 };
+
+    /** 离线下载队列(不依赖 vscode, 便于单测; 抓取走阅读侧同一条链路) */
+    const downloadService = new DownloadService({
+        store: offlineStore,
+        fetchChapter: (chapter, ref, signal) => onlineChapterParagraphs(ref, chapter.index, chapter.url, signal),
+    });
+    downloadQueue = downloadService;
 
     // ---------------------------------------------------------------- 阅读页窗口恢复
     // VS Code 重开窗口会尝试恢复上次的 webview; 这里接管它:
@@ -124,7 +156,20 @@ export function activate(context: vscode.ExtensionContext): void {
             current: !!currentNovel && currentNovel.filePath === b.filePath,
             online: !!b.online,
             sourceName: b.online?.sourceName,
+            // 搜索结果行靠它对上书架记录(移出/已加入判定)
+            onlineBookUrl: b.online?.bookUrl,
+            // 离线下载进度(书架行显示「离线 N」)
+            offline: offlineTagOf(b.filePath),
         }));
+    }
+
+    /** 书架行的离线标记: 只暴露 done/total, 不带全量章号列表 */
+    function offlineTagOf(filePath: string): { done: number; total: number } | undefined {
+        const view = offlineIndex.get(filePath);
+        if (!view) { return undefined; }
+        const status = downloadService.statusOf(filePath);
+        const done = status ? Math.max(view.done, status.done) : view.done;
+        return done > 0 ? { done, total: view.total } : undefined;
     }
 
     function refreshShelfView(): void {
@@ -144,27 +189,42 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ---------------------------------------------------------------- 加载小说
 
+    /**
+     * 「打开意图」序号 —— 覆盖**全部**打开入口(本地/在线/预览/启动器/抽屉/续读/恢复)。
+     *
+     * 为什么需要它: 打开一本书常常要等网络(抓目录、预取首章), 期间用户可能已经
+     * 从书架点了另一本。若不在 createOrShow 之前比对序号, "慢的那本"回来时会把
+     * 面板切回去(R2-07)。编号必须在**任何 await 之前**取, 否则两个并发请求会拿到
+     * 同一个号, 校验形同虚设。
+     */
+    let openIntentSeq = 0;
+    /** 取一个新的打开意图号(同步, 必须在 await 之前调用) */
+    function nextOpenIntent(): number {
+        openIntentSeq += 1;
+        return openIntentSeq;
+    }
+    /** 本次打开意图是否仍然最新(放到 createOrShow 之前判断) */
+    function openIntentAlive(seq: number): boolean {
+        return seq === openIntentSeq;
+    }
+
     /** 加载小说: 解析 -> 登记书架 -> 刷新视图 -> (可选)打开阅读面板 */
-    /** 记录本地/在线阅读历史(预览书不在书架时不记) */
-    function recordHistory(filePath: string, chapterIndex: number, totalOverride?: number): void {
-        const entry = shelf.get(filePath);
-        if (!entry) { return; }
-        history.record({
-            kind: entry.online ? 'online' : 'local',
-            filePath,
-            title: entry.title || path.basename(filePath),
-            author: entry.author,
-            chapterIndex,
-            totalChapters: totalOverride || entry.totalChapters || 0,
-            lastReadAt: Date.now(),
-            sourceId: entry.online?.sourceId,
-            sourceName: entry.online?.sourceName,
-            bookUrl: entry.online?.bookUrl,
-        });
+    /**
+     * 记录"打开一本书"的阅读历史。
+     *
+     * 刻意不查书架: 从书源搜出来、还没加入书架(预览态)的书同样要记 ——
+     * 老版本这里有一道 `if (!shelf.get(filePath)) return;` 门禁,
+     * 导致"本地书打开后不滚动就没有历史"以及"预览书永远进不了历史"。
+     */
+    function recordOpenHistory(novel: Novel, chapterIndex: number, totalOverride?: number): void {
+        const entry = buildOpenEntry(novel, shelf.get(novel.filePath), chapterIndex, totalOverride);
+        if (entry) { history.record(entry); }
     }
 
     async function loadNovel(filePath: string, opts: LoadOptions = {}): Promise<Novel | undefined> {
         if (isOnlinePath(filePath)) { return loadOnlineNovel(filePath, opts); }
+        // 打开意图号: 必须在第一个 await 之前取
+        const intentSeq = nextOpenIntent();
         try {
             if (!fs.existsSync(filePath)) {
                 throw new Error('文件不存在');
@@ -238,14 +298,17 @@ export function activate(context: vscode.ExtensionContext): void {
             const scrollRatio = opts.scrollRatio ?? (hasProgress ? entry.scrollRatio : 0);
 
             if (opts.openPanel !== false) {
-                ReaderPanel.createOrShow(
-                    novel,
-                    chapterIndex,
-                    scrollRatio,
-                    store,
-                    vscode.ViewColumn.One,
-                    opts.openSettings
-                );
+                // 期间用户可能已经打开了别的书: 旧意图不再抢面板
+                if (openIntentAlive(intentSeq)) {
+                    ReaderPanel.createOrShow(
+                        novel,
+                        chapterIndex,
+                        scrollRatio,
+                        store,
+                        vscode.ViewColumn.One,
+                        opts.openSettings
+                    );
+                }
             }
             return novel;
         } catch (err) {
@@ -298,16 +361,355 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     }
 
-    /** 正文: 缓存优先, 未命中则抓取并写缓存 */
-    async function onlineChapterParagraphs(ref: OnlineRef, index: number, url: string): Promise<string[]> {
+    /**
+     * 正文: 三级优先 —— 离线下载区 → 临时读缓存 → 网络(单飞去重)。
+     *
+     * 单飞的意义: 用户翻到某章的同时下载队列可能也在抓同一章,
+     * 不去重会对同一 URL 发两次请求(浪费流量, 还容易触发站点限流)。
+     */
+    async function onlineChapterParagraphs(
+        ref: OnlineRef,
+        index: number,
+        url: string,
+        signal?: AbortSignal
+    ): Promise<string[]> {
         const key = onlineKey(ref.sourceId, ref.bookUrl);
+
+        const offline = await offlineStore.readChapter(key, index);
+        if (offline) { return offline; }
+
         const cached = await onlineCache.readChapter(key, index);
         if (cached) { return cached; }
-        const source = bookSources.get(ref.sourceId);
-        if (!source) { throw new Error('书源已被删除, 无法加载正文'); }
-        const res = await fetchChapter(source, url, { pool: sourcePool, referer: ref.bookUrl });
-        await onlineCache.writeChapter(key, index, res.paragraphs);
-        return res.paragraphs;
+
+        return inflightChapters.run(key + '#' + index, async () => {
+            const source = bookSources.get(ref.sourceId);
+            if (!source) { throw new Error('书源已被删除, 无法加载正文'); }
+            const res = await fetchChapter(source, url, {
+                pool: sourcePool,
+                referer: ref.bookUrl,
+                signal,
+            });
+            await onlineCache.writeChapter(key, index, res.paragraphs);
+            return res.paragraphs;
+        });
+    }
+
+    /** 取一本书对应的在线元信息: 预览书没有书架记录, 用 novel.online 兜底 */
+    function refForNovel(novel: Novel): OnlineRef | undefined {
+        if (novel.online) {
+            return {
+                sourceId: novel.online.sourceId,
+                sourceName: novel.online.sourceName,
+                bookUrl: novel.online.bookUrl,
+                tocUrl: novel.online.tocUrl,
+            };
+        }
+        return shelf.get(novel.filePath)?.online;
+    }
+
+    // ------------------------------------------------------------ 离线下载
+
+    /** 重建离线索引(下载结束后 / 清缓存后 / 启动时) */
+    async function refreshOfflineIndex(): Promise<void> {
+        try {
+            const [entries, stats] = await Promise.all([
+                offlineStore.listAll(),
+                offlineStore.totalSize(),
+            ]);
+            offlineGlobalStats = stats;
+            offlineIndex.clear();
+            for (const entry of entries) {
+                const m = entry.manifest;
+                offlineIndex.set(entry.key, {
+                    filePath: entry.key,
+                    total: m.totalChapters || m.chapters.length,
+                    done: entry.done.length,
+                    failed: m.failed ? Object.keys(m.failed).length : 0,
+                    running: downloadService.isRunning(entry.key),
+                    paused: downloadService.statusOf(entry.key)?.paused ?? false,
+                    downloaded: entry.done,
+                    bytes: entry.bytes,
+                    totalBytes: stats.bytes,
+                    bookCount: stats.books,
+                });
+            }
+        } catch { /* 读盘失败不影响阅读 */ }
+    }
+
+    /** 同步快照(OnlineApi.status / init 首帧) */
+    function offlineViewOf(filePath: string): OfflineStatusView | undefined {
+        const cached = offlineIndex.get(filePath);
+        if (cached) {
+            const status = downloadService.statusOf(filePath);
+            return {
+                ...cached,
+                running: downloadService.isRunning(filePath),
+                paused: status?.paused ?? false,
+                done: status ? Math.max(cached.done, status.done) : cached.done,
+                failed: status ? status.failed : cached.failed,
+                totalBytes: offlineGlobalStats.bytes,
+                bookCount: offlineGlobalStats.books,
+            };
+        }
+        // 还没进索引(刚下第一章): 至少把"正在下"的状态暴露出来
+        const status = downloadService.statusOf(filePath);
+        if (!status) { return undefined; }
+        return {
+            filePath,
+            total: status.total,
+            done: status.done,
+            failed: status.failed,
+            running: status.running,
+            paused: status.paused,
+            downloaded: [],
+            bytes: 0,
+            totalBytes: offlineGlobalStats.bytes,
+            bookCount: offlineGlobalStats.books,
+        };
+    }
+
+    function pushOfflineStatus(): void {
+        const cur = ReaderPanel.current;
+        if (!cur) { return; }
+        cur.postOfflineStatus(offlineViewOf(cur.novel.filePath));
+        cur.postOfflineStats({ ...offlineGlobalStats });
+    }
+
+    // 进度节流: 5000 章的书不要每章都往 webview 发一条
+    let lastProgressAt = 0;
+    let progressTimer: ReturnType<typeof setTimeout> | null = null;
+    let pendingProgress: DownloadProgressEvent | null = null;
+
+    function flushProgress(): void {
+        if (!pendingProgress) { return; }
+        const p = pendingProgress;
+        pendingProgress = null;
+        lastProgressAt = Date.now();
+        const status = downloadService.statusOf(p.key);
+        ReaderPanel.current?.postDownloadProgress({
+            done: p.done,
+            total: p.total,
+            failed: p.failed,
+            running: !!status,
+            paused: status?.paused ?? false,
+            index: p.index,
+            title: p.title,
+            added: p.added,
+            // 归属: 进度属于 p.key 这本书, 不一定是"当前打开的那本"
+            filePath: p.key,
+            bookTitle: shelf.get(p.key)?.title || '',
+        });
+    }
+
+    /** 250ms 内的进度只保留最后一条; 首帧立即发, 避免进度条半天不动 */
+    function queueProgress(p: DownloadProgressEvent): void {
+        pendingProgress = p;
+        const now = Date.now();
+        if (now - lastProgressAt >= 250) {
+            flushProgress();
+            return;
+        }
+        if (!progressTimer) {
+            progressTimer = setTimeout(() => {
+                progressTimer = null;
+                flushProgress();
+            }, 250);
+        }
+    }
+
+    async function finishDownload(r: DownloadResult): Promise<void> {
+        if (progressTimer) { clearTimeout(progressTimer); progressTimer = null; }
+        pendingProgress = null;
+        await refreshOfflineIndex();
+        refreshShelfView();
+        pushOfflineStatus();
+        // 任务表快照: 结束后按钮/进度条靠它收敛(哪怕当前打开的是另一本书)
+        ReaderPanel.current?.postDownloadTasks();
+
+        const label = shelf.get(r.key)?.title || ReaderPanel.current?.novel.bookTitle || '这本书';
+        if (r.cancelled) {
+            ReaderPanel.current?.postDownloadDone({
+                ok: false, cancelled: true, done: r.done, total: r.total, failed: r.failed,
+                message: '已取消', filePath: r.key,
+            });
+            return;
+        }
+        ReaderPanel.current?.postDownloadDone({
+            ok: r.failed === 0,
+            cancelled: false,
+            done: r.done,
+            total: r.total,
+            failed: r.failed,
+            filePath: r.key,
+        });
+        if (r.failed === 0) {
+            void vscode.window.showInformationMessage(
+                `「${label}」离线下载完成：${r.done}/${r.total} 章`
+            );
+        } else {
+            void vscode.window.showWarningMessage(
+                `「${label}」已下载 ${r.done}/${r.total} 章，${r.failed} 章失败（再次下载会自动重试）`
+            );
+        }
+    }
+
+    function currentOfflineKey(): string | undefined {
+        const novel = ReaderPanel.current?.novel;
+        const ref = novel ? refForNovel(novel) : undefined;
+        return ref ? onlineKey(ref.sourceId, ref.bookUrl) : undefined;
+    }
+
+    /**
+     * 解析下载目标。
+     * 优先用显式 `filePath`（= 在线书 `online://` 键）—— 这样"在书架里对 A 发起下载、
+     * 随后切到 B"仍然下的是 A；缺省才退回"当前打开的书"。
+     */
+    function resolveDownloadTarget(
+        filePath?: string
+    ): { title: string; author: string; ref: OnlineRef; key: string } | undefined {
+        const cur = ReaderPanel.current?.novel;
+        if (!filePath || (cur && cur.filePath === filePath)) {
+            if (!cur) { return undefined; }
+            const ref = refForNovel(cur);
+            if (!ref) { return undefined; }
+            return { title: cur.bookTitle, author: cur.author, ref, key: onlineKey(ref.sourceId, ref.bookUrl) };
+        }
+        const entry = shelf.get(filePath);
+        if (!entry?.online) { return undefined; }
+        return {
+            title: entry.title,
+            author: entry.author,
+            ref: entry.online,
+            key: filePath,
+        };
+    }
+
+    /** 开始下载(不传范围 = 整本) */
+    async function startOfflineDownload(
+        range?: { start?: number; end?: number },
+        filePath?: string
+    ): Promise<{ ok: boolean; message?: string }> {
+        const target = resolveDownloadTarget(filePath);
+        if (!target) { return { ok: false, message: '请先打开一本在线书' }; }
+        const ref = target.ref;
+
+        const key = target.key;
+        if (downloadService.isRunning(key)) { return { ok: false, message: '这本书正在下载中' }; }
+
+        // 目录: 已下载过就用离线快照(书源没了也能续传), 否则走 TTL 缓存/重新抓
+        const saved = await offlineStore.readManifest(key);
+        let chapters: OnlineChapter[];
+        let tocUrl = ref.tocUrl;
+        if (saved && saved.chapters.length) {
+            chapters = saved.chapters;
+            tocUrl = saved.tocUrl || tocUrl;
+        } else {
+            try {
+                const toc = await resolveOnlineToc(ref);
+                chapters = toc.chapters;
+                tocUrl = toc.tocUrl || tocUrl;
+            } catch (err) {
+                return { ok: false, message: err instanceof Error ? err.message : '获取目录失败' };
+            }
+        }
+        if (!chapters.length) { return { ok: false, message: '目录为空，无法下载' }; }
+
+        const last = chapters.length - 1;
+        const start = Math.min(Math.max(0, range?.start ?? 0), last);
+        const end = Math.min(Math.max(start, range?.end ?? last), last);
+
+        lastProgressAt = 0;
+        pendingProgress = null;
+        if (progressTimer) { clearTimeout(progressTimer); progressTimer = null; }
+
+        downloadService.start(
+            {
+                key,
+                ref: { ...ref, tocUrl, tocFetchedAt: saved?.tocFetchedAt || Date.now() },
+                chapters,
+                bookTitle: target.title,
+                author: target.author,
+                range: { start, end },
+            },
+            {
+                onProgress: (p) => queueProgress(p),
+                onDone: (r) => { void finishDownload(r); },
+            }
+        );
+
+        // 立刻回一帧"已开始", 让按钮马上变成「暂停」
+        ReaderPanel.current?.postDownloadProgress({
+            done: offlineViewOf(key)?.done ?? 0,
+            total: end - start + 1,
+            failed: 0,
+            running: true,
+            paused: false,
+            filePath: key,
+            bookTitle: target.title,
+        });
+        ReaderPanel.current?.postDownloadTasks();
+        return { ok: true };
+    }
+
+    /**
+     * 导出当前书的离线内容为本地 txt。
+     *
+     * **只保存文件**: 不打开阅读页、也不加入书架 —— 要不要变成书架里的书由用户自己决定
+     * (之后用「添加书籍」或「刷新书架」导入即可)。写完给一条带「打开所在文件夹」的提示。
+     */
+    async function exportCurrentOfflineTxt(): Promise<{
+        ok: boolean; message?: string; filePath?: string; chapters?: number; missing?: number;
+    }> {
+        const novel = ReaderPanel.current?.novel;
+        const ref = novel ? refForNovel(novel) : undefined;
+        if (!novel || !ref) { return { ok: false, message: '请先打开一本在线书' }; }
+
+        const key = onlineKey(ref.sourceId, ref.bookUrl);
+        const manifest = await offlineStore.readManifest(key);
+        if (!manifest) { return { ok: false, message: '这本书还没有离线内容，请先下载' }; }
+
+        const baseName = safeFileName(novel.bookTitle || manifest.bookTitle || '未命名');
+        const library = getLibraryPath();
+
+        let targetFile: string;
+        if (library) {
+            targetFile = await uniquePath(library, baseName + '.txt');
+        } else {
+            const picked = await vscode.window.showSaveDialog({
+                title: '导出为本地 txt',
+                saveLabel: '导出',
+                defaultUri: vscode.Uri.file(path.join(os.homedir(), baseName + '.txt')),
+                filters: { '小说文本': ['txt'] },
+            });
+            if (!picked) { return { ok: false, message: '已取消' }; }
+            targetFile = picked.fsPath;
+        }
+
+        const res = await exportOfflineTxt({ store: offlineStore, key, targetFile, baseName });
+        if (!res.ok || !res.filePath) {
+            return {
+                ok: false,
+                message: res.message || '导出失败',
+                filePath: res.filePath,
+                chapters: res.chapters,
+                missing: res.missing,
+            };
+        }
+
+        // 只落盘, 不做任何"打开/加入书架"的副作用
+        const suffix = res.missing > 0 ? `（另有 ${res.missing} 章未下载）` : '';
+        const where = library ? '书库目录' : path.dirname(res.filePath);
+        void vscode.window
+            .showInformationMessage(
+                `已导出到${where}：${path.basename(res.filePath)}（${res.chapters} 章）${suffix}`,
+                '打开所在文件夹'
+            )
+            .then((picked) => {
+                if (picked === '打开所在文件夹') {
+                    void vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(res.filePath as string));
+                }
+            });
+        return { ok: true, filePath: res.filePath, chapters: res.chapters, missing: res.missing };
     }
 
     /** 用书架里的 online 元信息重建 Novel(不含正文) */
@@ -346,6 +748,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     /** 打开在线书: 目录(缓存优先) + 当前章正文预取 */
     async function loadOnlineNovel(filePath: string, opts: LoadOptions = {}): Promise<Novel | undefined> {
+        // 打开意图号: 抓目录/预取正文都可能很慢, 必须在 await 之前取号
+        const intentSeq = nextOpenIntent();
         try {
             const entry = shelf.get(filePath);
             if (!entry || !entry.online) { throw new Error('书架中找不到这本在线书'); }
@@ -380,7 +784,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     vscode.ViewColumn.One,
                     opts.openSettings
                 );
-                recordHistory(filePath, chapterIndex, novel.chapters.length);
+                // 历史上的写入已由 ReaderPanel.onOpen 统一处理(打开即记), 这里不再重复
             }
             return novel;
         } catch (err) {
@@ -454,8 +858,10 @@ export function activate(context: vscode.ExtensionContext): void {
         sourceId: string; sourceName: string; title: string; author?: string;
         bookUrl: string; coverUrl?: string; intro?: string; kind?: string;
         lastChapter?: string; wordCount?: number;
+        /** 起始章节(从历史重开时回到原章); 不传则从第 0 章开始 */
+        chapterIndex?: number;
     }): Promise<{ ok: boolean; message?: string }> {
-        const seq = ++previewSeq;
+        const seq = nextOpenIntent();
         const source = bookSources.get(item.sourceId);
         if (!source) {
             const message = '书源不存在或已被删除';
@@ -512,23 +918,29 @@ export function activate(context: vscode.ExtensionContext): void {
                             preview: true,
                         },
                     };
-                    // 首章预取(失败也不阻塞, 阅读页会显示重试)
+                    const start = Math.min(
+                        Math.max(0, typeof item.chapterIndex === 'number' && Number.isFinite(item.chapterIndex)
+                            ? item.chapterIndex
+                            : 0),
+                        Math.max(0, chapters.length - 1)
+                    );
+                    // 起始章预取(失败也不阻塞, 阅读页会显示重试)
                     try {
-                        const first = chapters[0];
+                        const first = chapters[start];
                         if (first?.url) {
-                            const paragraphs = await onlineChapterParagraphs(ref, 0, first.url);
+                            const paragraphs = await onlineChapterParagraphs(ref, start, first.url);
                             first.content = paragraphs.join('\n');
                             first.wordCount = first.content.length;
                         }
                     } catch { /* 预览页内重试 */ }
 
                     // 旧轮请求: 不打开, 避免覆盖用户后来的选择
-                    if (seq !== previewSeq) { return; }
+                    if (!openIntentAlive(seq)) { return; }
                     currentNovel = novel;
-                    ReaderPanel.createOrShow(novel, 0, 0, store, vscode.ViewColumn.One);
+                    ReaderPanel.createOrShow(novel, start, 0, store, vscode.ViewColumn.One);
                 }
             );
-            if (seq !== previewSeq) {
+            if (!openIntentAlive(seq)) {
                 return { ok: false, message: '预览请求已被新的操作取代' };
             }
             return { ok: true };
@@ -541,7 +953,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     /** 把当前预览的书转为正式书架条目 */
     async function savePreview(): Promise<{ ok: boolean; message?: string }> {
-        const novel = currentNovel;
+        // 面板持有的 novel 才是按钮所属的书(窗口恢复路径下 currentNovel 可能为空或指向别处)
+        const novel = ReaderPanel.current?.novel || currentNovel;
         if (!novel?.online || !novel.online.preview) {
             return { ok: false, message: '当前不是预览书籍' };
         }
@@ -573,15 +986,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     /** 阅读面板: 在线章按需加载 */
     ReaderPanel.onlineChapterLoader = async function (novel: Novel, index: number): Promise<string[]> {
-        // 预览书还没进书架, 用 novel.online 兜底
-        const ref: OnlineRef | undefined = novel.online
-            ? {
-                sourceId: novel.online.sourceId,
-                sourceName: novel.online.sourceName,
-                bookUrl: novel.online.bookUrl,
-                tocUrl: novel.online.tocUrl,
-            }
-            : shelf.get(novel.filePath)?.online;
+        const ref = refForNovel(novel);
         const chapter = novel.chapters[index];
         if (!ref || !chapter || !chapter.url) { throw new Error('在线章节信息缺失'); }
         return onlineChapterParagraphs(ref, index, chapter.url);
@@ -609,19 +1014,32 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     };
 
+        /**
+ * 没书时也把阅读面板打开(正文显示引导文案)。
+ *
+ * 为什么不是弹一句"书架里还没有小说": 书源搜索、笔记、阅读设置这些入口
+ * 全都在面板内部, 弹窗+return 等于把用户挡在门外, 连搜书都没地方点。
+ *
+ * @param tab 指定的抽屉页签(打开面板后切过去), 由 openDrawerAt 传入
+ */
+function openEmptyReader(tab?: DrawerTab): void {
+    // 同步路径: 取号紧跟 createOrShow, 让还在飞的"慢打开"作废
+    nextOpenIntent();
+    ReaderPanel.createOrShow(createEmptyNovel(shelfItems().length === 0), 0, 0, store);
+    refreshShelfView();
+    syncLibraryToView();
+    if (tab) {
+        ReaderPanel.openDrawer(tab);
+    }
+}
+
     // ---------------------------------------------------------------- 命令
 
-        /** 活动栏图标动作: 打开阅读面板(在读则续读, 否则引导添加) */
+        /** 活动栏图标动作: 打开阅读面板(在读则续读, 否则给空态页) */
     async function openReaderFromLauncher(): Promise<void> {
         const novel = await ensureNovel();
         if (!novel) {
-            const picked = await vscode.window.showInformationMessage(
-                '书架里还没有小说，先添加一本吧。',
-                '添加书籍'
-            );
-            if (picked === '添加书籍') {
-                await vscode.commands.executeCommand('novelReader.openFile');
-            }
+            openEmptyReader();
             return;
         }
         const entry = shelf.get(novel.filePath);
@@ -629,6 +1047,7 @@ export function activate(context: vscode.ExtensionContext): void {
             ReaderPanel.current?.chapterIndex ??
             (entry && entry.chapterIndex >= 0 ? entry.chapterIndex : 0);
         const scrollRatio = ReaderPanel.current?.scrollRatio ?? (entry ? entry.scrollRatio : 0);
+        nextOpenIntent();
         ReaderPanel.createOrShow(novel, chapterIndex, scrollRatio, store);
         refreshShelfView();
         syncLibraryToView();
@@ -638,13 +1057,8 @@ export function activate(context: vscode.ExtensionContext): void {
         async function openDrawerAt(tab: DrawerTab): Promise<void> {
             const novel = await ensureNovel();
             if (!novel) {
-                const picked = await vscode.window.showInformationMessage(
-                    '书架里还没有小说，先添加一本吧。',
-                    '添加书籍'
-                );
-                if (picked === '添加书籍') {
-                    await vscode.commands.executeCommand('novelReader.openFile');
-                }
+                // 没书也开面板: 抽屉(如书源搜索)本身没有书也能用
+                openEmptyReader(tab);
                 return;
             }
             const entry = shelf.get(novel.filePath);
@@ -652,6 +1066,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 ReaderPanel.current?.chapterIndex ??
                 (entry && entry.chapterIndex >= 0 ? entry.chapterIndex : 0);
             const scrollRatio = ReaderPanel.current?.scrollRatio ?? (entry ? entry.scrollRatio : 0);
+            nextOpenIntent();
             ReaderPanel.createOrShow(novel, chapterIndex, scrollRatio, store);
             refreshShelfView();
             syncLibraryToView();
@@ -673,8 +1088,6 @@ export function activate(context: vscode.ExtensionContext): void {
     const sourcePool = new SourceHttpPool();
     const searchService = new SearchService(bookSources, sourcePool);
     const onlineCache = new OnlineCache(path.join(context.globalStorageUri.fsPath, 'online-cache'));
-    /** 预览轮次: 旧请求跑完也不能覆盖新请求 */
-    let previewSeq = 0;
     /** 目录缓存有效期: 6 小时; 过期后重新抓, 失败则回退旧缓存 */
     const TOC_TTL = 6 * 60 * 60 * 1000;
     // 书源改存文件(合集可达数千条); 首次启动把旧版 globalState 数据迁移过来
@@ -886,23 +1299,399 @@ export function activate(context: vscode.ExtensionContext): void {
         importInteractive: importSourcesInteractive,
     };
 
+    // 离线下载/缓存: 面板只做转发, 编排都在这里(下载队列挂在 activate 作用域, 关面板不停)
+    ReaderPanel.offlineView = (filePath: string) => offlineViewOf(filePath);
+
+    /**
+     * 目录里每章的标记: 临时读缓存(读过就存) + 已读章节。
+     * 与主动下载的 downloaded 一起, 让用户一眼看出「哪些章没网也能读」。
+     */
+    ReaderPanel.chapterMarks = async function (novel: Novel): Promise<ChapterMarksView | null> {
+        const ref = refForNovel(novel);
+        if (!ref) { return null; }
+        const key = onlineKey(ref.sourceId, ref.bookUrl);
+        const cached = await onlineCache.listChapters(key);
+        const entry = shelf.get(novel.filePath);
+        const read: number[] = [];
+        const ratios = entry?.chapterRatios;
+        if (ratios) {
+            for (const raw of Object.keys(ratios)) {
+                const n = Number(raw);
+                if (Number.isInteger(n) && n >= 0) { read.push(n); }
+            }
+            read.sort(function (a, b) { return a - b; });
+        }
+        return {
+            cached,
+            read,
+            // 与状态栏「读至第 N 章」同一口径; -1 = 还没开始
+            readUpTo: entry && entry.chapterIndex >= 0 ? entry.chapterIndex : -1,
+        };
+    };
+
+    /**
+     * 下载任务表（webview 任务表用）。
+     *
+     * 两条来源合并、按 `filePath`(= 下载 key) 去重：
+     *  1. 运行中的任务（`downloadService.snapshot()`，带真实书名）；
+     *  2. 离线索引里已存在的书（running=false，只作为"查看/清理"入口）。
+     * 这是**全局**视图，与"当前打开哪本书"无关（R9-06）。
+     */
+    function buildDownloadTasks(): DownloadTaskView[] {
+        const now = Date.now();
+        const out = new Map<string, DownloadTaskView>();
+        for (const s of downloadService.snapshot()) {
+            out.set(s.key, {
+                filePath: s.key,
+                bookTitle: s.bookTitle || shelf.get(s.key)?.title || s.key,
+                done: s.done,
+                total: s.total,
+                failed: s.failed,
+                running: true,
+                paused: s.paused,
+                updatedAt: now,
+            });
+        }
+        offlineIndex.forEach(function (view, key) {
+            if (out.has(key)) { return; }
+            out.set(key, {
+                filePath: key,
+                bookTitle: shelf.get(key)?.title || key,
+                done: view.done,
+                total: view.total,
+                failed: view.failed,
+                running: false,
+                paused: false,
+                updatedAt: now,
+            });
+        });
+        return Array.from(out.values());
+    }
+
+    ReaderPanel.offline = {
+        stats: () => ({ ...offlineGlobalStats }),
+        status: () => {
+            const key = currentOfflineKey();
+            return key ? offlineViewOf(key) : undefined;
+        },
+        start: (range, filePath) => startOfflineDownload(range, filePath),
+        // 三个控制动作都按显式 key: 用户可以在 B 书的页面上暂停 A 的下载
+        pause: (key) => {
+            const k = key || currentOfflineKey();
+            return k ? downloadService.pause(k) : false;
+        },
+        resume: (key) => {
+            const k = key || currentOfflineKey();
+            return k ? downloadService.resume(k) : false;
+        },
+        cancel: (key) => {
+            const k = key || currentOfflineKey();
+            if (k) { downloadService.cancel(k); }
+        },
+        exportTxt: () => exportCurrentOfflineTxt(),
+        clearCurrent: async (key) => {
+            const k = key || currentOfflineKey();
+            if (!k) { return; }
+            downloadService.cancel(k);
+            await offlineStore.remove(k);
+            await refreshOfflineIndex();
+            refreshShelfView();
+            pushOfflineStatus();
+        },
+        clearAll: async () => {
+            const total = offlineGlobalStats.books;
+            if (!total) {
+                void vscode.window.showInformationMessage('还没有离线下载内容。');
+                return;
+            }
+            const pick = await vscode.window.showWarningMessage(
+                `删除全部 ${total} 本书的离线内容？该操作不可恢复（已导出的本地 txt 不受影响）。`,
+                { modal: true },
+                '删除'
+            );
+            if (pick !== '删除') { return; }
+            downloadService.cancelAll();
+            await offlineStore.removeAll();
+            await refreshOfflineIndex();
+            refreshShelfView();
+            pushOfflineStatus();
+        },
+        tasks: () => buildDownloadTasks(),
+    };
+
     // 面板关闭时停掉批量检查, 避免后台挂着
     ReaderPanel.cancelSourceCheck = () => {
         for (const entry of activeChecks.values()) { entry.control.cancel(); }
         activeChecks.clear();
     };
 
-    /** 打开书源面板: 没有书时提示先打开一本(面板依赖阅读页) */
+    // ---------------------------------------------------------- 书架移除(单本/批量)
+
+    interface RemoveTarget {
+        filePath: string;
+        name: string;
+        online: boolean;
+        /** 文件就在书库目录里 -> 移除时一并丢进回收站 */
+        willTrash: boolean;
+        onlineRef?: OnlineRef;
+        offlineKey?: string;
+        offlineDone: number;
+        /** 不删文件的原因(单本确认文案要写清楚) */
+        whyNotTrash: string;
+    }
+
+    /** 解析一个移除目标: 只做判断, 不产生任何副作用 */
+    function resolveRemoveTarget(filePath: string): RemoveTarget {
+        const book = shelf.get(filePath);
+        const libPath = getLibraryPath();
+        const online = isOnlinePath(filePath);
+        const inLibrary = !online && !!libPath && isInsideDir(filePath, libPath);
+        const fileExists = !online && fs.existsSync(filePath);
+        const offlineKey = online && book?.online
+            ? onlineKey(book.online.sourceId, book.online.bookUrl)
+            : undefined;
+        const view = offlineKey ? offlineIndex.get(offlineKey) : undefined;
+        const whyNotTrash = online
+            ? '在线书没有本地文件'
+            : !libPath
+                ? '未设置书库目录'
+                : !inLibrary
+                    ? '该书文件不在书库目录内'
+                    : '文件不存在';
+        return {
+            filePath,
+            name: book?.title || path.basename(filePath),
+            online,
+            willTrash: inLibrary && fileExists,
+            onlineRef: book?.online,
+            offlineKey,
+            offlineDone: view ? view.done : 0,
+            whyNotTrash,
+        };
+    }
+
+    /**
+     * 真正执行移除。逐个处理, 单个失败不影响其它:
+     * 文件没删成的书**保留书架记录**(否则会出现"文件还在但书架里找不到")。
+     */
+    async function applyRemoveTargets(
+        targets: RemoveTarget[],
+        deleteOffline: boolean
+    ): Promise<{ removed: number; trashed: number; failures: { name: string; message: string }[] }> {
+        let removed = 0;
+        let trashed = 0;
+        let offlineRemoved = false;
+        const failures: { name: string; message: string }[] = [];
+        for (const t of targets) {
+            if (t.willTrash) {
+                try {
+                    await moveToTrash(t.filePath);
+                    trashed += 1;
+                } catch (err) {
+                    failures.push({ name: t.name, message: err instanceof Error ? err.message : String(err) });
+                    continue;
+                }
+            }
+            await shelf.remove(t.filePath);
+            // 临时读缓存始终清掉(重读会重新抓); 离线下载区按用户选择处理
+            if (t.online) { await onlineCache.clear(t.filePath); }
+            if (deleteOffline && t.offlineKey && t.offlineDone > 0) {
+                downloadService.cancel(t.offlineKey);
+                await offlineStore.remove(t.offlineKey);
+                offlineRemoved = true;
+            }
+            // 当前正在读的就是这本: 退回预览态, 正文里的「+ 加入书架」重新出现
+            if (t.online) { ReaderPanel.resetToPreview(t.filePath, t.onlineRef); }
+            removed += 1;
+        }
+        if (offlineRemoved) { await refreshOfflineIndex(); }
+        if (removed) { refreshShelfView(); }
+        return { removed, trashed, failures };
+    }
+
+    /** 有离线内容时统一问一次「保留 / 一并删除」; 返回 null = 用户取消 */
+    async function askKeepOffline(
+        targets: RemoveTarget[]
+    ): Promise<boolean | null> {
+        const withOffline = targets.filter(function (t) { return t.offlineDone > 0; });
+        if (!withOffline.length) { return true; }
+        const chapters = withOffline.reduce(function (s, t) { return s + t.offlineDone; }, 0);
+        const head = withOffline.length === 1
+            ? `「${withOffline[0].name}」已离线下载 ${withOffline[0].offlineDone} 章。移除后要保留离线内容吗？`
+            : `其中 ${withOffline.length} 本已离线下载（共 ${chapters} 章）。移除后要保留离线内容吗？`;
+        const choice = await vscode.window.showWarningMessage(
+            head + '\n保留后重新加入书架仍可离线阅读；导出过的本地 txt 不受影响。',
+            { modal: true },
+            '保留离线内容',
+            '一并删除'
+        );
+        if (!choice) { return null; }
+        return choice !== '一并删除';
+    }
+
+    /**
+     * 移除类命令的参数归一化。
+     *
+     * 双形态兼容（架构文档 §3.2 / D5）：
+     *  - 旧：`string`（单本）或 `string[]`（批量）—— 命令面板与其它内部调用仍走这两式；
+     *  - 新：`{ filePaths, skipConfirm?, keepOffline?, opId? }` —— 来自 webview，
+     *    因为 webview 已用 ConfirmDialog 确认过，宿主要跳过 `showWarningMessage`。
+     */
+    type RemoveArg =
+        | string
+        | string[]
+        | {
+            filePaths?: string[];
+            filePath?: string;
+            skipConfirm?: boolean;
+            keepOffline?: boolean;
+            opId?: string;
+        };
+
+    interface RemoveNorm {
+        filePaths: string[];
+        skipConfirm: boolean;
+        /** 仅 skipConfirm 路径使用：显式保留/删除离线内容 */
+        keepOffline?: boolean;
+    }
+
+    function normalizeRemoveArg(arg: RemoveArg | undefined): RemoveNorm {
+        if (typeof arg === 'string') {
+            return { filePaths: arg ? [arg] : [], skipConfirm: false };
+        }
+        if (Array.isArray(arg)) {
+            return { filePaths: arg.filter(function (p) { return typeof p === 'string' && !!p; }), skipConfirm: false };
+        }
+        if (arg && typeof arg === 'object') {
+            const list = Array.isArray(arg.filePaths)
+                ? arg.filePaths
+                : (arg.filePath ? [arg.filePath] : []);
+            return {
+                filePaths: list.filter(function (p) { return typeof p === 'string' && !!p; }),
+                skipConfirm: arg.skipConfirm === true,
+                keepOffline: arg.keepOffline,
+            };
+        }
+        return { filePaths: [], skipConfirm: false };
+    }
+
+
+    // ---------------------------------------------------------- 刷新书架(预演/执行)
+
+    /** 预演编号: 每次预演 +1, 执行时必须与之匹配（过期即拒绝） */
+    let refreshPlanSeq = 0;
+    /** 最近一次预演计划（执行阶段唯一真相源） */
+    let lastRefreshPlan: ShelfRefreshPlan | undefined;
+    /** 最近一次执行结果（命令面板入口要拿它拼提示文案） */
+    let lastRefreshResult: ShelfRefreshResult | undefined;
+
+    /** access() 错误码 -> 预演用的探测码。只有 ENOENT 会被当作"文件真的没了" */
+    const PROBE_CODES = ['ENOENT', 'EACCES', 'EPERM', 'EBUSY', 'EMFILE'];
+
+    function probeFile(target: string): Promise<ProbeCode> {
+        return new Promise(function (resolve) {
+            fs.access(target, fs.constants.F_OK, function (err) {
+                if (!err) { resolve(null); return; }
+                const code = (err as NodeJS.ErrnoException).code || '';
+                resolve((PROBE_CODES.indexOf(code) >= 0 ? code : 'UNKNOWN') as ProbeCode);
+            });
+        });
+    }
+
+    /** 预演用的 fs 适配器(注入式, 便于 src/shelfRefresh.ts 保持零 vscode 依赖) */
+    const shelfPlanFs: FsProbe = {
+        readdir: (dir) => fs.promises.readdir(dir, { withFileTypes: true }),
+        readFile: (target) => fs.promises.readFile(target),
+        probe: (target) => probeFile(target),
+        exists: (target) => fs.existsSync(target),
+    };
+
+    /** 组装预演入参 */
+    function makePlanInput(planId: number): PlanInput {
+        return {
+            dir: getLibraryPath(),
+            shelf: shelf.list().map(function (b) {
+                return {
+                    filePath: b.filePath,
+                    title: b.title,
+                    author: b.author,
+                    totalChapters: b.totalChapters,
+                    chapterIndex: b.chapterIndex,
+                    addedAt: b.addedAt,
+                };
+            }),
+            fs: shelfPlanFs,
+            isInsideDir,
+            decode: decodeBuffer,
+            parse: function (text, filePath, enc) {
+                const novel = parseNovel(text, filePath, enc);
+                return { bookTitle: novel.bookTitle, author: novel.author, chapters: novel.chapters };
+            },
+            deriveTitleAuthor,
+            planId,
+        };
+    }
+
+    /** 第一步: 预演。只读盘, 不写任何东西 */
+    async function refreshShelfPlan(): Promise<{ ok: boolean; message?: string }> {
+        const dir = getLibraryPath();
+        if (!dir) {
+            const message = '未设置书库目录：请先在「存储位置」里选择书库目录。';
+            void vscode.window.showInformationMessage(message);
+            return { ok: false, message };
+        }
+        if (!fs.existsSync(dir)) {
+            const message = '书库目录不存在：' + dir;
+            void vscode.window.showWarningMessage(message);
+            return { ok: false, message };
+        }
+        refreshPlanSeq += 1;
+        const plan = await planShelfRefresh(makePlanInput(refreshPlanSeq));
+        lastRefreshPlan = plan;
+        lastRefreshResult = undefined;
+        ReaderPanel.current?.postShelfRefreshPlan(plan);
+        return { ok: true };
+    }
+
+    /**
+     * 第二步: 按预演结果执行。
+     * @param planId 用户确认时带回来的编号; 与最近一次预演不一致 = 已过期, 拒绝执行
+     */
+    async function refreshShelfApply(planId?: number): Promise<{ ok: boolean; message?: string }> {
+        const plan = lastRefreshPlan;
+        if (!plan) {
+            return { ok: false, message: '预演已过期，请重新预演' };
+        }
+        if (typeof planId === 'number' && planId !== plan.planId) {
+            return { ok: false, message: '文件已变化，请重新预演' };
+        }
+        // 计划一次性: 执行后作废, 避免重复点「执行」把同一份 plan 应用两遍
+        lastRefreshPlan = undefined;
+        const result = await applyShelfRefresh(plan, {
+            list: () => shelf.list(),
+            upsert: async function (b) { await shelf.upsert(b); },
+            remove: async function (target) { await shelf.remove(target); },
+        });
+        lastRefreshResult = result;
+        refreshShelfView();
+        ReaderPanel.current?.postShelfRefreshResult(result);
+        if (result.failed.length > 0) {
+            return { ok: false, message: result.driftNote || '部分条目未能刷新' };
+        }
+        return { ok: true };
+    }
+
+    /**
+     * 打开书源面板。
+     *
+     * 空书架**不再**用提示弹窗把人挡在门外: 书源搜索、笔记、阅读设置都在面板内部,
+     * 弹一句"请先打开一本书"等于让用户无路可走。改为直接开空阅读页并切到书源抽屉
+     * (R6-01), 搜索到书后预览/加入书架都在同一个面板里完成。
+     */
     async function showSourcesPanel(): Promise<void> {
         const novel = await ensureNovel();
         if (!novel) {
-            const picked = await vscode.window.showInformationMessage(
-                '请先打开一本书, 再使用书源搜索。',
-                '选择本地文件'
-            );
-            if (picked === '选择本地文件') {
-                await vscode.commands.executeCommand('novelReader.openFile');
-            }
+            openEmptyReader('source');
             return;
         }
         await openDrawerAt('source');
@@ -956,6 +1745,24 @@ export function activate(context: vscode.ExtensionContext): void {
             }
             // 在线书没有本地文件, 直接按 online:// 打开
             if (isOnlinePath(filePath)) {
+                // 已从书架移除但历史还留着: 用历史里的书源信息按"预览"重开,
+                // 否则这条历史就是个点不开的死链
+                if (!shelf.get(filePath)) {
+                    const h = history.find(filePath);
+                    if (h && h.sourceId && h.bookUrl) {
+                        await previewOnlineBook({
+                            sourceId: h.sourceId,
+                            sourceName: h.sourceName || '',
+                            title: h.title,
+                            author: h.author,
+                            bookUrl: h.bookUrl,
+                            chapterIndex: h.chapterIndex,
+                        });
+                        return;
+                    }
+                    void vscode.window.showInformationMessage('这本书已不在书架，且缺少书源信息，无法重新打开。');
+                    return;
+                }
                 await loadNovel(filePath, { openPanel: true });
                 return;
             }
@@ -1011,186 +1818,241 @@ export function activate(context: vscode.ExtensionContext): void {
         // 书架: 移除某本书(二次确认)
         //  - 设置了书库目录且文件就在书库内 -> 确认后把文件移入系统回收站
         //  - 其它情况(未设置书库目录 / 文件在书库外) -> 只移除书架记录, 不动文件
-        vscode.commands.registerCommand('novelReader.removeFromShelf', async (filePath: string) => {
+        vscode.commands.registerCommand('novelReader.removeFromShelf', async (arg: RemoveArg): Promise<{ ok: boolean; message?: string }> => {
+            const norm = normalizeRemoveArg(arg);
+            const filePath = norm.filePaths[0];
             if (!filePath) {
-                return;
+                return { ok: false, message: '没有指定要移除的书' };
             }
-            const book = shelf.get(filePath);
-            const name = book?.title || path.basename(filePath);
-            const online = isOnlinePath(filePath);
-            const libPath = getLibraryPath();
-            const inLibrary = !online && !!libPath && isInsideDir(filePath, libPath);
-            const fileExists = !online && fs.existsSync(filePath);
-            const willTrash = inLibrary && fileExists;
+            const target = resolveRemoveTarget(filePath);
             // 未删除文件时说明原因, 避免"设了书库目录却提示不删文件"的困惑
-            const whyNotTrash = online
-                ? '在线书没有本地文件'
-                : !libPath
-                  ? '未设置书库目录'
-                  : !inLibrary
-                    ? '该书文件不在书库目录内'
-                    : '文件不存在';
-            const confirmText = willTrash
-                ? `从书架移除「${name}」并把文件移入回收站？\n文件：${filePath}`
-                : `从书架移除「${name}」？仅移除书架记录，不删除文件。\n原因：${whyNotTrash}\n文件：${filePath}`;
-            // 注意: modal 对话框会自动带「取消」, 这里只传确认按钮, 否则出现两个取消
-            const picked = await vscode.window.showWarningMessage(confirmText, { modal: true }, '移除');
-            if (picked !== '移除') {
-                return;
-            }
-            if (willTrash) {
-                try {
-                    await moveToTrash(filePath);
-                } catch (err) {
-                    // 移入回收站失败: 中止操作(不删记录, 不丢文件)
-                    vscode.window.showErrorMessage(
-                        `移入回收站失败，已取消删除: ${err instanceof Error ? err.message : String(err)}`
-                    );
-                    return;
+            const confirmText = target.willTrash
+                ? `从书架移除「${target.name}」并把文件移入回收站？\n文件：${filePath}`
+                : `从书架移除「${target.name}」？仅移除书架记录，不删除文件。\n原因：${target.whyNotTrash}\n文件：${filePath}`;
+            // skipConfirm: webview 已用自己的确认框确认过, 这里不能再弹宿主模态框
+            if (!norm.skipConfirm) {
+                // 注意: modal 对话框会自动带「取消」, 这里只传确认按钮, 否则出现两个取消
+                const picked = await vscode.window.showWarningMessage(confirmText, { modal: true }, '移除');
+                if (picked !== '移除') {
+                    return { ok: false, message: '已取消' };
                 }
             }
-            await shelf.remove(filePath);
-            if (online) { await onlineCache.clear(filePath); }
-            refreshShelfView();
+
+            // 离线内容保留/删除: 跳过确认时取显式 keepOffline, 缺省**保留**
+            // (用户刚确认的只是"移除书架", 没说删离线内容 —— 最小惊讶)
+            let keepOffline: boolean;
+            if (norm.skipConfirm) {
+                keepOffline = norm.keepOffline !== false;
+            } else {
+                const asked = await askKeepOffline([target]);
+                if (asked === null) { return { ok: false, message: '已取消' }; }
+                keepOffline = asked;
+            }
+
+            const res = await applyRemoveTargets([target], !keepOffline);
+            if (res.failures.length) {
+                // 移入回收站失败: 记录未动, 文件也没丢
+                const message = `移入回收站失败，已取消删除: ${res.failures[0].message}`;
+                void vscode.window.showErrorMessage(message);
+                return { ok: false, message };
+            }
             vscode.window.setStatusBarMessage(
-                willTrash ? `已移除「${name}」并移入回收站` : `已从书架移除「${name}」`,
+                target.willTrash
+                    ? `已移除「${target.name}」并移入回收站`
+                    : target.offlineDone > 0
+                        ? `已从书架移除「${target.name}」${keepOffline ? '（离线内容已保留）' : '（离线内容已删除）'}`
+                        : `已从书架移除「${target.name}」`,
                 3000
             );
+            return { ok: true };
         }),
 
-        // 书架: 按书库目录重新扫描(新增缺失的 txt, 清理书库内已不存在的记录)
-        vscode.commands.registerCommand('novelReader.refreshShelfFromLibrary', async () => {
-            const dir = getLibraryPath();
-            if (!dir) {
-                void vscode.window.showInformationMessage('未设置书库目录：请先在「存储位置」里选择书库目录。');
-                return;
+        // 书架: 批量移除(一次确认 + 一次离线内容选择, 不再逐本弹窗)
+        vscode.commands.registerCommand('novelReader.removeBooksFromShelf', async (arg: RemoveArg): Promise<{ ok: boolean; message?: string }> => {
+            const norm = normalizeRemoveArg(arg);
+            const paths = Array.from(new Set(norm.filePaths));
+            if (!paths.length) { return { ok: false, message: '没有选中要移除的书' }; }
+            const targets = paths.map(resolveRemoveTarget);
+            const trashCount = targets.filter(function (t) { return t.willTrash; }).length;
+            const head = targets.length === 1
+                ? `从书架移除「${targets[0].name}」？`
+                : `从书架移除 ${targets.length} 本？`;
+            const detail = trashCount > 0
+                ? `其中 ${trashCount} 个文件会移入回收站。`
+                : '仅移除书架记录，不删除文件。';
+            if (!norm.skipConfirm) {
+                const picked = await vscode.window.showWarningMessage(`${head}\n${detail}`, { modal: true }, '移除');
+                if (picked !== '移除') { return { ok: false, message: '已取消' }; }
             }
-            if (!fs.existsSync(dir)) {
-                void vscode.window.showWarningMessage(`书库目录不存在：${dir}`);
-                return;
+
+            let keepOffline: boolean;
+            if (norm.skipConfirm) {
+                keepOffline = norm.keepOffline !== false;
+            } else {
+                const asked = await askKeepOffline(targets);
+                if (asked === null) { return { ok: false, message: '已取消' }; }
+                keepOffline = asked;
             }
-            let names: string[] = [];
-            try {
-                names = (await fs.promises.readdir(dir, { withFileTypes: true }))
-                    .filter((d) => d.isFile() && d.name.toLowerCase().endsWith('.txt'))
-                    .map((d) => path.join(dir, d.name));
-            } catch (err) {
-                void vscode.window.showErrorMessage(
-                    `读取书库目录失败: ${err instanceof Error ? err.message : String(err)}`
+
+            const res = await applyRemoveTargets(targets, !keepOffline);
+            const bits = [`已从书架移除 ${res.removed} 本`];
+            if (res.trashed > 0) { bits.push(`${res.trashed} 个文件已移入回收站`); }
+            if (targets.some(function (t) { return t.offlineDone > 0; })) {
+                bits.push(keepOffline ? '离线内容已保留' : '离线内容已删除');
+            }
+            vscode.window.setStatusBarMessage(bits.join('，'), 4000);
+            if (res.failures.length) {
+                const message = `有 ${res.failures.length} 本未能移除（书架记录已保留）：` +
+                    res.failures.slice(0, 6).map(function (f) { return `「${f.name}」${f.message}`; }).join('；');
+                void vscode.window.showWarningMessage(message);
+                // 部分成功也算失败: webview 保留选择, 用户可以只重试失败的那几本
+                return { ok: false, message };
+            }
+            return { ok: true };
+        }),
+
+        // 历史: 批量删除所选
+        vscode.commands.registerCommand('novelReader.removeHistory', async (arg: RemoveArg): Promise<{ ok: boolean; message?: string }> => {
+            const norm = normalizeRemoveArg(arg);
+            const paths = Array.from(new Set(norm.filePaths));
+            if (!paths.length) { return { ok: false, message: '没有选中要删除的历史记录' }; }
+            if (!norm.skipConfirm) {
+                const picked = await vscode.window.showWarningMessage(
+                    `删除选中的 ${paths.length} 条阅读记录？\n只删记录，不影响书架、笔记与已下载的离线内容。`,
+                    { modal: true },
+                    '删除'
                 );
-                return;
+                if (picked !== '删除') { return { ok: false, message: '已取消' }; }
             }
-            const known = new Set(shelf.list().map((b) => b.filePath.toLowerCase()));
-            // 已有书籍键(书名+作者+章节数): 同书的多份副本/老路径记录不重复补录
-            const knownKeys = new Set(
-                shelf.list().map((b) => shelfBookKey(b.title, b.author, b.totalChapters))
-            );
-            let added = 0;
-            let skippedDup = 0;
-            for (const file of names) {
-                if (known.has(file.toLowerCase())) {
-                    continue;
-                }
-                try {
-                    const buf = await fs.promises.readFile(file);
-                    const { text, encoding } = decodeBuffer(buf);
-                    const novel = parseNovel(text, file, encoding);
-                    const key = shelfBookKey(novel.bookTitle, novel.author, novel.chapters.length);
-                    if (knownKeys.has(key)) {
-                        // 同一本书已经在书架里(哪怕文件路径不同): 跳过, 避免重复出现
-                        skippedDup += 1;
-                        continue;
-                    }
-                    await shelf.upsert({
-                        filePath: file,
-                        title: novel.bookTitle,
-                        author: novel.author,
-                        totalChapters: novel.chapters.length,
-                    });
-                    knownKeys.add(key);
-                    added += 1;
-                } catch {
-                    // 单个文件解析失败: 跳过, 不影响其余
-                }
+            const removed = history.removeMany(paths);
+            if (removed > 0) {
+                await history.flush();
+                ReaderPanel.current?.postHistory();
             }
-            // 书名纠偏: 按文件名重新推导标题/作者(仅当文件名含《书名》时才改写)
-            let retitled = 0;
-            for (const b of shelf.list()) {
-                if (!isInsideDir(b.filePath, dir) || !fs.existsSync(b.filePath)) {
-                    continue;
-                }
-                const fnTitle = b.filePath.replace(/^.*[\\/]/, '').match(/《([^》]{1,60})》/);
-                if (!fnTitle) {
-                    continue;
-                }
-                const { bookTitle, author } = deriveTitleAuthor(b.filePath, '');
-                if (bookTitle !== b.title || author !== b.author) {
-                    await shelf.upsert({
-                        filePath: b.filePath,
-                        title: bookTitle,
-                        author,
-                        totalChapters: b.totalChapters,
-                    });
-                    retitled += 1;
-                }
-            }
-
-            // 合并同书重复记录(同书名+作者+章节数): 只保留一条, 只删记录不动文件
-            let merged = 0;
-            const dupPlans = planDuplicateRemoval(
-                shelf.list(),
-                dir,
-                (p) => fs.existsSync(p),
-                isInsideDir
-            );
-            for (const plan of dupPlans) {
-                for (const b of plan.removals) {
-                    await shelf.remove(b.filePath);
-                    merged += 1;
-                }
-            }
-            // 清理: 书库内已不存在的文件, 其书架记录一并移除
-            let pruned = 0;
-            for (const b of shelf.list()) {
-                if (isInsideDir(b.filePath, dir) && !fs.existsSync(b.filePath)) {
-                    await shelf.remove(b.filePath);
-                    pruned += 1;
-                }
-            }
-            refreshShelfView();
-            void vscode.window.showInformationMessage(
-                `书架已刷新：新增 ${added} 本` +
-                (skippedDup ? `，跳过重复副本 ${skippedDup} 个` : '') +
-                (merged ? `，合并重复记录 ${merged} 条` : '') +
-                (retitled ? `，修正书名 ${retitled} 条` : '') +
-                (pruned ? `，清理失效记录 ${pruned} 条` : '') +
-                `（书库内共 ${names.length} 个 txt）`
-            );
+            vscode.window.setStatusBarMessage(`已删除 ${removed} 条历史记录`, 3000);
+            return { ok: true };
         }),
+
+        // 历史: 清空某一栏(本地 / 在线)
+        vscode.commands.registerCommand(
+            'novelReader.clearHistory',
+            async (arg: 'local' | 'online' | { kind?: 'local' | 'online'; skipConfirm?: boolean; opId?: string }): Promise<{ ok: boolean; message?: string }> => {
+                const isObj = !!arg && typeof arg === 'object';
+                const rawKind = isObj ? (arg as { kind?: 'local' | 'online' }).kind : arg as 'local' | 'online';
+                const skipConfirm = isObj ? (arg as { skipConfirm?: boolean }).skipConfirm === true : false;
+                const k: 'local' | 'online' = rawKind === 'online' ? 'online' : 'local';
+                const label = k === 'online' ? '在线' : '本地';
+                const count = history.list()[k].length;
+                if (!count) {
+                    void vscode.window.showInformationMessage(`还没有${label}阅读记录。`);
+                    return { ok: true };
+                }
+                if (!skipConfirm) {
+                    const picked = await vscode.window.showWarningMessage(
+                        `清空全部${label}阅读记录（${count} 条）？\n只删记录，不影响书架、笔记与已下载的离线内容。`,
+                        { modal: true },
+                        '清空'
+                    );
+                    if (picked !== '清空') { return { ok: false, message: '已取消' }; }
+                }
+                const removed = history.clearKind(k);
+                await history.flush();
+                ReaderPanel.current?.postHistory();
+                vscode.window.setStatusBarMessage(`已清空 ${removed} 条${label}阅读记录`, 3000);
+                return { ok: true };
+            }
+        ),
+
+        // 书架: 按书库目录重新扫描 —— **两阶段**: 先预演(只读盘), 再按 planId 执行。
+        // 命令面板入口保留旧语义 = 预演 + 立即执行（不弹 webview 确认框,
+        // 因为命令面板本身就是一次显式确认）。
+        vscode.commands.registerCommand('novelReader.refreshShelfFromLibrary', async (): Promise<{ ok: boolean; message?: string }> => {
+            const planned = await refreshShelfPlan();
+            if (!planned.ok) { return planned; }
+            const scanned = lastRefreshPlan ? lastRefreshPlan.scanned : 0;
+            const applied = await refreshShelfApply();
+            if (!applied.ok) {
+                void vscode.window.showWarningMessage(applied.message || '刷新书架未完成');
+                return applied;
+            }
+            const r = lastRefreshResult;
+            void vscode.window.showInformationMessage(
+                `书架已刷新：新增 ${r ? r.added : 0} 本` +
+                (r && r.skippedDup ? `，跳过重复副本 ${r.skippedDup} 个` : '') +
+                (r && r.merged ? `，合并重复记录 ${r.merged} 条` : '') +
+                (r && r.retitled ? `，修正书名 ${r.retitled} 条` : '') +
+                (r && r.pruned ? `，清理失效记录 ${r.pruned} 条` : '') +
+                `（书库内共 ${scanned} 个 txt）`
+            );
+            return applied;
+        }),
+
+        // 预演(webview「刷新书架」第一步): 只算不写, 结果走 shelfRefreshPlan 消息下发
+        vscode.commands.registerCommand('novelReader.refreshShelfPlan', () => refreshShelfPlan()),
+        // 执行(用户确认后): planId 不一致 = 预演已过期, 拒绝并回失败
+        vscode.commands.registerCommand('novelReader.refreshShelfApply', (planId?: number) => refreshShelfApply(planId)),
 
         // 回到当前阅读的章节(阅读面板已关闭时会重新打开)
         vscode.commands.registerCommand('novelReader.resumeCurrent', async () => {
             const novel = await ensureNovel();
             if (!novel) {
-                const picked = await vscode.window.showInformationMessage(
-                    '书架里还没有小说，先添加一本吧。',
-                    '添加书籍'
-                );
-                if (picked === '添加书籍') {
-                    await vscode.commands.executeCommand('novelReader.openFile');
-                }
+                // 状态栏「小说阅读」在空书架时也要能进面板(正文给引导文案)
+                openEmptyReader();
                 return;
             }
-            const index = ReaderPanel.current?.chapterIndex ?? Math.max(0, novel.chapters.length - 1);
             const entry = shelf.get(novel.filePath);
-            const target = entry && entry.chapterIndex >= 0 ? entry.chapterIndex : index;
+            // 续读落点: 面板还开着就用面板的实时位置; 否则用书架记录;
+            // **从未读过(记录 chapterIndex<0)一律回第 1 章** —— 以前这里会退回
+            // "最后一章", 新书点「小说阅读」直接跳到结尾, 是明确的入口缺陷(R6-04)。
+            const live = ReaderPanel.current;
+            const target = live
+                ? live.chapterIndex
+                : entry && entry.chapterIndex >= 0
+                    ? entry.chapterIndex
+                    : 0;
+            const ratio = live ? live.scrollRatio : (entry ? entry.scrollRatio : 0);
             refreshShelfView();
-            ReaderPanel.createOrShow(novel, target, entry?.scrollRatio ?? 0, store);
+            nextOpenIntent();
+            ReaderPanel.createOrShow(novel, target, ratio, store);
         }),
 
         vscode.commands.registerCommand('novelReader.showBookshelf', () => void openDrawerAt('shelf')),
         vscode.commands.registerCommand('novelReader.showChapters', () => void openDrawerAt('catalog')),
         vscode.commands.registerCommand('novelReader.showSettings', () => void openDrawerAt('storage')),
+
+        // 离线下载: 下载整本 / 导出本地 txt / 清理离线缓存
+        vscode.commands.registerCommand('novelReader.downloadBook', async () => {
+            const novel = await ensureNovel();
+            if (!novel) {
+                void vscode.window.showInformationMessage('请先打开一本在线书，再下载。');
+                return;
+            }
+            if (!novel.online) {
+                void vscode.window.showInformationMessage('这本书已经是本地文件，不需要下载。');
+                return;
+            }
+            const res = await startOfflineDownload();
+            if (!res.ok) {
+                void vscode.window.showWarningMessage(res.message || '无法开始下载');
+                return;
+            }
+            ReaderPanel.openDrawer('catalog');
+        }),
+        vscode.commands.registerCommand('novelReader.exportOfflineTxt', async () => {
+            const novel = await ensureNovel();
+            if (!novel || !novel.online) {
+                void vscode.window.showInformationMessage('请先打开一本在线书。');
+                return;
+            }
+            if (!ReaderPanel.current) { ReaderPanel.openDrawer('catalog'); }
+            const res = await exportCurrentOfflineTxt();
+            if (!res.ok) {
+                void vscode.window.showWarningMessage(res.message || '导出失败');
+            }
+        }),
+        vscode.commands.registerCommand('novelReader.clearOfflineCache', async () => {
+            await ReaderPanel.offline?.clearAll();
+        }),
 
         // 选择书库目录(导入时复制到这里)
         vscode.commands.registerCommand('novelReader.pickLibraryPath', async () => {
@@ -1351,10 +2213,20 @@ export function activate(context: vscode.ExtensionContext): void {
     // ---------------------------------------------------------------- 阅读进度 -> 书架
 
     ReaderPanel.onProgress = (filePath: string, chapterIndex: number, scrollRatio: number) => {
+        // 空态占位面板(filePath 为空)没有真实书籍: 不写书架、不记阅读历史
+        if (!filePath) {
+            return;
+        }
         // 用消息里带的 filePath, 而不是 currentNovel ——
         // 窗口恢复出来的面板不会经过 loadNovel, currentNovel 可能为空或指向别的书
         void shelf.updateProgress(filePath, chapterIndex, scrollRatio).then(refreshShelfView);
-        recordHistory(filePath, chapterIndex);
+        // 只推进已有条目: 章内滚动不置顶、不刷新时间, 否则历史列表会一直跳
+        history.updateProgress(filePath, chapterIndex);
+    };
+
+    // 打开即记历史: createOrShow / restore 两个漏斗都会走到这里
+    ReaderPanel.onOpen = (novel: Novel, chapterIndex: number) => {
+        recordOpenHistory(novel, chapterIndex);
     };
 
     // ---------------------------------------------------------------- 摸鱼模式会话
@@ -1403,6 +2275,8 @@ export function activate(context: vscode.ExtensionContext): void {
     syncLibraryToView();
     void (async () => {
         await shelf.migrateLegacySession();
+        // 先建离线索引, 书架行才能一次带出「离线 N」标签(不做二次刷新)
+        await refreshOfflineIndex();
         refreshShelfView();
         const last = shelf.last();
         // 只把上次那本预载到内存(供书架/章节/设置抽屉使用), 绝不自动弹出阅读面板;
@@ -1415,6 +2289,8 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
+    // 停掉后台下载: 已下完的章在 done.log 里, 下次会自动续传
+    downloadQueue?.cancelAll();
     void historyStore?.flush();
     ReaderPanel.current?.dispose();
 }

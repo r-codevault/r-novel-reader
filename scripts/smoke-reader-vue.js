@@ -94,6 +94,9 @@ const readerCss = path.join(__dirname, '..', 'dist-webview', 'reader.css');
 assert(fs.existsSync(readerJs), 'dist-webview/reader.js 不存在, 请先 npm run build:webview');
 assert(fs.existsSync(readerCss), 'dist-webview/reader.css 不存在, 请先 npm run build:webview');
 
+// 打开钩子(「打开即记历史」的挂点): 首次打开与同书重开都应触发
+let openedHook = null;
+ReaderPanel.onOpen = (n, i) => { openedHook = { filePath: n.filePath, index: i }; };
 ReaderPanel.createOrShow(novel, 2, 0.5, store);
 
 // ================================================================ 1. 外壳断言
@@ -271,10 +274,26 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   sendMsg({ type: 'chapter', payload: { index: 3, title: '标题4', paragraphs: [], totalChapters: 5, chapterWords: 0, scrollRatio: 0 } });
   await sleep(20);
   sendMsg({ type: 'chapterLoading', payload: { index: 3, title: '标题4' } });
-  await sleep(20);
-  assert(document.querySelector('#content [data-chapter-loading]'), '加载中应显示提示');
+  await sleep(60);
+  assert(!document.querySelector('#content [data-chapter-skeleton]'),
+    '400ms 内不应闪骨架(缓存命中也是这条路径)');
+  assert(!$('#content').textContent.includes('本章无内容'),
+    '加载中不应显示「本章无内容」(会误导)');
+  await sleep(420);
+  const skeleton = document.querySelector('#content [data-chapter-skeleton]');
+  assert(skeleton, '慢网(>400ms)应显示骨架屏, 而不是整屏卡住');
+  assert(skeleton.getAttribute('aria-busy') === 'true', '骨架应标记 aria-busy');
+  const skH = parseFloat(String(skeleton.getAttribute('style') || '').replace(/[^0-9.]/g, ''));
+  assert(skH >= 120, '骨架应按纸面剩余高度撑满(实测高度 ' + skH + ')');
+  assert(skeleton.querySelectorAll('.sk-line').length >= 20, '骨架行数应足够铺满整页');
+  assert(document.querySelector('#content .chapter-title').textContent.includes('标题4'),
+    '加载中标题应先切到目标章(点了要有反应)');
+  const navBusy = document.querySelector('.side-nav-next');
+  assert(navBusy && navBusy.disabled, '加载中应禁用翻章箭头, 防连点');
   sendMsg({ type: 'chapterError', payload: { index: 3, message: '正文解析结果为空' } });
   await sleep(20);
+  assert(!document.querySelector('#content [data-chapter-skeleton]'), '失败后骨架应消失');
+  assert(!document.querySelector('.side-nav-next').disabled, '失败后应恢复翻章');
   assert(document.querySelector('#content [data-chapter-error]'), '失败应显示错误态');
   assert(document.querySelector('#content [data-chapter-error]').textContent.includes('正文解析结果为空'),
     '错误态应显示原因');
@@ -437,10 +456,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const widthRow = Array.from(document.querySelectorAll('#settingsPanel .sp-row'))
       .find((r) => (r.querySelector('.sp-label') || {}).textContent === '页面宽度');
     assert(widthRow, '应有「页面宽度」行');
-    const ratioLabels = Array.from(widthRow.querySelectorAll('.sp-seg-btn')).map((b) => (b.textContent || '').trim());
+    // 档位名改为「窄/标准/宽/特宽」，存储值不变（架构 §8.2 / R8-04）
+    const segBtns = Array.from(widthRow.querySelectorAll('.sp-seg-btn'));
+    const ratioLabels = segBtns.map((b) => (b.querySelector('.sr-only') ? (b.textContent || '').replace(b.querySelector('.sr-only').textContent, '').trim() : (b.textContent || '').trim()));
     assert(
-      ratioLabels.join(',') === '33.33%,55.55%,66.66%,77.77%',
-      '页面宽度应为 4 个视口比例档, 实际: ' + ratioLabels.join(',')
+      ratioLabels.join(',') === '窄,标准,宽,特宽',
+      '页面宽度应对应 窄/标准/宽/特宽, 实际: ' + ratioLabels.join(',')
+    );
+    assert(
+      segBtns.map((b) => b.dataset.ratio).join(',') === '0.3333,0.5555,0.6666,0.7777',
+      '存储用的 widthRatio 数值不得改变, 实际: ' + segBtns.map((b) => b.dataset.ratio).join(',')
     );
     posted.length = 0;
     widthRow.querySelectorAll('.sp-seg-btn')[1].dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
@@ -505,19 +530,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   assert(!menuEl.classList.contains('expanded'), '点菜单按钮应收起');
   assert(document.documentElement.style.getPropertyValue('--menu-w') === '48px', '收起时 --menu-w 应为 48px');
+  // 7 个弹窗功能项 + 状态栏开关 + 笔记模式开关 + 摸鱼入口
   assert(
-    document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not([data-menu="slacker"])').length === 7,
-    '菜单应有 7 个弹窗功能项, 实际: ' + document.querySelectorAll('.menu-item').length + ' (含状态栏/摸鱼) / ' + document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not([data-menu="slacker"])').length + ' (弹窗项)'
+    document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not(.menu-toggle-notemode):not([data-menu="slacker"])').length === 7,
+    '菜单应有 7 个弹窗功能项, 实际: ' + document.querySelectorAll('.menu-item').length + ' (含状态栏/笔记模式/摸鱼) / ' + document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not(.menu-toggle-notemode):not([data-menu="slacker"])').length + ' (弹窗项)'
   );
-  assert(document.querySelectorAll('.menu-item[data-menu]').length === 9, '菜单共 9 项(状态栏开关 + 摸鱼入口 + 书源)');
+  assert(document.querySelectorAll('.menu-item[data-menu]').length === 10, '菜单共 10 项(状态栏开关 + 笔记模式开关 + 摸鱼入口 + 7 个弹窗)');
+  assert(document.querySelector('.menu-item[data-menu="note-mode"]'), '菜单应有「笔记模式」开关');
   assert(document.querySelector('.menu-item[data-menu="statusbar"]'), '菜单应有「状态栏」显隐开关');
   assert(document.querySelector('.menu-item[data-menu="slacker"]'), '菜单应有「摸鱼模式」入口');
   // 顺序: 书架 → 目录 → 状态栏 → 阅读设置 → 存储位置 → 摸鱼模式, 分割线在最下方
   const order = Array.from(document.querySelector('.menu').children).map((el) =>
     el.classList.contains('menu-divider') ? 'divider' : el.getAttribute('data-menu'));
   assert(
-    JSON.stringify(order) === JSON.stringify([null, 'divider', 'shelf', 'history', 'catalog', 'notes', 'statusbar', 'settings', 'storage', 'source', 'slacker']),
-    '菜单顺序应为 折叠按钮 + 分割线 + 书架/历史/目录/笔记/状态栏/阅读设置/存储位置/书源/摸鱼模式, 实际: ' + JSON.stringify(order)
+    JSON.stringify(order) === JSON.stringify([null, 'divider', 'shelf', 'history', 'catalog', 'notes', 'statusbar', 'note-mode', 'settings', 'storage', 'source', 'slacker']),
+    '菜单顺序应为 折叠按钮 + 分割线 + 书架/历史/目录/笔记/状态栏/笔记模式/阅读设置/存储位置/书源/摸鱼模式, 实际: ' + JSON.stringify(order)
   );
   // 摸鱼入口点击 -> postMessage slackerStart(转发到 novelReader.slackerStart 命令)
   {
@@ -595,13 +622,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   console.log('状态栏显隐开关(默认显示/隐藏/恢复/独立): 通过');
 
-  // Esc 应清掉焦点残留(按钮被点过再按 Esc, 浏览器会画出 focus-visible 边框)
+  // Esc 关闭浮层后焦点应回到触发按钮(而不是掉到 body 上, 也不能靠主动 blur 清掉)
+  // 旧断言是"Esc 后应清掉焦点", 与 R5-04「关闭后焦点归位」冲突, 按新行为改写(架构 §8.2)
   const focusTarget = document.querySelector('.menu-item[data-menu="catalog"]');
   focusTarget.focus();
   assert(document.activeElement === focusTarget, '前置: 按钮应能获得焦点');
-  document.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  focusTarget.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
-  assert(document.activeElement !== focusTarget, 'Esc 后应清掉焦点(避免残留焦点框)');
+  assert($('#catalogPanel').classList.contains('open'), '前置: 目录浮层应已打开');
+  assert(document.activeElement !== document.body, '打开浮层后焦点应在浮层内, 不应是 body');
+  document.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await sleep(40);
+  assert(!$('#catalogPanel').classList.contains('open'), 'Esc 应关闭浮层');
+  assert(document.activeElement !== document.body, 'Esc 关闭后焦点不应掉到 body');
+  assert(document.activeElement === focusTarget || document.activeElement === document.querySelector('[data-menu="catalog"]'),
+    'Esc 关闭浮层后焦点应回到触发按钮, 实际 ' + (document.activeElement && document.activeElement.className));
 
   // 地域色彩主题: 省份下拉 + 色卡预览 + 选中即切换主题
   document.querySelector('.menu-item[data-menu="settings"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
@@ -892,20 +927,28 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '本地书应显示「本地」标签');
   assert(document.querySelector('#shelfPopup .popup-sub').textContent.includes('共 2 本'), '应显示册数');
   posted.length = 0;
-  bks[1].dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  // 行已拆成"容器 + 主按钮 + 独立删除按钮": 打开书要点主按钮(架构 §4.b.1)
+  bks[1].querySelector('.bk-main').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
-  assert(posted.some((m) => m.type === 'openBook' && m.filePath === 'D:/b.txt'), '点书架条目应发 openBook');
+  assert(posted.some((m) => m.type === 'openBook' && m.filePath === 'D:/b.txt'), '点书架主按钮应发 openBook');
   assert(!$('#shelfPopup').classList.contains('open'), '打开书后书架弹窗应收起');
   menuItem('shelf').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   posted.length = 0;
+  // 移除走统一确认框: 点 ✕ 只打开确认框, 确认后才发 removeBook
   document.querySelector('#shelfPopup .bp-del').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
-  assert(posted.some((m) => m.type === 'removeBook'), '点移除应发 removeBook');
+  assert(document.querySelector('[data-confirm-ok]'), '点行内 ✕ 应弹出统一确认框');
+  assert(!posted.some((m) => m.type === 'removeBook'), '未确认前不应发 removeBook');
   assert(
     document.querySelectorAll('#shelfPopup .bk').length === 2,
     '未确认前不应从列表移除(等扩展二次确认后刷新)'
   );
+  document.querySelector('[data-confirm-ok]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  const rmOne = posted.find((m) => m.type === 'removeBook');
+  assert(rmOne, '确认后应发 removeBook');
+  assert(typeof rmOne.opId === 'string' && rmOne.opId, '写操作必须带 opId(宿主据此回终态)');
   // 扩展确认后推送权威列表 -> 行消失
   sendMsg({ type: 'shelf', items: [{ filePath: 'D:/b.txt', title: '另一本书', author: '', chapterIndex: -1, totalChapters: 8, current: false }] });
   await sleep(30);
@@ -919,17 +962,84 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(refreshBtn, '设置书库目录后应显示「刷新书架」按钮');
   refreshBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
-  assert(posted.some((m) => m.type === 'refreshLibrary'), '点「刷新书架」应发 refreshLibrary');
+  assert(posted.some((m) => m.type === 'refreshLibraryPreview'), '点「刷新书架」应先发 refreshLibraryPreview(预演)');
   // 在线书徽标
   sendMsg({ type: 'shelf', items: [
     { filePath: 'online://s1/abc123', title: '在线书', author: '作者', chapterIndex: 0, totalChapters: 10, current: false, online: true, sourceName: '测试站' },
   ] });
   await sleep(30);
   const tag = document.querySelector('#shelfPopup .bk-tag');
-  assert(tag && tag.textContent.includes('在线'), '在线书应显示「在线」徽标');
-  assert(tag.getAttribute('title') === '测试站', '徽标应带来源名');
+  assert(tag && tag.textContent.includes('测试站'), '在线书应直接显示书源名(便于区分来源)');
+  assert(tag.getAttribute('title') === '来源：测试站', '徽标 title 应带来源说明');
 
-  console.log('书架弹窗(渲染/打开/移除/添加): 通过');
+  // 书架管理: 「管理」-> 点行勾选 -> 全选 -> 移除所选
+  {
+    sendMsg({ type: 'shelf', items: [
+      { filePath: 'A:/1.txt', title: '书一', author: '', chapterIndex: 0, totalChapters: 3, current: false },
+      { filePath: 'A:/2.txt', title: '书二', author: '', chapterIndex: 0, totalChapters: 3, current: false },
+      { filePath: 'A:/3.txt', title: '书三', author: '', chapterIndex: 0, totalChapters: 3, current: false },
+    ] });
+    await sleep(30);
+    assert(!document.querySelector('#shelfPopup [data-shelf-check]'), '默认不应显示勾选框');
+    assert(document.querySelector('#shelfPopup [data-shelf-batch]').textContent.trim() === '管理',
+      '头部按钮文案应为「管理」');
+    document.querySelector('#shelfPopup [data-shelf-batch]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(document.querySelector('#shelfPopup [data-shelf-batch]').textContent.trim() === '完成',
+      '进入后按钮应变「完成」');
+    assert(document.querySelectorAll('#shelfPopup [data-shelf-check]').length === 3,
+      '管理模式每行都应有勾选框');
+    assert(!document.querySelector('#shelfPopup .bp-del'), '管理模式应隐藏行内 ✕(避免误点)');
+
+    posted.length = 0;
+    // 多动作行: 勾选走原生 checkbox, 点行本身不再打开书也不再勾选
+    const firstCheck = document.querySelector('#shelfPopup .bk [data-shelf-check]');
+    firstCheck.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(!posted.some((m) => m.type === 'openBook'), '管理模式下点行不应打开书');
+    assert(document.querySelector('#shelfPopup .bk').classList.contains('sel'), '勾选的行应高亮');
+    assert(document.querySelector('#shelfPopup [data-shelf-sel-count]').textContent.includes('已选 1'),
+      '应显示已选数量, 实际 ' + document.querySelector('#shelfPopup [data-shelf-sel-count]').textContent.trim());
+
+    // 再点一次取消勾选
+    document.querySelector('#shelfPopup .bk [data-shelf-check]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('#shelfPopup [data-shelf-sel-count]').textContent.includes('已选 0'),
+      '再点一次应取消勾选');
+
+    document.querySelector('#shelfPopup [data-shelf-select-all]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('#shelfPopup [data-shelf-sel-count]').textContent.includes('已选 3'), '全选应选 3 本');
+
+    posted.length = 0;
+    const rmSelected = document.querySelector('#shelfPopup [data-shelf-remove-selected]');
+    assert(rmSelected && !rmSelected.disabled, '有选择时「移除所选」应可用');
+    rmSelected.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    // 危险操作先出确认框; 取消必须保留选择
+    assert(document.querySelector('[data-confirm-ok]'), '「移除所选」应先弹确认框');
+    assert(!posted.some((m) => m.type === 'removeBooks'), '未确认前不应发 removeBooks');
+    document.querySelector('[data-confirm-cancel]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('#shelfPopup [data-shelf-sel-count]').textContent.includes('已选 3'),
+      '取消确认后选择必须保留');
+
+    rmSelected.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    document.querySelector('[data-confirm-ok]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    const rmMsg = posted.find((m) => m.type === 'removeBooks');
+    assert(rmMsg, '确认后应发 removeBooks');
+    assert(Array.isArray(rmMsg.filePaths) && rmMsg.filePaths.length === 3,
+      '应带 3 个路径, 实际 ' + (rmMsg.filePaths || []).length);
+    // 成功终态回包后才退出管理模式(R7-03)
+    assert(document.querySelector('#shelfPopup [data-shelf-check]'), '失败/未回包前应仍在管理模式');
+    sendMsg({ type: 'opResult', payload: { opId: rmMsg.opId, op: 'books:removeMany', ok: true } });
+    await sleep(30);
+    assert(!document.querySelector('#shelfPopup [data-shelf-check]'), '成功后应退出管理模式');
+  }
+
+  console.log('书架弹窗(渲染/打开/移除/添加/管理): 通过');
 
   // 历史记录弹窗: 本地/在线分栏、点击打开、15 行滚动
   sendMsg({ type: 'history', payload: {
@@ -952,11 +1062,87 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelectorAll('#historyPopup .hist-row').length === 1, '在线 Tab 应显示 1 条');
   assert(document.querySelector('#historyPopup .hist-row .bk-tag').textContent.includes('在线'), '在线记录应显示「在线」标签');
   posted.length = 0;
-  document.querySelector('#historyPopup .hist-row').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  document.querySelector('#historyPopup .hist-row .hist-row-main').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
-  assert(posted.some((m) => m.type === 'openBook' && m.filePath === 'online://s1/h'), '点历史记录应发 openBook');
+  assert(posted.some((m) => m.type === 'openBook' && m.filePath === 'online://s1/h'), '点历史行主按钮应发 openBook');
   assert(!$('#historyPopup').classList.contains('open'), '打开后历史弹窗应关闭');
   assert(/\.hist-list\s*\{[^}]*max-height:\s*660px/.test(capturedHtml), '历史列表应限制 15 行高度');
+
+  // 历史管理: 全选 -> 删除所选; 切换分栏清空选择; 清空本栏
+  {
+    menuItem('history').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    document.querySelector('#historyPopup [data-hist-tab="local"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(!document.querySelector('#historyPopup [data-hist-check]'), '默认不应显示勾选框');
+    assert(document.querySelector('#historyPopup [data-hist-batch]').textContent.trim() === '管理',
+      '历史头部按钮文案应为「管理」');
+    document.querySelector('#historyPopup [data-hist-batch]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(document.querySelector('#historyPopup [data-hist-batch]').textContent.trim() === '完成',
+      '进入后应变为「完成」');
+    assert(document.querySelectorAll('#historyPopup [data-hist-check]').length === 2, '管理模式应有 2 个勾选框');
+
+    posted.length = 0;
+    document.querySelector('#historyPopup .hist-row [data-hist-check]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(!posted.some((m) => m.type === 'openBook'), '管理模式下点行不应打开书');
+    assert(document.querySelector('#historyPopup [data-hist-sel-count]').textContent.includes('已选 1'),
+      '应显示已选条数');
+
+    // 切分栏: 选择属于当前栏, 必须清空
+    document.querySelector('#historyPopup [data-hist-tab="online"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('#historyPopup [data-hist-sel-count]').textContent.includes('已选 0'),
+      '切换分栏应清空选择');
+    document.querySelector('#historyPopup [data-hist-tab="local"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+
+    document.querySelector('#historyPopup [data-hist-select-all]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('#historyPopup [data-hist-sel-count]').textContent.includes('已选 2'), '全选应选 2 条');
+
+    posted.length = 0;
+    document.querySelector('#historyPopup [data-hist-remove-selected]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('[data-confirm-ok]'), '「删除所选」应先弹统一确认框');
+    assert(!posted.some((m) => m.type === 'removeHistory'), '未确认前不应发 removeHistory');
+    document.querySelector('[data-confirm-ok]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    const rmHist = posted.find((m) => m.type === 'removeHistory');
+    assert(rmHist, '确认后应发 removeHistory');
+    assert((rmHist.filePaths || []).length === 2, '应带 2 个路径');
+    assert(typeof rmHist.opId === 'string' && rmHist.opId, 'delete 必须带 opId');
+    assert(document.querySelector('#historyPopup [data-hist-check]'), '成功后回包前应仍在管理模式');
+    sendMsg({ type: 'opResult', payload: { opId: rmHist.opId, op: 'history:remove', ok: true } });
+    await sleep(30);
+    assert(!document.querySelector('#historyPopup [data-hist-check]'), '成功后应退出管理模式');
+
+    // 清空本栏(只删记录)
+    posted.length = 0;
+    document.querySelector('#historyPopup [data-hist-clear]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('[data-confirm-ok]'), '「清空本栏」应先弹统一确认框');
+    document.querySelector('[data-confirm-ok]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    const clrLocal = posted.find((m) => m.type === 'clearHistory' && m.kind === 'local');
+    assert(clrLocal, '确认后应发 clearHistory(local)');
+    // 回终态: 清掉 pending, 否则「清空」按钮在 pending 期间一直是 disabled(防重复提交)
+    sendMsg({ type: 'opResult', payload: { opId: clrLocal.opId, op: 'history:clear', ok: true } });
+    await sleep(30);
+    document.querySelector('#historyPopup [data-hist-tab="online"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    posted.length = 0;
+    document.querySelector('#historyPopup [data-hist-clear]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    document.querySelector('[data-confirm-ok]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(posted.some((m) => m.type === 'clearHistory' && m.kind === 'online'),
+      '在线分栏确认后应发 clearHistory(online)');
+    document.querySelector('#historyPopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+  }
+  console.log('历史记录(分栏/打开/管理/清空): 通过');
 
   // 目录弹窗(菜单打开) + 章节跳转
   menuItem('catalog').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
@@ -974,6 +1160,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   menuItem('storage').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   assert(document.querySelector('#storagePopup .popup-val').textContent.includes('D:/我的书库'), '存储弹窗应显示书库目录');
+  // 导出已改为「只保存文件」, 说明文案不能再提「加入书架」
+  // (存储面板有两段说明: 第一段讲书库目录, 第二段才是离线/导出)
+  const stTips = Array.from(document.querySelectorAll('#storagePopup .popup-tip')).map((el) => el.textContent);
+  const stTip = stTips[stTips.length - 1] || '';
+  assert(stTip.indexOf('会生成一本独立本地书') < 0, '存储弹窗不应再声称导出会生成并加入书架的本地书: ' + stTip);
+  assert(stTip.includes('只保存一个 txt 文件'), '存储弹窗应说明导出只保存文件, 实际: ' + JSON.stringify(stTip));
   posted.length = 0;
   const spBtns = Array.from(document.querySelectorAll('#storagePopup .popup-btn'));
   spBtns.find((b) => b.textContent.includes('选择书库目录')).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
@@ -999,8 +1191,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const sidePrev = document.querySelector('.side-nav-prev');
   const sideNext = document.querySelector('.side-nav-next');
   assert(sidePrev && sideNext, '正文两侧应有上/下一章箭头');
-  assert(!sidePrev.classList.contains('hover-only') && !sideNext.classList.contains('hover-only'),
-    '默认应常驻显示');
+  assert(sidePrev.classList.contains('hover-only') && sideNext.classList.contains('hover-only'),
+    '默认应为「悬浮」档: 平时隐形, 不跟正文抢注意力');
   assert(sidePrev.style.left && sidePrev.style.left !== 'auto' && sideNext.style.right !== 'auto',
     '箭头位置应动态跟随正文左右边缘');
   assert(!sidePrev.disabled && !sideNext.disabled, '中间章节两侧箭头均应可用');
@@ -1013,12 +1205,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // 阅读设置切到「悬浮显示」→ 箭头带 hover-only; 切回常驻恢复
   sendMsg({ type: 'settings', payload: { ...defaults, sideNavMode: 'hover' } });
   await sleep(30);
-  assert(sidePrev.classList.contains('hover-only') && sideNext.classList.contains('hover-only'),
-    '悬浮显示模式下箭头应带 hover-only');
+  // 常驻档: 去掉 hover-only
   sendMsg({ type: 'settings', payload: { ...defaults, sideNavMode: 'always' } });
   await sleep(30);
-  assert(!sidePrev.classList.contains('hover-only'), '切回常驻后箭头应恢复常驻');
-  console.log('正文两侧章节箭头(常驻/点击切章/悬浮显示): 通过');
+  assert(!document.querySelector('.side-nav-prev').classList.contains('hover-only'),
+    '常驻档箭头不应带 hover-only');
+  // 隐藏档: 直接不渲染(v-if), 连透明热区都不留, 避免误触
+  sendMsg({ type: 'settings', payload: { ...defaults, sideNavMode: 'hidden' } });
+  await sleep(30);
+  assert(!document.querySelector('.side-nav-prev') && !document.querySelector('.side-nav-next'),
+    '隐藏档不应渲染两侧箭头');
+  // 回到默认悬浮档
+  sendMsg({ type: 'settings', payload: { ...defaults, sideNavMode: 'hover' } });
+  await sleep(30);
+  assert(document.querySelector('.side-nav-prev').classList.contains('hover-only'),
+    '切回悬浮档箭头应带 hover-only');
+  console.log('正文两侧章节箭头(默认悬浮/点击切章/常驻/隐藏): 通过');
 
   // 扩展消息 openDrawer 兼容(命令 [书架/目录/存储] 打开对应弹窗)
   sendMsg({ type: 'openDrawer', tab: 'catalog' });
@@ -1054,9 +1256,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   sendFromWebview({ type: 'refreshLibrary' });
   sendFromWebview({ type: 'openFile' });
   await sleep(20);
-  for (const [cmd, arg] of [
+  for (const [cmd, arg, shape] of [
     ['novelReader.openBook', 'D:/x.txt'],
-    ['novelReader.removeFromShelf', 'D:/x.txt'],
+    // 移除类命令改为对象参数(skipConfirm + opId): webview 用自己的确认框确认过后
+    // 宿主要跳过 showWarningMessage(架构文档 §4.c.3 / D5)。旧数组形态仍兼容。
+    ['novelReader.removeFromShelf', 'D:/x.txt', 'obj'],
     ['novelReader.pickLibraryPath', undefined],
     ['novelReader.clearLibraryPath', undefined],
     ['novelReader.openLibraryFolder', undefined],
@@ -1064,7 +1268,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ['novelReader.openFile', undefined],
   ]) {
     assert(
-      executedCommands.some((e) => e.cmd === cmd && (arg === undefined || e.arg === arg)),
+      executedCommands.some((e) => {
+        if (e.cmd !== cmd) { return false; }
+        if (arg === undefined) { return true; }
+        if (shape === 'obj') {
+          return !!(e.arg && Array.isArray(e.arg.filePaths) && e.arg.filePaths[0] === arg && e.arg.skipConfirm === true);
+        }
+        return e.arg === arg;
+      }),
       `消息应转发到命令 ${cmd}`
     );
   }
@@ -1321,7 +1532,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert($('#sourcePopup .popup-sub').textContent.includes('2 个可搜'), '头部应显示可搜数量');
   assert(document.querySelectorAll('#sourcePopup .src-row[data-source-id]').length === 2, '「书源」列表不应包含失效源');
   assert(document.querySelector('#sourcePopup .src-status.is-ok'), '可用源应显示绿色状态');
-  assert(document.querySelector('#sourcePopup .src-bulk'), '应有批量勾选条');
+  // 批量条只在管理模式出现(危险动作与普通工具分离, R11-02)
+  assert(!document.querySelector('#sourcePopup .src-bulk'), '非管理模式不应渲染批量勾选条');
+  assert(!document.querySelector('#sourcePopup .src-danger-zone'), '非管理模式不应渲染危险区');
+  document.querySelector('#sourcePopup [data-src-manage-toggle]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  assert(document.querySelector('#sourcePopup .src-bulk'), '进入管理模式后应出现批量勾选条');
+  assert(document.querySelector('#sourcePopup .src-danger-zone'), '管理模式应有独立危险区');
   assert(document.querySelectorAll('#sourcePopup .src-ico').length === 6, '两个存活源各 3 个图标按钮');
 
   // 4) 勾选启停(checkbox change) -> sourceToggle
@@ -1345,6 +1562,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
 
   posted.length = 0;
+  if (!document.querySelector('#sourcePopup [data-src-clear]')) {
+    document.querySelector('#sourcePopup [data-src-manage-toggle]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+  }
   document.querySelector('#sourcePopup [data-src-clear]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   const clearMsg = posted.filter((m) => m.type === 'sourceSetEnabled').pop();
@@ -1455,6 +1676,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(posted.some((m) => m.type === 'sourceRemove' && m.id === 's2'), '确认后应发送 sourceRemove');
 
   posted.length = 0;
+  // 导入收进「导入书源 ▾」子菜单(R11-01): 先展开菜单
+  document.querySelector('#sourcePopup [data-src-import-toggle]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
   document.querySelector('#sourcePopup [data-src-import="url"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   assert(posted.some((m) => m.type === 'sourceImport' && m.mode === 'url'), '点「从 URL 导入」应发送 sourceImport(url)');
@@ -1550,8 +1774,40 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(!addBtn.disabled && addBtn.textContent.includes('加入书架'), '失败后按钮应恢复可点');
   sendMsg({ type: 'onlineBookAdded', bookUrl: 'https://a.com/b/1', ok: true });
   await sleep(20);
-  assert(addBtn.textContent.includes('已加入') && addBtn.disabled, '加入成功后按钮应显示已加入');
+  assert(addBtn.textContent.includes('移出书架') && !addBtn.disabled,
+    '加入成功后按钮应变为可点的「移出书架」');
   assert(!document.querySelector('#sourcePopup [data-src-op-error]'), '成功后应清除失败提示');
+
+  // 移出书架: 按 bookUrl 对上书架记录, 发出 removeBook(扩展侧负责二次确认)
+  sendMsg({ type: 'shelf', items: [
+    { filePath: 'online://s1/hash1', title: '遮天', author: '辰东', chapterIndex: -1,
+      totalChapters: 0, current: false, online: true, sourceName: 'A站',
+      onlineBookUrl: 'https://a.com/b/1' },
+  ] });
+  await sleep(20);
+  assert(addBtn.textContent.includes('移出书架') && !addBtn.disabled,
+    '书架快照里已有该书时仍应显示「移出书架」');
+  const addedRow = document.querySelector('#sourcePopup [data-src-pane="current"] .src-result');
+  assert(addedRow.classList.contains('added') && addedRow.getAttribute('data-src-added') === '1',
+    '已在书架的结果行应高亮(左缘竖条+浅底)');
+  const addedBadge = addedRow.querySelector('[data-src-added-badge]');
+  assert(addedBadge && addedBadge.textContent.includes('已存书架'), '已在书架的行应挂「已存书架」高亮徽标');
+  assert(!addedRow.querySelector('[data-src-cur-badge]'), '非当前行不应有「在读/预览中」胶囊');
+  posted.length = 0;
+  addBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  const rmMsg = posted.filter((m) => m.type === 'removeBook').pop();
+  assert(rmMsg && rmMsg.filePath === 'online://s1/hash1',
+    '点移出书架应发送 removeBook 并带上书架 filePath');
+  assert(cloneErrors.length === 0, '移出消息必须可结构化克隆');
+  // 书架推送里没有这本书之后, 按钮应恢复成「加入书架」, 行高亮也应取消
+  sendMsg({ type: 'shelf', items: [] });
+  await sleep(20);
+  assert(addBtn.textContent.includes('加入书架') && !addBtn.disabled,
+    '移出后按钮应恢复为「加入书架」');
+  assert(!addedRow.classList.contains('added') && !addedRow.getAttribute('data-src-added')
+    && !addedRow.querySelector('[data-src-added-badge]'),
+    '移出后行高亮与「在书架」徽标都应取消');
 
   // 结果列表限高 10 条: 外层容器 + 内滚
   assert(document.querySelector('#sourcePopup [data-src-results]'), '搜索结果应放在独立滚动容器里');
@@ -1801,10 +2057,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '应显示历史搜索关键词');
   assert(document.querySelectorAll('#sourcePopup [data-src-history-result]').length === 2,
     '历史区应显示上一次的 2 条结果');
-  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.maxHeight === '132px',
-    '当前 3 条应为 3 行高');
-  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.maxHeight === '88px',
+  // 行高改用 CSS 变量 --src-alloc-h（架构 §5.1：内联 maxHeight -> 变量，高度跟随实测行高）
+  const curPane = document.querySelector('#sourcePopup [data-src-pane="current"]');
+  const histPane = document.querySelector('#sourcePopup [data-src-pane="history"]');
+  assert(curPane.style.getPropertyValue('--src-alloc-h').trim() === '132px',
+    '当前 3 条应为 3 行高, 实际 ' + curPane.style.getPropertyValue('--src-alloc-h'));
+  assert(histPane.style.getPropertyValue('--src-alloc-h').trim() === '88px',
     '历史 2 条应为 2 行高');
+  assert(capturedHtml.indexOf('--src-alloc-h') >= 0,
+    '.src-pane 的 max-height 应读取 --src-alloc-h 变量');
 
   posted.length = 0;
   document.querySelector('#sourcePopup [data-src-cancel]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
@@ -1859,9 +2120,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   }));
   sendMsg({ type: 'searchBatch', token: splitStart.token, errors: [], items: six });
   await sleep(30);
-  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.maxHeight === '264px',
+  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.getPropertyValue('--src-alloc-h').trim() === '264px',
     '当前 6 条应占 6 行(264px)');
-  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.maxHeight === '44px',
+  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.getPropertyValue('--src-alloc-h').trim() === '44px',
     '历史 1 条应占 1 行(44px)');
 
   // 16) 再搜: 上一轮 6 条进历史, 本次 6 条 -> 5/5 行, 拖动 +1 行
@@ -1882,9 +2143,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '历史应为 6 条');
   assert(!document.querySelector('#sourcePopup [data-src-history-result] .src-add'),
     '历史结果不应显示加入书架按钮');
-  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.maxHeight === '220px',
+  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.getPropertyValue('--src-alloc-h').trim() === '220px',
     '两边都 6 条时当前区应为 5 行');
-  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.maxHeight === '220px',
+  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.getPropertyValue('--src-alloc-h').trim() === '220px',
     '两边都 6 条时历史区应为 5 行');
 
   const splitEl = document.querySelector('#sourcePopup [data-src-split]');
@@ -1899,9 +2160,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   document.dispatchEvent(pt('pointermove', 144));
   document.dispatchEvent(pt('pointerup', 144));
   await sleep(30);
-  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.maxHeight === '264px',
+  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.getPropertyValue('--src-alloc-h').trim() === '264px',
     '拖动 +1 行后当前区应增高 44px');
-  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.maxHeight === '176px',
+  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.getPropertyValue('--src-alloc-h').trim() === '176px',
     '拖动后历史区应减少 44px');
   assert(document.querySelector('#sourcePopup [data-src-split]').getAttribute('aria-valuenow') === '6',
     '分隔条当前行数应更新');
@@ -1912,7 +2173,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   }));
   sendMsg({ type: 'searchBatch', token: dragStart.token, errors: [], items: four });
   await sleep(30);
-  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.maxHeight === '264px',
+  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.getPropertyValue('--src-alloc-h').trim() === '264px',
     '补到 10 条后仍按拖动分得的 6 行显示(超出内滚)');
   const splitEl2 = document.querySelector('#sourcePopup [data-src-split]');
   splitEl2.dispatchEvent(pt('pointerdown', 100));
@@ -1921,7 +2182,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   assert(!document.querySelector('#sourcePopup [data-src-pane="history"]'), '拖到最大时历史区应收起');
   assert(document.querySelector('#sourcePopup [data-src-history-label]'), '历史标题应保留');
-  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.maxHeight === '440px',
+  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.getPropertyValue('--src-alloc-h').trim() === '440px',
     '历史收起后当前区最多 10 行');
 
   // 18) 历史收起后不渲染历史行
@@ -1939,7 +2200,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // 19) 点击结果行 -> 临时预览: 弹窗保持到 previewReady
   posted.length = 0;
-  document.querySelector('#sourcePopup [data-src-result="0"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  document.querySelector('#sourcePopup [data-src-result="0"] .src-result-main').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   const previewMsg = posted.filter((m) => m.type === 'previewOnlineBook').pop();
   assert(previewMsg && previewMsg.item && previewMsg.item.bookUrl, '点结果行应发送 previewOnlineBook');
@@ -1957,7 +2218,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // 解析中再点第二行: 不应再发请求
   posted.length = 0;
-  document.querySelector('#sourcePopup [data-src-result="1"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  document.querySelector('#sourcePopup [data-src-result="1"] .src-result-main').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   assert(posted.filter((m) => m.type === 'previewOnlineBook').length === 0, '解析中再点其他结果不应发第二个请求');
 
@@ -1976,7 +2237,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // 失败: 弹窗保持, 清除 pending/高亮, 显示原因
   menuItem('source').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
-  document.querySelector('#sourcePopup [data-src-result="0"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  document.querySelector('#sourcePopup [data-src-result="0"] .src-result-main').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   sendMsg({ type: 'previewError', message: '目录解析结果为空: 源「A站」 目录页 https://a.com/book/1', bookUrl: previewMsg.item.bookUrl });
   await sleep(30);
@@ -1988,7 +2249,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '失败提示应带源名/目录页');
 
   // 解析中手动关闭: 失败不应强行重开
-  document.querySelector('#sourcePopup [data-src-result="0"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  document.querySelector('#sourcePopup [data-src-result="0"] .src-result-main').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   document.querySelector('#sourcePopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
@@ -2257,7 +2518,148 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   assert(!document.querySelector('.note-return'), '点「返回上次阅读位置」后提示条应消失');
 
-  console.log('笔记(空态/段落建卡/下划线标记/保存/分组/内联定位/两步删除/跳转高亮/返回提示条): 通过');
+  // 9) 笔记「管理」: 多选删除
+  {
+    menuItem('notes').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    const items = document.querySelectorAll('#notesPopup .nt-item');
+    assert(items.length > 0, '笔记列表应有条目');
+    const noteTotal = items.length;
+    assert(!document.querySelector('#notesPopup [data-note-check]'), '默认不应显示勾选框');
+    assert(document.querySelector('#notesPopup [data-note-manage]').textContent.trim() === '管理',
+      '笔记头部按钮文案应为「管理」');
+
+    document.querySelector('#notesPopup [data-note-manage]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(document.querySelectorAll('#notesPopup [data-note-check]').length === noteTotal,
+      '管理模式每条笔记都应有勾选框');
+    assert(!document.querySelector('#notesPopup .nt-acts'), '管理模式应隐藏行内操作按钮(定位/编辑/删除)');
+    assert(document.querySelector('#notesPopup [data-note-manage]').textContent.trim() === '完成',
+      '进入后按钮应变「完成」');
+
+    // 书 / 章分组头也要能整组勾选
+    const firstBook = document.querySelector('#notesPopup .nt-book');
+    const bookCheck = firstBook.querySelector('[data-note-book-check]');
+    const bookNotes = firstBook.querySelectorAll('.nt-item').length;
+    const firstChap = firstBook.querySelector('.nt-chap-group');
+    const chapNotes = firstChap.querySelectorAll('.nt-item').length;
+    assert(bookCheck, '书分组头应有勾选框');
+    assert(firstBook.querySelector('[data-note-chap-check]'), '章分组头应有勾选框');
+    assert(bookCheck.getAttribute('data-note-book-check') === 'none', '初始应为未选');
+
+    posted.length = 0;
+    document.querySelector('#notesPopup .nt-item').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert($('#notesPopup').classList.contains('open'), '管理模式下点条目不应跳转关掉浮层');
+    assert(!posted.some((m) => m.type === 'getChapter'), '管理模式下点条目不应跳章');
+    assert(document.querySelector('#notesPopup .nt-item').classList.contains('sel'), '勾选的条目应高亮');
+    assert(document.querySelector('#notesPopup [data-note-sel-count]').textContent.includes('已选 1'),
+      '应显示「已选 1 条」');
+    if (bookNotes > 1) {
+      // 半选改用原生 indeterminate（不再是 classList.part 的模拟）
+      assert(bookCheck.indeterminate === true, '只选中一部分时书头 checkbox 应为 indeterminate');
+    }
+
+    // 再点一次取消, 回到"未全选"状态
+    document.querySelector('#notesPopup .nt-item').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('#notesPopup [data-note-sel-count]').textContent.includes('已选 0'),
+      '再点一次应取消勾选');
+
+    // 点书头 checkbox = 选中本书全部笔记（原生控件, 不再靠整行 click 模拟）
+    firstBook.querySelector('[data-note-book-check]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('#notesPopup [data-note-sel-count]').textContent.includes('已选 ' + bookNotes),
+      '点书头 checkbox 应选中本书全部 ' + bookNotes + ' 条, 实际 ' +
+      document.querySelector('#notesPopup [data-note-sel-count]').textContent.trim());
+    assert(firstBook.querySelector('[data-note-book-check]').checked === true, '书头 checkbox 应为已勾选');
+    // 再点一次取消
+    firstBook.querySelector('[data-note-book-check]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('#notesPopup [data-note-sel-count]').textContent.includes('已选 0'),
+      '再点书头 checkbox 应取消本书勾选');
+
+    // 点章头 checkbox = 选中该章全部笔记
+    firstChap.querySelector('[data-note-chap-check]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('#notesPopup [data-note-sel-count]').textContent.includes('已选 ' + chapNotes),
+      '点章头 checkbox 应选中本章 ' + chapNotes + ' 条');
+    firstChap.querySelector('[data-note-chap-check]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('#notesPopup [data-note-sel-count]').textContent.includes('已选 0'),
+      '再点章头 checkbox 应取消本章勾选');
+
+    document.querySelector('#notesPopup [data-note-select-all]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('#notesPopup [data-note-sel-count]').textContent.includes('已选 ' + noteTotal),
+      '全选应选满全部笔记');
+
+    // 批量删笔记走统一确认框(R7-01): 点按钮只弹框, 不发消息
+    posted.length = 0;
+    document.querySelector('#notesPopup [data-note-remove-selected]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(document.querySelector('[data-confirm-ok]'), '「删除所选」应先弹统一确认框');
+    assert(!posted.some((m) => m.type === 'removeNotes'), '未确认前不应发 removeNotes');
+    assert(document.querySelector('#notesPopup [data-note-check]'), '取消/确认前应仍在管理模式');
+    // 取消: 选择必须保留(R7-03)
+    document.querySelector('[data-confirm-cancel]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('#notesPopup [data-note-sel-count]').textContent.includes('已选 ' + noteTotal),
+      '取消确认后应保留选择');
+    // 再点 -> 确认 -> 带 opId 发 removeNotes
+    posted.length = 0;
+    document.querySelector('#notesPopup [data-note-remove-selected]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    document.querySelector('[data-confirm-ok]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    const rmNotes = posted.find((m) => m.type === 'removeNotes');
+    assert(rmNotes, '确认后应发 removeNotes');
+    assert((rmNotes.ids || []).length === noteTotal, '应带全部选中笔记的 id');
+    assert(typeof rmNotes.opId === 'string' && rmNotes.opId, 'removeNotes 必须带 opId(终态/防重复)');
+    assert(document.querySelector('#notesPopup [data-note-check]'), '回包前不应退出管理模式');
+    // 失败: 保留选择与管理模式 + 就地 role=alert
+    sendMsg({ type: 'opResult', payload: { opId: rmNotes.opId, op: 'notes:remove', ok: false, message: '磁盘写入失败' } });
+    await sleep(40);
+    assert(document.querySelector('#notesPopup [data-note-check]'), '失败后应仍在管理模式');
+    assert(document.querySelector('#notesPopup [data-note-sel-count]').textContent.includes('已选 ' + noteTotal),
+      '失败后选择应保留');
+    // 失败瞬间就要"就地可见": 面板级一份(不切面板也看得到) + 确认框内一份(可重试)。
+    // 两处承载位置不同, 独立回归也是这么要求的; 面板级必须恰一份, 不能重复堆叠。
+    const panelAlertNow = document.querySelectorAll('#notesPopup [data-note-op-error]');
+    assert(panelAlertNow.length === 1, '失败瞬间面板级 role=alert 应恰有 1 份, 实际 ' + panelAlertNow.length);
+    assert(panelAlertNow[0].getAttribute('role') === 'alert', '面板级提示应为 role=alert');
+    assert(panelAlertNow[0].textContent.includes('磁盘写入失败'), '面板级提示应含宿主返回原因');
+    const dialogAlertNow = document.querySelectorAll('.confirm-dlg [role="alert"]');
+    assert(dialogAlertNow.length === 1, '确认框内也应有 1 份 role=alert 说明原因(可重试)');
+    assert(dialogAlertNow[0].textContent.includes('磁盘写入失败'), '确认框内提示应含原因');
+    // 关掉确认框后, 面板级提示继续存在(P3-1: 用户不切面板也能看到)
+    document.querySelector('[data-confirm-cancel]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    const panelAlert = document.querySelector('#notesPopup [data-note-op-error]');
+    assert(panelAlert, '取消确认框后面板级 role=alert 仍在');
+    assert(panelAlert.textContent.includes('磁盘写入失败'), '面板级提示应含宿主返回原因');
+    assert(document.querySelectorAll('#notesPopup [role="alert"]').length === 1, '同一时刻只应有一个面板级 alert');
+    // P3-3: 别的面板成功操作后, 陈旧错误应被清掉
+    sendMsg({ type: 'opResult', payload: { opId: 'other-op-1', op: 'books:removeMany', ok: true } });
+    await sleep(30);
+    assert(!document.querySelector('#notesPopup [data-note-op-error]'), '其他操作成功后应清掉陈旧失败文案');
+    // 成功: 才退出管理模式(重开确认框再确认一次)
+    posted.length = 0;
+    document.querySelector('#notesPopup [data-note-remove-selected]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    document.querySelector('[data-confirm-ok]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    const retryMsg = posted.filter((m) => m.type === 'removeNotes').pop();
+    assert(retryMsg && retryMsg.opId !== rmNotes.opId, '重试应是新的 opId');
+    sendMsg({ type: 'opResult', payload: { opId: retryMsg.opId, op: 'notes:remove', ok: true } });
+    await sleep(40);
+    assert(!document.querySelector('#notesPopup [data-note-check]'), '成功后应退出管理模式');
+    assert(!document.querySelector('#notesPopup [data-note-op-error]'), '成功后不应残留失败文案');
+    document.querySelector('#notesPopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+  }
+
+  console.log('笔记(空态/段落建卡/下划线标记/保存/分组/内联定位/两步删除/跳转高亮/返回提示条/管理): 通过');
 
 
   // ---------------- 笔记: 空内容保存 + 分组默认折叠 ----------------
@@ -2329,10 +2731,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(curBook && otherBook, '应能按书名定位两组');
   assert(!curBook.classList.contains('collapsed'), '在读分组默认应展开');
   assert(curBook.querySelector('.nt-items'), '在读分组应渲染条目');
-  assert(curBook.querySelector('.nt-book-head').getAttribute('aria-expanded') === 'true', '在读分组 aria-expanded 应为 true');
+  assert(curBook.querySelector('.nt-book-head .nt-expand').getAttribute('aria-expanded') === 'true', '在读分组 aria-expanded 应为 true');
   assert(otherBook.classList.contains('collapsed'), '非在读分组默认应收起');
   assert(!otherBook.querySelector('.nt-items'), '非在读分组不应渲染条目');
-  assert(otherBook.querySelector('.nt-book-head').getAttribute('aria-expanded') === 'false', '收起分组 aria-expanded 应为 false');
+  assert(otherBook.querySelector('.nt-book-head .nt-expand').getAttribute('aria-expanded') === 'false', '收起分组 aria-expanded 应为 false');
   assert(otherBook.querySelector('.nt-book-count').textContent.trim() === '1', '收起后仍应显示条目数');
   // 章分组默认态: 在读章展开, 其它章收起
   const chapGroups = Array.from(curBook.querySelectorAll('.nt-chap-group'));
@@ -2344,17 +2746,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#notesPopup .nt-caret svg'), '分组箭头应为双箭头 SVG 图标');
   // 点章头展开其它章
   const closedChap = chapGroups.find((c) => c !== openChaps[0]);
-  closedChap.querySelector('.nt-chap-head').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  closedChap.querySelector('.nt-chap-head .nt-expand').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   assert(!closedChap.classList.contains('collapsed'), '点章头应展开该章分组');
-  closedChap.querySelector('.nt-chap-head').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  closedChap.querySelector('.nt-chap-head .nt-expand').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   assert(closedChap.classList.contains('collapsed'), '再点章头应收起');
 
   // 9e 点组头展开其它书, 关闭再打开保持选择
   const bookByTitle = (name) => Array.from(document.querySelectorAll('#notesPopup .nt-book'))
     .find((b) => (b.querySelector('.nt-book-title') || {}).textContent === name);
-  bookByTitle('另一本书').querySelector('.nt-book-head').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  bookByTitle('另一本书').querySelector('.nt-book-head .nt-expand').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   assert(bookByTitle('另一本书').querySelector('.nt-items'), '点组头应展开该分组');
   document.querySelector('#notesPopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
@@ -2365,17 +2767,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '关闭再打开应保留用户展开的选择');
 
   // 9f 在读分组也可手动收起
-  bookByTitle(novel.bookTitle).querySelector('.nt-book-head').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  bookByTitle(novel.bookTitle).querySelector('.nt-book-head .nt-expand').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   assert(bookByTitle(novel.bookTitle).classList.contains('collapsed'), '在读分组也应允许手动收起');
-  bookByTitle(novel.bookTitle).querySelector('.nt-book-head').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  bookByTitle(novel.bookTitle).querySelector('.nt-book-head .nt-expand').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   assert(!bookByTitle(novel.bookTitle).classList.contains('collapsed'), '再点应恢复展开');
 
   // 9g 跨书跳转: 点击其它书的条目 → openBook 换书 → init 落地后按笔记章节跳转
   const otherBookEl = bookByTitle('另一本书');
   // 该书非在读 → 章分组默认收起, 先点开章头让条目进 DOM
-  otherBookEl.querySelector('.nt-chap-head').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  otherBookEl.querySelector('.nt-chap-head .nt-expand').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   posted.length = 0;
   otherBookEl.querySelector('[data-note-id="note-other"]')
@@ -2440,6 +2842,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const chapDelMsg = posted.find((m) => m.type === 'removeNoteGroup');
   assert(chapDelMsg && chapDelMsg.bookPath === novel.filePath && chapDelMsg.chapterTitle === novel.chapters[2].title,
     '确认后应发 removeNoteGroup(书+章)');
+  // P3-2: 组删除必须带 opId 并进入 pending; 期间按钮禁用, 连点不会产生多个 opId
+  assert(typeof chapDelMsg.opId === 'string' && chapDelMsg.opId, 'removeNoteGroup 必须带 opId(终态/防重复)');
+  const chapDelBusy = document.querySelector('#notesPopup .nt-chap-head .ng-del:not(.ng-cancel)');
+  assert(chapDelBusy && chapDelBusy.disabled, '组删除进行中删除按钮应禁用');
+  chapDelBusy.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(20);
+  assert(posted.filter((m) => m.type === 'removeNoteGroup').length === 1, 'pending 期间不应重复发 removeNoteGroup');
+  // 回终态: pending 清空、按钮恢复(成功也不应重复发)
+  sendMsg({ type: 'opResult', payload: { opId: chapDelMsg.opId, op: 'notes:removeGroup', ok: true } });
+  await sleep(30);
+  assert(!posted.some((m) => m.type === 'removeNoteGroup' && m.opId !== chapDelMsg.opId),
+    '回包后不应出现第二个 opId 的 removeNoteGroup');
   // 模拟扩展回发全量笔记(该书该章已清空, 只剩它书条目)
   sendMsg({ type: 'notes', items: [{ ...noteItem, id: 'note-c2', bookPath: 'D:/b.txt' }] });
   await sleep(30);
@@ -2474,18 +2888,92 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   } });
   await sleep(40);
   const previewBtn = document.querySelector('[data-preview-add]');
-  assert(previewBtn && previewBtn.textContent.includes('加入书架'), '预览书应显示「加入书架」按钮');
-  assert(previewBtn.style.left && previewBtn.style.left !== 'auto',
-    '加入书架应在正文右边缘外侧(下一章下方)');
-  assert(!/\.preview-add\{[^}]*top:\s*16px/.test(capturedHtml), '不应再固定在右上角');
+  assert(previewBtn && previewBtn.getAttribute('data-tip') === '加入书架',
+    '预览书应显示「+」按钮, hover 提示为「加入书架」');
+  assert(!previewBtn.closest('#content'), '加入书架应脱离正文流(否则一滚动就跟着消失)');
+  const posStyle = previewBtn.getAttribute('style') || '';
+  assert(posStyle.includes('right:') && posStyle.includes('px'),
+    '水平位置应按纸面实测坐标写入(right: Npx)');
+  assert(!posStyle.includes('left:'), '不应再用 left 夹取窗口边界');
+  const cssIdx = capturedHtml.indexOf('.preview-add{');
+  const cssSeg = cssIdx >= 0 ? capturedHtml.slice(cssIdx, cssIdx + 260) : '';
+  assert(cssSeg.includes('position:fixed') && cssSeg.includes('bottom:108px'),
+    '应固定悬浮, 且距底 108px(两身位 + 再抬一身位 + 间隙)');
+  assert(capturedHtml.includes('attr(data-tip)'),
+    'hover 时应弹出文字提示(::after + data-tip)');
   posted.length = 0;
   previewBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(20);
   assert(posted.some((m) => m.type === 'previewAddToShelf'), '点按钮应发送 previewAddToShelf');
+  assert(previewBtn.disabled && previewBtn.getAttribute('data-tip') === '正在加入书架…',
+    '等待回包时应置灰, 提示改为「正在加入书架…」');
   sendMsg({ type: 'previewSaved' });
   await sleep(30);
   assert(!document.querySelector('[data-preview-add]'), '加入成功后预览按钮应消失');
   console.log('在线书预览(结果行/正文按钮): 通过');
+
+  // 「+」与正文的间隙: 纯函数(全输入域) + DOM 接入
+  {
+    const { previewAddLayout } = require('../dist/overlayLayout');
+    assert.strictEqual(previewAddLayout(124).right, 76, '留白充足时应整颗落在纸面外');
+    assert.strictEqual(previewAddLayout(56).right, 8, 'gap=56 应贴 8px 安全边距');
+    const narrow = previewAddLayout(20);
+    assert.strictEqual(narrow.right, 7, '窄窗应向右让位');
+    assert.ok(narrow.gapToText >= 16 && !narrow.overlapsText, '窄窗必须与正文留 ≥16px');
+    assert.ok(narrow.protrude <= 19, '探入纸面不得超过内边距(否则会压字)');
+    // 正常布局下 gap 恒 >= 20(#reader 左右各 20px padding);
+    // gap < 17 只会出现在"正文宽于视口 + 横向滚动"的极端情况, 那里物理上无法同时
+    // 保住 8px 视口边距与 16px 正文间隙 —— 公式选择保正文间隙(已在下一条注释里说明)
+    for (let g = 17; g <= 2000; g += 1) {
+      const r = previewAddLayout(g);
+      assert.ok(r.gapToText >= 16, 'gap=' + g + ' 正文间隙不足 16px');
+      assert.ok(r.protrude <= 19, 'gap=' + g + ' 探入纸面过深');
+    }
+    assert.strictEqual(previewAddLayout(0).overlapsText, true,
+      'gap=0 的横向滚动极端情况已知会压字 1px(记录为限制)');
+  }
+
+  // 预览态: 按钮按实测 gap 定位; 移除书架后 previewReset 让按钮回来
+  {
+    const { previewAddLayout } = require('../dist/overlayLayout');
+    sendMsg({ type: 'init', payload: {
+      filePath: 'online://s1/preview1', bookTitle: '预览书', author: '作者',
+      chapters: [{ index: 0, title: '第1章' }], chapterIndex: 0, chapterTitle: '第1章',
+      paragraphs: ['预览正文'], totalChapters: 1, totalWords: 0, scrollRatio: 0, chapterWords: 4,
+      settings: { ...defaults }, shelf: [], libraryPath: '', notes: [], sources: [],
+      online: { sourceName: '测试站', bookUrl: 'https://x.com/book/1', preview: true },
+    } });
+    await sleep(40);
+    const el = document.querySelector('#content');
+    const origRect = el.getBoundingClientRect.bind(el);
+    const vw = document.documentElement.clientWidth || sandboxWindow.innerWidth;
+    el.getBoundingClientRect = () => ({
+      left: vw - 900, right: vw - 20, top: 0, bottom: 600,
+      width: 880, height: 600, x: vw - 900, y: 0,
+    });
+    sandboxWindow.dispatchEvent(new win.Event('resize'));
+    await sleep(40);
+    let pBtn = document.querySelector('[data-preview-add]');
+    assert(pBtn, '预览书应显示「+」按钮');
+    const applied = parseFloat(String(pBtn.getAttribute('style') || '').replace(/[^0-9.]/g, ''));
+    assert.strictEqual(applied, previewAddLayout(20).right,
+      '窄窗时 DOM 的 right 应等于公式值(gap=20)');
+
+    // 加入中 -> 被移出书架: previewReset 应解除置灰, 按钮继续存在
+    pBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(pBtn.disabled, '点击后应进入「加入中」并置灰');
+    sendMsg({ type: 'previewReset', filePath: 'online://s1/preview1' });
+    await sleep(30);
+    pBtn = document.querySelector('[data-preview-add]');
+    assert(pBtn && !pBtn.disabled, 'previewReset 应让按钮恢复可点(移除书架场景)');
+    assert(pBtn.getAttribute('data-tip') === '加入书架', 'previewReset 后提示应回到「加入书架」');
+
+    el.getBoundingClientRect = origRect;
+    sandboxWindow.dispatchEvent(new win.Event('resize'));
+    await sleep(20);
+    console.log('「+」间隙与移除后重现: 通过');
+  }
 
   // 带卷前缀的章节: 「第二集 第1章 …」不能被当成空卷
   sendMsg({ type: 'init', payload: {
@@ -2511,6 +2999,691 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#catalogPanel .cat-sub').textContent.includes('共 4 章'), '总章数应为 4');
   assert(document.querySelector('#catalogPanel .cat-no').textContent.includes('第1章'), '章节号应去掉卷前缀');
   console.log('目录分卷(带卷前缀章节): 通过');
+
+  // ---------------- 离线下载(目录面板 / 书架标签 / 存储容量) ----------------
+  {
+    const onlinePath = 'online://src1/abc123';
+    sendMsg({ type: 'init', payload: {
+      filePath: onlinePath, bookTitle: '在线测试书', author: '作者',
+      chapters: [
+        { index: 0, title: '第1章 甲' },
+        { index: 1, title: '第2章 乙' },
+        { index: 2, title: '第3章 丙' },
+        { index: 3, title: '第4章 丁' },
+        { index: 4, title: '第5章 戊' },
+      ],
+      chapterIndex: 0, chapterTitle: '第1章 甲', paragraphs: ['p'], totalChapters: 5,
+      totalWords: 5, scrollRatio: 0, chapterWords: 1, settings: { ...defaults },
+      shelf: [{
+        filePath: onlinePath, title: '在线测试书', author: '作者',
+        chapterIndex: 0, totalChapters: 5, current: true,
+        online: true, sourceName: '测试源', offline: { done: 2, total: 5 },
+      }],
+      libraryPath: '', notes: [], sources: [],
+      online: { sourceName: '测试源', bookUrl: 'https://x/b1', preview: false },
+      offline: {
+        filePath: onlinePath, total: 5, done: 2, failed: 1,
+        running: false, paused: false, downloaded: [0, 1],
+        bytes: 1024, totalBytes: 2048, bookCount: 2,
+      },
+    } });
+    await sleep(40);
+    // 目录每章标记: 临时缓存 [2,4], 读过第 4 章, 读到第 2 章(0 基 2 => 第 3 章在读)
+    dispatch('chapterMarks', { cached: [2, 4], read: [4], readUpTo: 2 });
+    await sleep(30);
+
+    menuItem('catalog').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    assert(document.querySelector('#catalogPanel [data-cat-dl]'), '在线书目录应显示「下载」按钮');
+
+    // 三态标记: offline(已下载) > cache(仅临时缓存) > 无
+    assert.strictEqual(
+      document.querySelector('#catalogPanel .cat-item[data-i="0"] [data-cat-mark]').getAttribute('data-cat-mark'),
+      'offline', '已下载的章应标 offline'
+    );
+    assert.strictEqual(
+      document.querySelector('#catalogPanel .cat-item[data-i="2"] [data-cat-mark]').getAttribute('data-cat-mark'),
+      'cache', '只有临时缓存的章应标 cache'
+    );
+    assert(!document.querySelector('#catalogPanel .cat-item[data-i="3"] [data-cat-mark]'),
+      '既没下载也没缓存的章不应有任何标记');
+
+    // 已读压灰: 0/1 在 readUpTo 之前; 4 在 read 集合里; 3 未读
+    assert(document.querySelector('#catalogPanel .cat-item[data-i="0"]').classList.contains('read'),
+      '读到的章之前的应标为已读');
+    assert(document.querySelector('#catalogPanel .cat-item[data-i="4"]').classList.contains('read'),
+      '有位置记忆的章应标为已读');
+    assert(!document.querySelector('#catalogPanel .cat-item[data-i="3"]').classList.contains('read'),
+      '未读章不应压灰');
+
+    // 底部筛选/图例: 全部 5 / 已下载 2 / 仅缓存 2 / 需联网 1
+    const chip = (k) => document.querySelector('#catalogPanel [data-cat-chip="' + k + '"]');
+    assert(chip('all'), '应有「全部」筛选项');
+    assert(chip('offline').textContent.includes('已下载 2'),
+      '筛选项应显示已下载数, 实际 ' + chip('offline').textContent.trim());
+    assert(chip('cache').textContent.includes('仅缓存 2'),
+      '筛选项应显示仅缓存数, 实际 ' + chip('cache').textContent.trim());
+    assert(chip('none').textContent.includes('需联网 1'),
+      '筛选项应显示需联网数, 实际 ' + chip('none').textContent.trim());
+
+    // 点「已下载」→ 目录只留已下载的章(回答"我到底下好了哪些")
+    chip('offline').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(document.querySelectorAll('#catalogPanel .cat-item').length === 2,
+      '筛选「已下载」后应只剩 2 章, 实际 ' + document.querySelectorAll('#catalogPanel .cat-item').length);
+    assert(!document.querySelector('#catalogPanel .cat-item[data-i="3"]'), '未下载的章应被过滤掉');
+    assert(chip('offline').classList.contains('on'), '当前筛选项应高亮');
+    assert(document.querySelector('#catalogPanel .cat-head .cat-sub').textContent.includes('已下载 2'),
+      '头部副标题应反映筛选(而不是还写「共 5 章」)');
+
+    // 再点一次 = 取消筛选
+    chip('offline').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(document.querySelectorAll('#catalogPanel .cat-item').length === 5, '再点一次应回到全部章节');
+
+    // 展开范围行
+    assert(!document.querySelector('#catalogPanel [data-cat-dl-row]'), '默认应收起下载范围行');
+    document.querySelector('#catalogPanel [data-cat-dl]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(document.querySelector('#catalogPanel [data-cat-dl-row]'), '点「下载」应展开范围行');
+    assert(document.querySelector('#catalogPanel [data-cat-dl-text]').textContent.includes('2/5'),
+      '应显示「已下载 2/5 章」');
+
+    // 设范围 2~5 → 应换算成 0 基 [1,4]
+    const startInput = document.querySelector('#catalogPanel [data-cat-dl-start]');
+    const endInput = document.querySelector('#catalogPanel [data-cat-dl-end]');
+    startInput.value = '2';
+    startInput.dispatchEvent(new win.Event('input', { bubbles: true }));
+    endInput.value = '5';
+    endInput.dispatchEvent(new win.Event('input', { bubbles: true }));
+    await sleep(20);
+    posted.length = 0;
+    document.querySelector('#catalogPanel [data-cat-dl-go]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    const startMsg = posted.find((m) => m.type === 'downloadStart');
+    assert(startMsg, '点「开始下载」应发出 downloadStart');
+    assert.strictEqual(startMsg.start, 1, '起始章应换算成 0 基(第2章 → 1), 实际 ' + startMsg.start);
+    assert.strictEqual(startMsg.end, 4, '结束章应换算成 0 基(第5章 → 4), 实际 ' + startMsg.end);
+
+    // 进度: 本轮回合的 done/total
+    dispatch('downloadProgress', { done: 5, total: 10, failed: 0, running: true, paused: false, added: [2] });
+    await sleep(30);
+    assert(document.querySelector('#catalogPanel [data-cat-dl-text]').textContent.includes('5/10'),
+      '应显示本轮进度 5/10');
+    assert.strictEqual(
+      document.querySelector('#catalogPanel .cat-item[data-i="2"] [data-cat-mark]').getAttribute('data-cat-mark'),
+      'offline', '进度里的 added 应把该章从 cache 升级为 offline'
+    );
+    assert(document.querySelector('#catalogPanel [data-cat-dl-pause]'), '下载中应出现「暂停」');
+    dispatch('downloadProgress', { done: 6, total: 10, failed: 0, running: true, paused: true });
+    await sleep(30);
+    assert(document.querySelector('#catalogPanel [data-cat-dl-pause]').textContent.includes('继续'),
+      '暂停后按钮应变「继续」');
+
+    dispatch('downloadDone', { ok: true, cancelled: false, done: 10, total: 10, failed: 0 });
+    await sleep(30);
+    assert(document.querySelector('#catalogPanel [data-cat-dl-go]'), '下载结束后应恢复「开始下载」');
+    assert(document.querySelector('#catalogPanel [data-cat-dl-notice]'), '结束后应有结果提示');
+    console.log('目录面板 · 离线下载(按钮/范围换算/三态标记/筛选/进度/暂停/结束): 通过');
+
+    // 书架「离线 N」标签
+    document.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+    await sleep(20);
+    menuItem('shelf').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    const offTag = document.querySelector('#shelfPopup .bk-tag-offline');
+    assert(offTag, '书架在线书应显示离线标签');
+    assert(offTag.textContent.includes('离线 2'), '标签应显示已下载章数, 实际 ' + offTag.textContent.trim());
+    console.log('书架 · 离线标签: 通过');
+
+    // 存储面板容量
+    sendMsg({ type: 'offlineStats', payload: { bytes: 10485760, books: 3 } });
+    await sleep(20);
+    document.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+    await sleep(20);
+    menuItem('storage').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    const sizeEl = document.querySelector('#storagePopup [data-sp-offline-size]');
+    assert(sizeEl, '存储面板应显示离线缓存一行');
+    assert(sizeEl.textContent.includes('10.0 MB'), '容量应格式化, 实际 ' + sizeEl.textContent.trim());
+    assert(sizeEl.textContent.includes('3 本'), '应显示书目数');
+    document.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+    await sleep(20);
+    console.log('存储面板 · 离线缓存容量: 通过');
+  }
+
+  // ---------------- 扩展侧: 打开钩子 + 预览态复位 ----------------
+  {
+    assert(openedHook && openedHook.filePath === novel.filePath && openedHook.index === 2,
+      'createOrShow 应触发 onOpen(打开即记历史的挂点)');
+    openedHook = null;
+    ReaderPanel.createOrShow(novel, 3, 0, store);
+    assert(openedHook && openedHook.index === 3, '同书重开也应触发 onOpen');
+
+    const previewNovel = {
+      filePath: 'online://s1/prev', bookTitle: '预览书', author: '作者',
+      chapters: [{ index: 0, title: '第1章', content: 'x', wordCount: 1 }],
+      preface: '', encoding: 'utf-8', totalWords: 1,
+      online: { sourceId: 's1', sourceName: '站', bookUrl: 'https://x/1', preview: false },
+    };
+    openedHook = null;
+    ReaderPanel.createOrShow(previewNovel, 0, 0, store);
+    assert(openedHook && openedHook.filePath === 'online://s1/prev', '预览书打开也应触发 onOpen');
+    assert.strictEqual(ReaderPanel.resetToPreview('D:/other.txt'), false, '非当前书不应复位');
+
+    ReaderPanel.current._ready = true;
+    panelMessages.length = 0;
+    assert.strictEqual(ReaderPanel.resetToPreview('online://s1/prev'), true, '当前在线书应能复位');
+    assert.strictEqual(ReaderPanel.current.novel.online.preview, true, 'novel 的 preview 应置 true');
+    assert(panelMessages.some((m) => m.type === 'previewReset' && m.filePath === 'online://s1/prev'),
+      '复位后应发 previewReset(filePath)');
+    ReaderPanel.current._ready = false;
+    console.log('打开钩子 + 预览态复位: 通过');
+  }
+
+  // ---------------- 搜索失败明细 / 单源重试 / 状态语义(R9-01 ~ R9-04) ----------------
+  {
+    // 先把书源列表恢复成"两个可用源", 避免受前面用例(失效/停用)的影响
+    sendMsg({ type: 'sources', items: [
+      { id: 's1', name: 'A站', url: 'https://a', group: '', enabled: true, searchUrl: 'u1', failStreak: 0 },
+      { id: 's2', name: 'B站', url: 'https://b', group: '', enabled: true, searchUrl: 'u2', failStreak: 0 },
+    ] });
+    await sleep(30);
+    menuItem('source').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    const input2 = document.querySelector('#sourcePopup [data-src-input]');
+    input2.value = '诊断用例';
+    input2.dispatchEvent(new win.Event('input', { bubbles: true }));
+    await sleep(20);
+    posted.length = 0;
+    const goBtn2 = document.querySelector('#sourcePopup [data-src-go]');
+    goBtn2.click();
+    await sleep(30);
+    const diag = posted.filter((m) => m.type === 'sourceSearch').pop();
+    assert(diag, '应发起诊断用的搜索');
+
+    // 进度: role=progressbar + aria-valuenow 随 done 更新, 且可见区不参与播报
+    sendMsg({ type: 'searchProgress', token: diag.token, done: 3, total: 10, sourceName: 'A站', ok: true, failed: 0 });
+    await sleep(30);
+    const bar = document.querySelector('#sourcePopup [data-src-progress]');
+    assert(bar && bar.getAttribute('role') === 'progressbar', '进度行应为 role=progressbar');
+    assert(bar.getAttribute('aria-valuemin') === '0', 'progressbar 应有 aria-valuemin=0');
+    assert(bar.getAttribute('aria-valuemax') === '10', 'progressbar 应有 aria-valuemax=total');
+    assert(bar.getAttribute('aria-valuenow') === '3', 'progressbar 的 aria-valuenow 应随 done 更新');
+    assert(bar.getAttribute('aria-live') === 'off', '可见进度区 aria-live 必须为 off(避免与 sr-only 双播报)');
+    const liveRegion = Array.from(document.querySelectorAll('.sr-only[role="status"]'))
+      .find((el) => el.getAttribute('aria-live') === 'polite');
+    assert(liveRegion, '应有独立的 sr-only role=status aria-live=polite 播报区');
+    assert(liveRegion.textContent.trim().length > 0, 'sr-only 播报区应有节流文案');
+
+    // 全部失败: 无结果 + 2 个错误 -> 唯一一个 role=alert
+    sendMsg({ type: 'searchResults', token: diag.token, done: true, items: [], errors: [
+      { sourceId: 's1', sourceName: 'A站', kind: 'timeout', message: '请求超时，已重试 2 次仍未返回' },
+      { sourceId: 's2', sourceName: 'B站', kind: 'http', message: 'HTTP 503' },
+    ] });
+    await sleep(40);
+    const alerts = document.querySelectorAll('#sourcePopup [role="alert"]');
+    assert(alerts.length === 1, '最终失败应恰有 1 个 role=alert, 实际 ' + alerts.length);
+    assert(alerts[0].textContent.includes('所有书源都失败了'), 'role=alert 应为"全部失败"那一行');
+
+    // 空结果 vs 全失败: 文案必须是两种(resultSummary 四分支)
+    assert(document.querySelector('#sourcePopup .src-hint').textContent.includes('所有书源都失败了'),
+      '全失败文案应由 resultSummary 的失败分支给出');
+
+    // 失败明细: aria-expanded 翻转 + 每行类别徽章 + 重试按钮
+    const toggle = document.querySelector('#sourcePopup [data-src-errors-toggle]');
+    assert(toggle, '应有失败明细折叠按钮');
+    assert(toggle.getAttribute('aria-expanded') === 'false', '默认应折叠(aria-expanded=false)');
+    assert(toggle.getAttribute('aria-controls') === 'srcErrorList', 'aria-controls 应指向明细列表 id');
+    assert(!document.querySelector('#sourcePopup [data-src-error-list]'), '折叠时明细列表不应渲染');
+    toggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(document.querySelector('#sourcePopup [data-src-errors-toggle]').getAttribute('aria-expanded') === 'true',
+      '点击后 aria-expanded 应翻转为 true');
+    assert(document.querySelector('#sourcePopup [data-src-error-list]'), '展开后应渲染明细列表');
+    const rows = Array.from(document.querySelectorAll('#sourcePopup [data-src-error-row]'));
+    assert(rows.length === 2, '应有 2 行失败明细, 实际 ' + rows.length);
+    assert(document.querySelector('#sourcePopup [data-src-error-cat="timeout"]').textContent === '超时',
+      '错误类别应映射成中文(超时)');
+    assert(document.querySelector('#sourcePopup [data-src-error-cat="http"]').textContent === '状态码',
+      '错误类别应映射成中文(状态码)');
+    assert(rows.every((r) => r.querySelector('[data-src-error-retry]')), '每行都应有单源重试按钮');
+    assert(rows[0].querySelector('.src-error-msg').getAttribute('title').length > 0,
+      '精简原因应有 title 承载完整原因');
+
+    // 单源重试: 发 sourceRetry(reqId/sourceId/key), 重试中禁用防重复
+    posted.length = 0;
+    const retryBtn = document.querySelector('#sourcePopup [data-src-error-retry="s1"]');
+    retryBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    const retryMsg = posted.find((m) => m.type === 'sourceRetry');
+    assert(retryMsg, '点重试应发送 sourceRetry');
+    assert(retryMsg.sourceId === 's1', 'sourceRetry 应带 sourceId');
+    assert(typeof retryMsg.reqId === 'number', 'sourceRetry 应带 reqId');
+    assert(retryMsg.key === '诊断用例', 'sourceRetry 应带本轮关键词');
+    const retryBtn2 = document.querySelector('#sourcePopup [data-src-error-retry="s1"]');
+    assert(retryBtn2.disabled, '重试中按钮应禁用, 防止重复提交');
+    assert(retryBtn2.textContent.includes('重试中'), '重试中按钮文案应为「重试中…」');
+
+    // 重试成功: 移除该源错误 + 按 bookUrl 合并结果
+    sendMsg({ type: 'sourceRetryResult', payload: {
+      reqId: retryMsg.reqId, sourceId: 's1', sourceName: 'A站', ok: true,
+      items: [{ sourceId: 's1', sourceName: 'A站', title: '诊断用例', author: '某作者', bookUrl: 'https://d/1' }],
+    } });
+    await sleep(40);
+    assert(!document.querySelector('#sourcePopup [data-src-error-row="s1"]'), '重试成功后该源应移出失败列表');
+    assert(document.querySelectorAll('#sourcePopup [data-src-pane="current"] .src-result').length === 1,
+      '重试成功的命中应合并进当前结果');
+
+    // 重试失败: 保留该行并更新原因
+    posted.length = 0;
+    document.querySelector('#sourcePopup [data-src-error-retry="s2"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    const retryMsg2 = posted.filter((m) => m.type === 'sourceRetry').pop();
+    assert(retryMsg2 && retryMsg2.sourceId === 's2', '第二行也应能单独重试');
+    sendMsg({ type: 'sourceRetryResult', payload: {
+      reqId: retryMsg2.reqId, sourceId: 's2', sourceName: 'B站', ok: false, message: '仍然 503',
+    } });
+    await sleep(40);
+    assert(document.querySelector('#sourcePopup [data-src-error-row="s2"]'), '重试失败应保留该行');
+    assert(document.querySelector('#sourcePopup [data-src-error-row="s2"] .src-error-msg').textContent.includes('仍然 503'),
+      '重试失败应更新该行原因');
+
+    // 结果行: 主按钮才是点击目标, 加入书架是独立按钮(无按钮嵌套)
+    const row0 = document.querySelector('#sourcePopup [data-src-result="0"]');
+    assert(row0.querySelector('.src-result-main').tagName === 'BUTTON', '结果行主按钮应为原生 button');
+    assert(!row0.querySelector('.src-result-main button'), '主按钮内不应再嵌套按钮');
+
+    menuItem('source').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+  }
+  console.log('搜索失败明细/单源重试/progressbar/唯一 alert: 通过');
+
+  // ---------------- 笔记组头三件套 / 「更多」入口(R1-04 / R11-03 / R11-04) ----------------
+  {
+    // 造两条笔记(同一本书), 保证有组头可断言
+    const now = Date.now();
+    sendMsg({ type: 'notes', items: [
+      { id: 'smk1', bookPath: 'D:/smoke.txt', bookTitle: '冒烟书', chapterTitle: '第 1 章', chapterIndex: 0, paragraphIndex: 0, quote: '原文一', text: '笔记一', createdAt: now, updatedAt: now },
+      { id: 'smk2', bookPath: 'D:/smoke.txt', bookTitle: '冒烟书', chapterTitle: '第 1 章', chapterIndex: 0, paragraphIndex: 1, quote: '原文二', text: '笔记二', createdAt: now, updatedAt: now },
+    ] });
+    await sleep(20);
+    menuItem('notes').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+
+    const head = document.querySelector('#notesPopup .nt-book-head');
+    assert(head, '应存在书组头用于结构断言');
+    // 1) 组头是普通容器, 且内部不允许按钮嵌套(旧实现是 button 里嵌可聚焦 span)
+    assert(head.tagName === 'DIV', '书组头应为普通容器(不再是 button), 实际 ' + head.tagName);
+    assert(!head.querySelector('button button'), '组头内不允许按钮嵌套');
+    // 2) 三件套齐备
+    const expand = head.querySelector('.nt-expand');
+    const del = head.querySelector('.ng-del');
+    assert(expand && expand.tagName === 'BUTTON', '组头应有原生展开按钮 .nt-expand');
+    assert(del && del.tagName === 'BUTTON', '组头应有独立删除按钮 .ng-del');
+    assert(/删除《.+》/.test(del.getAttribute('aria-label') || ''), '删除按钮 aria-label 应含书名');
+    // 3) aria-controls 指向真实容器(分组默认可能收起, 先展开)
+    const controls = expand.getAttribute('aria-controls');
+    assert(controls, '展开按钮应有 aria-controls');
+    document.querySelector('#notesPopup .nt-book-head .nt-expand').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(document.getElementById(controls), 'aria-controls 应指向存在的 .nt-items 容器');
+    assert(document.getElementById(controls).classList.contains('nt-items'), 'aria-controls 应指向条目容器');
+
+    // 4) Tab 序: 展开 -> 复选框(管理模式; 删除按钮在管理模式隐藏, 与既有规则一致)
+    document.querySelector('#notesPopup [data-note-manage]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    const head2 = document.querySelector('#notesPopup .nt-book-head');
+    const order = Array.from(head2.querySelectorAll('button, input'));
+    assert(order.length === 2, '管理模式组头应恰有 2 个可聚焦控件(展开/复选框), 实际 ' + order.length);
+    assert(order[0].classList.contains('nt-expand'), 'Tab 序第 1 个应为展开按钮');
+    assert(order[1].getAttribute('data-note-book-check') !== null, 'Tab 序第 2 个应为组复选框');
+    assert(!head2.querySelector('.ng-del'), '管理模式应隐藏组删除按钮(与书架/历史同构)');
+    assert(head2.querySelector('input[type="checkbox"]'), '管理模式组头复选框应为原生 input');
+    // 半选: 先只勾一条 -> indeterminate
+    document.querySelector('#notesPopup .nt-item [data-note-check]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    const halfCheck = document.querySelector('#notesPopup [data-note-book-check]');
+    assert(halfCheck.indeterminate === true, '部分选中时组复选框应为 indeterminate');
+    assert(halfCheck.getAttribute('aria-label').indexOf('冒烟书') >= 0, '组复选框 aria-label 应含书名');
+
+    // 条目级勾选必须是原生 checkbox: 可聚焦、有含上下文的名称、单次切换(R12-03/R12-04)
+    const itemChk = document.querySelector('#notesPopup .nt-item [data-note-check]');
+    assert(itemChk && itemChk.tagName === 'INPUT', '条目勾选应为原生 input, 实际 ' + (itemChk && itemChk.tagName));
+    assert(itemChk.type === 'checkbox', '条目勾选应为 type=checkbox');
+    assert((itemChk.getAttribute('aria-label') || '').indexOf('选择笔记') >= 0,
+      '条目勾选 aria-label 应含上下文, 实际 ' + itemChk.getAttribute('aria-label'));
+    itemChk.focus();
+    assert(document.activeElement === itemChk, '条目勾选应可 Tab/程序聚焦');
+    const selCountOf = function () {
+      const t = document.querySelector('#notesPopup [data-note-sel-count]').textContent || '';
+      const m = /(\d+)/.exec(t);
+      return m ? Number(m[1]) : -1;
+    };
+    const selBefore = selCountOf();
+    itemChk.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(Math.abs(selCountOf() - selBefore) === 1,
+      '点条目勾选应只切换一次(不能冒泡到整行双触发), 前后: ' + selBefore + ' -> ' + selCountOf());
+
+    // I1: 24×24 命中区(label 外圈)必须真的可用 —— 点环也只能净切换一次
+    const ring = document.querySelector('#notesPopup .nt-check-label');
+    assert(ring, '条目勾选应有 label 命中区(24×24)');
+    const beforeRing = selCountOf();
+    ring.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(Math.abs(selCountOf() - beforeRing) === 1,
+      '点 label 外圈应恰好切换一次(否则 24×24 命中区等于失效), 前后: ' + beforeRing + ' -> ' + selCountOf());
+    // 点行内文字(非勾选区)仍只切换一次
+    const beforeRow = selCountOf();
+    document.querySelector('#notesPopup .nt-item').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(Math.abs(selCountOf() - beforeRow) === 1,
+      '点行内文字应恰好切换一次, 前后: ' + beforeRow + ' -> ' + selCountOf());
+    document.querySelector('#notesPopup [data-note-manage]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+
+    // 5) 「更多」常显入口: 可聚焦, 点击展开动作组, 再点收起, 方向键不误触
+    // 退出管理模式后分组回到用户之前的折叠态, 需要时再展开一次
+    if (!document.querySelector('#notesPopup .nt-item')) {
+      const bookExpand = document.querySelector('#notesPopup .nt-book-head .nt-expand');
+      if (bookExpand && bookExpand.getAttribute('aria-expanded') === 'false') {
+        bookExpand.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+        await sleep(30);
+      }
+      const chapExpand = document.querySelector('#notesPopup .nt-chap-head .nt-expand');
+      if (chapExpand && chapExpand.getAttribute('aria-expanded') === 'false') {
+        chapExpand.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+        await sleep(30);
+      }
+    }
+    const item = document.querySelector('#notesPopup .nt-item');
+    assert(item, '应存在笔记条目用于「更多」断言');
+    const more = item.querySelector('.nt-more');
+    assert(more && more.tagName === 'BUTTON', '笔记条目应有常显「更多」按钮');
+    assert(more.tabIndex >= 0, '「更多」按钮应可 Tab 到达');
+    assert(more.getAttribute('aria-expanded') === 'false', '「更多」默认应 aria-expanded=false');
+    const acts = item.querySelector('.nt-acts');
+    assert(acts, '动作组应存在于 DOM(默认由 CSS 隐藏)');
+    assert(win.getComputedStyle(acts).display === 'none', '未展开时动作组应隐藏');
+    more.focus();
+    assert(document.activeElement === more, '「更多」应能获得焦点');
+    more.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    const item2 = document.querySelector('#notesPopup .nt-item');
+    assert(item2.classList.contains('more-open'), '点「更多」应给条目加 more-open');
+    assert(item2.querySelector('.nt-more').getAttribute('aria-expanded') === 'true', '展开后 aria-expanded 应为 true');
+    assert(win.getComputedStyle(item2.querySelector('.nt-acts')).display !== 'none', '展开后动作组应显示');
+    const beforeOpen = item2.classList.contains('more-open');
+    item2.querySelector('.nt-more').dispatchEvent(new win.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    await sleep(20);
+    assert(document.querySelector('#notesPopup .nt-item').classList.contains('more-open') === beforeOpen,
+      '方向键不应用来切换「更多」的展开态');
+    item2.querySelector('.nt-more').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    assert(!document.querySelector('#notesPopup .nt-item').classList.contains('more-open'),
+      '再点「更多」应收起动作组');
+    // 清理: 关闭浮层并清掉本次造的笔记
+    menuItem('notes').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    sendMsg({ type: 'notes', items: [] });
+    await sleep(20);
+  }
+  console.log('笔记组头三件套/aria-controls/Tab 序/「更多」入口: 通过');
+
+  // ---------------- 书源管理: 主次层级 / 管理模式 / 键盘子菜单 / 可访问名称(R11-01/02, R12) ----------------
+  {
+    // 恢复 2 个可用源, 保证有行可断言
+    sendMsg({ type: 'sources', items: [
+      { id: 's1', name: 'A站', url: 'https://a.com', group: '玄幻', enabled: true, searchUrl: 'https://a.com/s?q={{key}}', lastCheckOk: true, failStreak: 0 },
+      { id: 's2', name: 'B站', url: 'https://b.com', group: '', enabled: true, searchUrl: 'https://b.com/s?q={{key}}', failStreak: 0 },
+    ] });
+    await sleep(30);
+    menuItem('source').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    document.querySelector('#sourcePopup [data-src-tab="manage"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+
+    // 1) 三层工具区: 唯一主操作 + 次操作 + 更多
+    const importToggle = document.querySelector('#sourcePopup [data-src-import-toggle]');
+    const checkAll = document.querySelector('#sourcePopup [data-src-check-all]');
+    const moreToggle = document.querySelector('#sourcePopup [data-src-more-toggle]');
+    assert(importToggle && importToggle.classList.contains('popup-primary'),
+      '「导入书源」应是唯一主操作(popup-primary)');
+    assert(checkAll && checkAll.classList.contains('popup-secondary'), '「检查全部」应是次操作');
+    assert(moreToggle, '应有「更多 ▾」低频动作入口');
+    assert(importToggle.getAttribute('aria-haspopup') === 'menu', '主操作应声明 aria-haspopup=menu');
+    assert(importToggle.getAttribute('aria-expanded') === 'false', '默认应未展开');
+
+    // 2) 子菜单键盘: 展开即聚焦首项, 方向键移动, Esc 收起并回焦
+    posted.length = 0;
+    importToggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    const menu = document.querySelector('#sourcePopup #srcImportMenu');
+    assert(menu, '点「导入书源」应展开子菜单');
+    assert(menu.getAttribute('role') === 'menu', '子菜单应有 role=menu');
+    const items = Array.from(menu.querySelectorAll('[role="menuitem"]'));
+    assert(items.length === 3, '子菜单应有 3 项(URL/JSON/文件), 实际 ' + items.length);
+    assert(document.activeElement === items[0], '展开后应把焦点放到第 1 项');
+    items[0].dispatchEvent(new win.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    await sleep(20);
+    assert(document.activeElement === items[1], 'ArrowDown 应移到第 2 项');
+    items[1].dispatchEvent(new win.KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    await sleep(20);
+    assert(document.activeElement === items[0], 'ArrowUp 应回到第 1 项');
+    items[0].dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await sleep(20);
+    assert(!document.querySelector('#sourcePopup #srcImportMenu'), 'Esc 应收起子菜单');
+    assert(document.activeElement === importToggle, 'Esc 收起后焦点应回到主操作按钮');
+
+    // 3) 「更多」子菜单: 导出 / 全部停用
+    document.querySelector('#sourcePopup [data-src-more-toggle]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    assert(document.querySelector('#sourcePopup #srcMoreMenu'), '点「更多」应展开子菜单');
+    assert(document.querySelector('#sourcePopup [data-src-export]'), '「更多」里应有导出');
+    assert(document.querySelector('#sourcePopup [data-src-disable-all]'), '「更多」里应有全部停用');
+    document.querySelector('#sourcePopup [data-src-more-toggle]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+
+    // 4) 管理模式: 批量条 + 危险区隔离
+    const manageToggle = document.querySelector('#sourcePopup [data-src-manage-toggle]');
+    assert(manageToggle.getAttribute('aria-pressed') === 'false', '默认应在非管理模式');
+    manageToggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(document.querySelector('#sourcePopup [data-src-manage-toggle]').getAttribute('aria-pressed') === 'true',
+      '进入管理后 aria-pressed 应为 true');
+    const danger = document.querySelector('#sourcePopup .src-danger-zone');
+    assert(danger && danger.querySelector('[data-src-remove-selected]'),
+      '危险动作应放在 .src-danger-zone 里, 与全选/反选分隔');
+    // 退出管理应清空批量区
+    document.querySelector('#sourcePopup [data-src-manage-toggle]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(!document.querySelector('#sourcePopup .src-bulk'), '退出管理模式后批量条应消失');
+
+    // 5) 复选框 label 关联 + 点击名称可切换
+    const row = document.querySelector('#sourcePopup .src-row');
+    const chk = row.querySelector('input[type="checkbox"]');
+    const label = row.querySelector('label.src-check-label');
+    assert(chk.id && label && label.getAttribute('for') === chk.id, '复选框应有 for 关联的 label');
+    assert(chk.getAttribute('aria-label').indexOf('A站') >= 0, '复选框 aria-label 应含源名');
+    assert(label.textContent.indexOf('A站') >= 0, 'label 内应包含源名(点击名称即可切换)');
+
+    // 6) 图标按钮 aria-label 含源名且彼此唯一
+    const icons = Array.from(row.querySelectorAll('.src-ico'));
+    assert(icons.length === 3, '每行应有 3 个图标按钮');
+    const labels = icons.map((b) => b.getAttribute('aria-label') || '');
+    assert(labels.every((t) => t.indexOf('A站') >= 0), '图标按钮 aria-label 都应含源名');
+    assert(new Set(labels).size === 3, '三个图标按钮的 aria-label 应互不相同, 实际 ' + JSON.stringify(labels));
+
+    // 7) 输入都有可访问名称
+    assert(document.querySelector('#sourcePopup #srcFilterInput').getAttribute('aria-label').indexOf('筛选') >= 0,
+      '筛选输入应有 aria-label');
+    document.querySelector('#sourcePopup [data-src-edit="s1"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(document.querySelector('#sourcePopup [data-src-edit-name]').getAttribute('aria-label') === '书源名称',
+      '编辑名称输入应有 aria-label');
+    assert(document.querySelector('#sourcePopup [data-src-edit-url]').getAttribute('aria-label') === '搜索地址',
+      '编辑地址输入应有 aria-label');
+
+    menuItem('source').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+  }
+  console.log('书源管理(三层工具/键盘子菜单/管理模式/危险区/label 与 aria-label): 通过');
+
+  // ---------------- 本轮新增的无障碍/键盘语义回归(T02/T03/T05) ----------------
+  {
+    // 浮层: role=dialog + 非模态 + aria-labelledby 指向真实存在的 <h2>
+    for (const id of ['catalogPanel', 'settingsPanel', 'shelfPopup', 'storagePopup', 'notesPopup', 'sourcePopup', 'historyPopup']) {
+      const el = document.getElementById(id);
+      assert(el, '应存在浮层 #' + id);
+      assert(el.getAttribute('role') === 'dialog', '#' + id + ' 应有 role=dialog');
+      assert(el.getAttribute('aria-modal') === 'false', '#' + id + ' 应为非模态(aria-modal=false)');
+      const labelledBy = el.getAttribute('aria-labelledby');
+      assert(labelledBy, '#' + id + ' 应有 aria-labelledby');
+      const title = document.getElementById(labelledBy);
+      assert(title && el.contains(title), '#' + id + ' 的 aria-labelledby 必须指向浮层内真实存在的标题');
+    }
+    // 无 focus trap: 不设置 inert, 也不拦截 Tab
+    assert(!document.querySelector('[inert]'), '不应给任何元素设置 inert(非模态, 不圈禁焦点)');
+
+    // 目录: 条目/卷头为原生 button, 当前章 aria-current, 卷头 aria-expanded/aria-controls
+    menuItem('catalog').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    const catItems2 = Array.from(document.querySelectorAll('#catalogPanel .cat-item'));
+    assert(catItems2.length > 0, '目录应有条目');
+    assert(catItems2.every((b) => b.tagName === 'BUTTON' && b.type === 'button'),
+      '目录条目应为原生 <button type="button">');
+    const curItem = document.querySelector('#catalogPanel .cat-item.cur');
+    assert(curItem && curItem.getAttribute('aria-current') === 'true', '当前章应有 aria-current="true"');
+    const groupHead = document.querySelector('#catalogPanel .cat-group-head');
+    assert(groupHead && groupHead.tagName === 'BUTTON', '卷头应为原生 button');
+    assert(groupHead.getAttribute('aria-expanded') !== null, '卷头应有 aria-expanded');
+    assert(document.getElementById(groupHead.getAttribute('aria-controls')),
+      '卷头 aria-controls 应指向真实存在的容器');
+    menuItem('catalog').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+
+    // 书架/历史行: 主按钮 + 独立删除按钮(禁止按钮嵌套)
+    menuItem('shelf').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    const bkRow = document.querySelector('#shelfPopup .bk');
+    if (bkRow) {
+      assert(bkRow.querySelector('.bk-main') && bkRow.querySelector('.bk-main').tagName === 'BUTTON',
+        '书架行应有原生主按钮');
+      const del = bkRow.querySelector('.bp-del');
+      assert(del && del.tagName === 'BUTTON', '书架行的删除应是独立按钮');
+      assert(/从书架移除《.+》/.test(del.getAttribute('aria-label') || ''), '删除按钮 aria-label 应含书名');
+      assert(!bkRow.querySelector('button button'), '不允许按钮嵌套');
+    }
+    menuItem('shelf').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+
+    // 笔记模式: 整组只有 1 个 tabindex=0; 关闭后全部回到 -1; data-note-mode 同步
+    const nmToggle = document.querySelector('.menu-item[data-menu="note-mode"]');
+    assert(nmToggle, '菜单应有「笔记模式」开关');
+    assert(nmToggle.getAttribute('aria-pressed') === 'false', '默认应为未按下');
+    nmToggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    assert(nmToggle.getAttribute('aria-pressed') === 'true', '开启后 aria-pressed 应为 true');
+    const paraBtns = Array.from(document.querySelectorAll('#content [data-para-btn]'));
+    assert(paraBtns.length > 0, '正文段落应渲染笔记按钮');
+    assert(paraBtns.filter((b) => b.tabIndex === 0).length === 1,
+      '笔记模式下整组只应有 1 个 tabindex=0, 实际 ' + paraBtns.filter((b) => b.tabIndex === 0).length);
+    assert(document.getElementById('content').getAttribute('data-note-mode') === 'on',
+      '根节点应有 data-note-mode="on"');
+    const zeroBtn = paraBtns.filter((b) => b.tabIndex === 0)[0];
+    zeroBtn.focus();
+    zeroBtn.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    await sleep(30);
+    assert(Array.from(document.querySelectorAll('#content [data-para-btn]')).filter((b) => b.tabIndex === 0).length === 1,
+      '方向键移动后仍应只有 1 个 tabindex=0(roving 不变式)');
+    nmToggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    assert(Array.from(document.querySelectorAll('#content [data-para-btn]')).every((b) => b.tabIndex === -1),
+      '关闭笔记模式后所有段落按钮应回到 tabindex=-1');
+    assert(document.getElementById('content').getAttribute('data-note-mode') === 'off',
+      '根节点应回到 data-note-mode="off"');
+
+    // 设置面板: 主题单选组 + 宽度档位名 + 自定义宽度 label 关联
+    menuItem('settings').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    const group = document.querySelector('#settingsPanel .sp-theme-dots');
+    assert(group && group.getAttribute('role') === 'radiogroup', '主题预设应为 radiogroup');
+    const radios = Array.from(group.querySelectorAll('[role="radio"]'));
+    assert(radios.length === 7, '应有 7 个 role=radio, 实际 ' + radios.length);
+    assert(radios.filter((r) => r.getAttribute('aria-checked') === 'true').length === 1,
+      '只应有一个 aria-checked=true');
+    assert(radios.every((r) => (r.textContent || '').trim().length > 0), '每个主题应有可见名称');
+    assert(radios.filter((r) => r.tabIndex === 0).length === 1, 'roving: 只有选中项可 Tab 到达');
+    const widthLabel = document.querySelector('label[for="spWidthInput"]');
+    assert(widthLabel && document.getElementById('spWidthInput'), '自定义宽度输入框应有 for 关联的 label');
+    menuItem('settings').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+
+    // 控件基线: 书源复选框 24×24 + 粗指针 40×40(样式在 CSS 里, 这里断言**该选择器**的声明)
+    // 注: 原来写的是 `cssText.indexOf('width:24px') >= 0` —— 任意元素有 24px 就通过, 属于空转断言(QA 修正)
+    const cssText2 = capturedHtml;
+    assert(/\.src-check\s*\{[^}]*width:\s*24px/.test(cssText2), '.src-check 应为 24×24(选择器级断言)');
+    assert(/\.src-check\s*\{[^}]*height:\s*24px/.test(cssText2), '.src-check 高度应为 24px');
+    assert(cssText2.indexOf('pointer:coarse') >= 0 || cssText2.indexOf('pointer: coarse') >= 0, '应有粗指针媒体查询(40×40 目标)');
+
+    // 浮层宽度模型: 取消固定 min-width(320px 视口会溢出), 上限由 min() 承担
+    // 注: 原来只查全文是否有 `min-width: 0;` —— 任何一处写了就通过, 于是 #notesPopup/#sourcePopup
+    //     后来各自加了固定 min-width 也没被发现(QA 修正为逐浮层断言)
+    const cssSrc3 = fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'reader.css'), 'utf8');
+    // 断言前必须去注释: 注释里解释了"以前是 min-width:380px", 不去注释会把自己讲道理的文本当成声明
+    const cssNoComments = cssSrc3.replace(/\/\*[\s\S]*?\*\//g, '');
+    assert(cssNoComments.indexOf('max-width: min(560px, calc(100vw - var(--menu-w, 48px) - 32px))') >= 0,
+      '浮层 max-width 应由视口宽度承担上限');
+    assert(cssNoComments.indexOf('min-width: 380px') < 0, '不应再有写死的 min-width:380px');
+    for (const popupId of ['#shelfPopup', '#storagePopup', '#notesPopup', '#sourcePopup', '#historyPopup']) {
+      const rule = new RegExp('\\' + popupId + '[^{]*\\{([^}]*)\\}', 'g');
+      let m;
+      while ((m = rule.exec(cssNoComments)) !== null) {
+        const minWidth = /min-width:\s*([^;]+);/.exec(m[1]);
+        if (!minWidth) { continue; }
+        const value = minWidth[1].trim();
+        assert(/^(0|0px|none|auto)$/.test(value),
+          popupId + ' 不该声明固定 min-width(' + value + '): 它会盖过 ≤576px 的 width, 窄屏被顶出视口');
+      }
+    }
+
+    // 字号解耦: --ui-font 是固定值, 不再由 --font-size 推导(R4-01)
+    // happy-dom 没有完整的 CSS 变量计算, 因此这里查"源声明"是否已固定:
+    //   :root{--ui-font:14px} 且全文不再出现 calc(var(--font-size) ...) 的 UI 字号推导
+    const cssSrc2 = fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'reader.css'), 'utf8');
+    assert(cssSrc2.indexOf('--ui-font: 14px') >= 0, '--ui-font 应固定为 14px');
+    assert(cssSrc2.indexOf('--ui-font-sub: 12px') >= 0, '--ui-font-sub 应固定为 12px');
+    // 只允许"正文纸面"与"切章骨架"跟随阅读字号, 且必须**恰好**是这两条规则。
+    // (旧写法是 length <= 2: 少一条也能过, 例如正文的 font-size 被误删仍绿; 这里收紧成白名单)
+    const READER_FONT_OWNERS = ['#content', '.chapter-skeleton'];
+    const lines2 = cssSrc2.split('\n');
+    const owners = [];
+    for (let i = 0; i < lines2.length; i += 1) {
+      const line = lines2[i];
+      if (line.indexOf('font-size') < 0 || line.indexOf('var(--font-size)') < 0) { continue; }
+      // 往回找最近的一条"以 { 结尾"的选择器行
+      let sel = '(unknown)';
+      for (let j = i - 1; j >= 0 && j > i - 12; j -= 1) {
+        const prev = lines2[j].trim();
+        if (!prev || prev.charAt(0) === '/' || prev.charAt(0) === '*') { continue; }
+        if (prev.slice(-1) === '{') { sel = prev.slice(0, -1).trim(); break; }
+        if (prev.indexOf('{') >= 0) { sel = prev.split('{')[0].trim() || sel; break; }
+      }
+      owners.push(sel);
+    }
+    assert.strictEqual(owners.length, READER_FONT_OWNERS.length,
+      '跟随 --font-size 的规则应恰好 ' + READER_FONT_OWNERS.length + ' 条, 实际 ' + owners.length + ': ' + JSON.stringify(owners));
+    for (const want of READER_FONT_OWNERS) {
+      assert(owners.indexOf(want) >= 0,
+        '缺少「' + want + '」的 font-size: var(--font-size)（正文/骨架必须跟随阅读字号）');
+    }
+    for (const got of owners) {
+      assert(READER_FONT_OWNERS.indexOf(got) >= 0,
+        '面板规则「' + got + '」不得由 --font-size 推导字号（只允许正文纸面与切章骨架）');
+    }
+  }
+  console.log('无障碍与键盘语义(dialog/aria-current/笔记模式 roving/主题单选/字号解耦): 通过');
 
   console.log('\n阅读面板 Vue 冒烟测试全部通过 ✔');
   process.exit(0);

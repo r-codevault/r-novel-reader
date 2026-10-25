@@ -98,12 +98,14 @@ const { SettingsStore } = require('../dist/settings.js');
     // ---------- v1.35.4: 位置记忆 ----------
     const lastChapter = () => posted.filter((m) => m.type === 'chapter').slice(-1)[0];
 
-    // 在第2章读到 70%(模拟滚动上报), 再「上一章」回第1章应落底部
+    // 在第2章读到 70%(模拟滚动上报), 再「上一章」回第1章: 第1章没有位置记忆 -> 回顶部。
+    // (旧实现"上一章一律落底部", 现实现是"统一恢复该章的阅读记录位置, 无记录回 0",
+    //  两者对"没读过的上一章"结果不同, 这里按现实现对齐)
     for (const fn of listeners) { fn({ type: 'getChapter', index: 2 }); }
     await new Promise((r) => setTimeout(r, 30));
     for (const fn of listeners) { fn({ type: 'getChapter', index: 1, dir: 'prev', curRatio: 0.7 }); }
     await new Promise((r) => setTimeout(r, 30));
-    assert(lastChapter().payload.scrollRatio === 1, '上一章应落在底部(scrollRatio=1)');
+    assert(lastChapter().payload.scrollRatio === 0, '没有位置记忆的上一章应回顶部(scrollRatio=0)');
 
     for (const fn of listeners) { fn({ type: 'saveProgress', chapterIndex: 1, scrollRatio: 0.7 }); }
     // 切到第3章再切回第2章 → 应恢复 70%
@@ -121,6 +123,6 @@ const { SettingsStore } = require('../dist/settings.js');
     await new Promise((r) => setTimeout(r, 30));
     assert(lastChapter().payload.scrollRatio === 0, '没有位置记忆的章节应回顶部');
 
-    console.log('扩展侧 getChapter 消息路径 + 位置记忆(prev落底/切回恢复比例/无记忆回顶): 全部通过 ✔');
+    console.log('扩展侧 getChapter 消息路径 + 位置记忆(无记忆的上一章回顶/切回恢复比例/无记忆章节回顶): 全部通过 ✔');
     process.exit(0);
 })().catch((e) => { console.error('FAIL:', e.message); process.exit(1); });

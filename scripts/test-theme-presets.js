@@ -9,6 +9,7 @@
  *   5. 危险色 ≥4.5:1
  *   6. 三级背景台阶：纸面 → 面板 → 留白，逐级 ≥1.05 / ≥1.08
  *   7. contrastRatio 支持 8 位 hex 与 alpha 合成（否则 muted 会被当成黑色假通过）
+ *   8. dangerFg 对 danger ≥4.5:1、success 对 chromeBg ≥4.5:1（R10-01/02）
  */
 'use strict';
 const assert = require('assert');
@@ -25,7 +26,7 @@ Module._load = function (request, parent, isMain) {
 const { THEMES, contrastRatio, themeById } = require('../dist/settings');
 
 const REQUIRED = ['bg', 'fg', 'pageBg', 'chromeBg', 'chromeBorder', 'borderStrong',
-  'accent', 'accentFg', 'muted', 'panelHover', 'danger', 'shadow'];
+  'accent', 'accentFg', 'muted', 'panelHover', 'danger', 'shadow', 'dangerFg', 'success'];
 const failures = [];
 
 assert.strictEqual(THEMES.length, 7, '应有 7 套预设主题');
@@ -45,6 +46,8 @@ for (const t of THEMES) {
   const border = contrastRatio(t.borderStrong, t.chromeBg);
   const soft = contrastRatio(t.chromeBorder, t.chromeBg);
   const danger = contrastRatio(t.danger, t.bg);
+  const dangerFg = contrastRatio(t.dangerFg, t.danger);
+  const success = contrastRatio(t.success, t.chromeBg);
   const step1 = contrastRatio(t.bg, t.chromeBg);
   const step2 = contrastRatio(t.chromeBg, t.pageBg);
 
@@ -56,6 +59,8 @@ for (const t of THEMES) {
   if (border < 3) { failures.push(`${t.name} 控件边框 ${border.toFixed(2)} < 3`); }
   if (soft < 1.3) { failures.push(`${t.name} 装饰线 ${soft.toFixed(2)} < 1.3`); }
   if (danger < 4.5) { failures.push(`${t.name} 危险色 ${danger.toFixed(2)} < 4.5`); }
+  if (dangerFg < 4.5) { failures.push(`${t.name} 危险底色上的文字 ${dangerFg.toFixed(2)} < 4.5`); }
+  if (success < 4.5) { failures.push(`${t.name} 成功状态文字 ${success.toFixed(2)} < 4.5`); }
   if (step1 < 1.05) { failures.push(`${t.name} 纸面/面板台阶 ${step1.toFixed(2)} < 1.05`); }
   if (step2 < 1.08) { failures.push(`${t.name} 面板/留白台阶 ${step2.toFixed(2)} < 1.08`); }
 }

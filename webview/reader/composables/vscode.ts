@@ -16,6 +16,50 @@ export interface ChapterPayload {
   totalChapters: number;
   chapterWords: number;
   scrollRatio: number;
+  /**
+   * 归属标识(= 书架 filePath)。在线书为 `online://<sourceId>/<hash>`。
+   * 老宿主可能不带此字段 -> 宽松模式下仍按旧行为应用。
+   */
+  filePath?: string;
+  /** 宿主单调递增的请求号(区分同书重试产生的两轮) */
+  reqId?: number;
+}
+
+/** 下载任务(任务表一行) */
+export interface DownloadTaskView {
+  filePath: string;
+  bookTitle: string;
+  done: number;
+  total: number;
+  failed: number;
+  running: boolean;
+  paused: boolean;
+  updatedAt: number;
+}
+
+/** 写操作终态回包 */
+export interface OpResultPayload {
+  opId: string;
+  op: string;
+  ok: boolean;
+  message?: string;
+  detail?: Record<string, number>;
+}
+
+/** 确认框模型(同一时刻只允许一个) */
+export interface ConfirmModel {
+  title: string;
+  /** 结构化明细: 数量 / 对象名 / 章节范围 / 占用空间 / 是否可恢复 */
+  lines: string[];
+  danger: boolean;
+  confirmText: string;
+  cancelText?: string;
+  op: string;
+  opId: string;
+  /** 执行时原样回传给宿主的参数(filePaths / ids / planId…) */
+  payload: Record<string, unknown>;
+  /** 失败时是否保留选择与草稿(危险批量操作 = true) */
+  keepContextOnFail?: boolean;
 }
 
 export interface NovelInfo {
@@ -37,6 +81,39 @@ export interface ShelfItemView {
   chapterIndex: number;
   totalChapters: number;
   current: boolean;
+  /** 是否在线书 */
+  online?: boolean;
+  /** 在线书来源名 */
+  sourceName?: string;
+  /** 在线书原始 bookUrl(搜索结果的"已加入/移出"靠它对上书架记录) */
+  onlineBookUrl?: string;
+  /** 离线下载进度(有下载内容时才有) */
+  offline?: { done: number; total: number };
+}
+
+/** 离线下载状态(与扩展侧 OfflineStatusView 一一对应) */
+export interface OfflineStatusView {
+  filePath: string;
+  total: number;
+  done: number;
+  failed: number;
+  running: boolean;
+  paused: boolean;
+  /** 已下载章号(升序) */
+  downloaded: number[];
+  bytes: number;
+  totalBytes: number;
+  bookCount: number;
+}
+
+/** 目录每章标记(与扩展侧 ChapterMarksView 一一对应) */
+export interface ChapterMarksView {
+  /** 临时读缓存里已有的章号(断网可读, 但删书架/清缓存会没) */
+  cached: number[];
+  /** 读过并留有位置记忆的章号 */
+  read: number[];
+  /** 读到的最大章号; -1 = 还没开始 */
+  readUpTo: number;
 }
 
 /** 阅读笔记(与扩展端 NoteItem 一一对应) */
@@ -234,6 +311,8 @@ export const state = reactive({
   searchCancelled: false,
   /** 拖动分隔条后的当前区行数; null = 自动分配 */
   splitCurrentRows: null as null | number,
+  /** 预览书「加入书架」请求进行中(按钮置灰 + 文案变「加入中…」) */
+  previewAddPending: false,
   /** 已加入在线书架的 bookUrl(搜索结果按钮状态) */
   onlineAdded: [] as string[],
   /** 正在加入书架的 bookUrl */
@@ -271,6 +350,70 @@ export const state = reactive({
   },
   /** 书源管理: 正在编辑的 sourceId(空 = 无) */
   sourceEditingId: '',
+  // ---- 离线下载
+  /** 当前书的离线状态(没有下载过 = null) */
+  offline: null as OfflineStatusView | null,
+  /** 全部离线缓存汇总 */
+  offlineStats: { bytes: 0, books: 0 },
+  /** 目录面板的下载范围行是否展开 */
+  dlRowOpen: false,
+  /** 本轮下载进度(范围内的 done/total; 与 offline.total=全书章数 区分) */
+  dlRun: null as null | { done: number; total: number; failed: number; running: boolean; paused: boolean },
+  /** 上次导出结果提示(短暂展示) */
+  dlNotice: '',
+  /** 目录每章标记(临时缓存 / 已读); readUpTo 随阅读推进在本地更新 */
+  marks: { cached: [] as number[], read: [] as number[], readUpTo: -1 } as ChapterMarksView,
+  /** 目录筛选: all=全部 / offline=已下载 / cache=仅缓存 / none=需联网 */
+  catFilter: 'all' as 'all' | 'offline' | 'cache' | 'none',
+  // ---- 归属协议(见 src/protocol.ts)
+  /** 宿主在 init 里声明 protocolVersion>=2 时置 true: 缺 filePath 的回包一律拒绝 */
+  ownershipStrict: false,
+  /** 已接受的最大章节请求号(reqId 回退即丢弃, 兜底防串书) */
+  chapterReqSeq: 0,
+  /** 下载任务表: 按 filePath 键的全局视图(与"当前书"无关) */
+  downloadTasks: {} as Record<string, DownloadTaskView>,
+  /** 进行中的写操作(opId -> 元数据): 存在即禁用按钮, 防重复提交 */
+  pendingOps: {} as Record<string, { op: string; at: number }>,
+  /** webview 侧自增的写操作序号 */
+  opSeq: 0,
+  /** 写操作失败的就地提示(role=alert) */
+  opError: '',
+  /**
+   * 最近一次写操作终态广播。
+   * 各面板 watch 它来决定"退出管理态/清空选择"还是"保留选择 + 就地报错"——
+   * 面板的 managing/selected 是组件局部状态, App 不能直接改, 只能广播。
+   */
+  lastOp: null as null | { opId: string; op: string; ok: boolean; message: string; at: number },
+  // ---- 键盘与笔记模式
+  /** 笔记本模式: 开启后全量段落笔记按钮可见且可聚焦 */
+  noteMode: false,
+  /** roving tabindex 停靠段落下标 */
+  noteParaCursor: 0,
+  // ---- 搜索终态
+  /** 失败明细区是否展开 */
+  searchErrorOpen: false,
+  /** 单源重试状态(sourceId 键) */
+  sourceRetries: {} as Record<string, { running: boolean; ok?: boolean; message?: string }>,
+  /** sr-only live region 的节流播报文案 */
+  searchAnnounce: '',
+  /** 统一确认框(浮层内的确认层, 不参与弹窗互斥) */
+  confirm: null as ConfirmModel | null,
+  // ---- 刷新书架(预演 -> 确认 -> 执行)
+  /** 宿主下发的预演计划(确认框要展示它, 执行时要回传 planId) */
+  shelfPlan: null as null | {
+    planId: number;
+    dir: string;
+    scanned: number;
+    add: unknown[];
+    skipDuplicate: unknown[];
+    merge: unknown[];
+    retitle: unknown[];
+    prune: { filePath: string; title: string }[];
+    inaccessible: { filePath: string; reason: string }[];
+    warnings: string[];
+  },
+  /** 刷新书架的终态提示(计数摘要 + 差异说明) */
+  shelfNotice: '',
 });
 
 /** 发消息给扩展(自由格式, 字段与协议一一对应) */
@@ -293,7 +436,67 @@ export function gotoChapter(index: number, dir?: 'prev' | 'next' | 'jump', exact
     curRatio: currentScrollRatio(),
     // 笔记「返回阅读位置」要求精确落点, 优先于扩展侧的记忆比例
     exactRatio: typeof exactRatio === 'number' ? exactRatio : undefined,
+    // 归属: 让宿主能核对"这条跳转属于哪本书"(切书瞬间的在途请求)
+    curBook: currentBookKey(),
   });
+}
+
+/** 当前书的归属键(= 书架 filePath)。空态占位书为空字符串。 */
+export function currentBookKey(): string {
+  return (state.novel && state.novel.filePath) || '';
+}
+
+/**
+ * 归属校验: 一条异步回包是否属于当前这本书。
+ *
+ * 严格模式(宿主声明 protocolVersion>=2)下**缺归属字段即拒绝**:
+ * 这样"宿主发了但漏填 filePath"的回归会在开发期立刻暴露, 而不是变成串书。
+ * 宽松模式(老宿主)下缺字段照旧应用, 只 warn —— 避免"宿主更新 / dist-webview
+ * 未重建"时整页白屏。
+ */
+export function ownedBy(msg: { filePath?: string }, tag: string): boolean {
+  const cur = currentBookKey();
+  if (!msg.filePath) {
+    if (state.ownershipStrict) {
+      console.warn('[reader] 拒绝无归属回包', tag);
+      return false;
+    }
+    return true;
+  }
+  if (msg.filePath !== cur) {
+    console.warn('[reader] 丢弃异书回包', tag, msg.filePath, cur);
+    return false;
+  }
+  return true;
+}
+
+/** 生成本次写操作的 opId(webview 侧唯一编号, 宿主原样回传) */
+export function newOpId(): string {
+  state.opSeq += 1;
+  return 'op' + state.opSeq + '-' + Date.now().toString(36);
+}
+
+/** 标记写操作进行中(按钮据此禁用, 防重复提交) */
+export function markOpPending(opId: string, op: string): void {
+  state.pendingOps[opId] = { op, at: Date.now() };
+  state.opError = '';
+}
+
+/** 结束写操作(成功/失败都要清, 否则按钮永久禁用) */
+export function clearOpPending(opId: string): void {
+  const next: Record<string, { op: string; at: number }> = {};
+  for (const key of Object.keys(state.pendingOps)) {
+    if (key !== opId) { next[key] = state.pendingOps[key]; }
+  }
+  state.pendingOps = next;
+}
+
+/** 是否有该 op 的写操作在进行中(用于批量按钮 disabled) */
+export function opRunning(prefix: string): boolean {
+  for (const key of Object.keys(state.pendingOps)) {
+    if (state.pendingOps[key].op === prefix) { return true; }
+  }
+  return false;
 }
 
 /** 打开笔记浮层(与其它抽屉互斥由 App 统一处理) */

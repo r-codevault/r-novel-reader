@@ -49,6 +49,12 @@ for (const t of SOLAR_TERMS) {
   if (accentFg < 4.5) { failures.push(`${t.name} 强调色上的文字 ${accentFg.toFixed(2)} < 4.5`); }
   if (borderStrong < 3) { failures.push(`${t.name} 控件边框 ${borderStrong.toFixed(2)} < 3`); }
   if (danger < 4.5) { failures.push(`${t.name} 危险色 ${danger.toFixed(2)} < 4.5`); }
+  if (contrastRatio(theme.dangerFg, theme.danger) < 4.5) {
+    failures.push(`${t.name} 危险底色上的文字 ${contrastRatio(theme.dangerFg, theme.danger).toFixed(2)} < 4.5`);
+  }
+  if (contrastRatio(theme.success, theme.chromeBg) < 4.5) {
+    failures.push(`${t.name} 成功状态文字 ${contrastRatio(theme.success, theme.chromeBg).toFixed(2)} < 4.5`);
+  }
 }
 assert.deepStrictEqual(failures, [], '存在不达标的节气:\n  ' + failures.join('\n  '));
 

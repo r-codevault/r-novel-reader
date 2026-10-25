@@ -46,8 +46,13 @@ export interface ReadingSettings {
   shortcutNext: string;
   /** 是否显示底部状态栏(默认显示; 由侧边菜单「状态栏」项切换) */
   showStatusBar: boolean;
-  /** 正文两侧上/下一章箭头: always 常驻(默认) / hover 鼠标移到箭头区域才显示 */
-  sideNavMode: "always" | "hover";
+  /**
+   * 正文两侧上/下一章箭头:
+   *  - always 常驻
+   *  - hover  平时隐形, 鼠标移到箭头区域才淡入(默认: 不跟正文抢注意力)
+   *  - hidden 完全不渲染(纯键盘/底部导航的用户)
+   */
+  sideNavMode: "always" | "hover" | "hidden";
   /** 重开 VS Code 时是否恢复上次打开的阅读页(关闭则丢弃 VS Code 恢复的阅读页 Tab) */
   restoreOnStartup: boolean;
   /** 正文栏宽: 视口宽度比例(0 = 关闭, 使用 contentWidth 的像素值) */
@@ -85,6 +90,17 @@ export interface ThemeDef {
   panelHover: string;
   /** 危险操作色(删除等), 对 bg ≥4.5:1 */
   danger: string;
+  /**
+   * 危险底色上的**文字色**: 对 `danger` ≥4.5:1。
+   * 浅色主题的 danger 是深红 → 配白字; 黑夜的 danger 是浅粉 → 配近黑字。
+   * 以前 CSS 里硬编码 `color:#fff`, 黑夜主题的「删除」按钮文字只有 ≈1.7:1。
+   */
+  dangerFg: string;
+  /**
+   * 成功状态文字色: 对 `chromeBg` ≥4.5:1（按各主题单独校准）。
+   * 以前用 `var(--charts-green, #2ea043)` 兜底, 深色主题上根本读不清。
+   */
+  success: string;
   /** 浮层/纸面投影颜色(深色主题需更重, 否则投影不可见) */
   shadow: string;
   /** 深色主题: 明度推导方向相反 */
@@ -108,7 +124,11 @@ export interface FontDef {
 //  - 背景拆成三级台阶: 纸面 bg → 侧栏 chromeBg → 留白 pageBg, 逐级变暗;
 //  - 边框拆成两支: chromeBorder(装饰, ~1.55:1) 与 borderStrong(控件边界, ≥3:1);
 //  - 新增 danger / shadow, 让删除色与投影也跟随主题。
-export const THEMES: ThemeDef[] = [
+/**
+ * 7 套预设的"原始色板"。dangerFg / success 由下面的 map 逐主题算出来,
+ * 不在这里手写 —— 手写 7×2 个值最容易在调色时漏改其中一套（PRD Q7/Q8、R10）。
+ */
+const PRESET_RAW: Omit<ThemeDef, "dangerFg" | "success">[] = [
   {
     id: "white",
     name: "纯净白",
@@ -224,8 +244,18 @@ export const THEMES: ThemeDef[] = [
   },
 ];
 
-export const FONTS: FontDef[] = [
-  {
+/**
+ * 7 套预设主题(对外只暴露这个)。dangerFg / success 在这里逐主题校准:
+ *  - dangerFg 取「白字对 danger ≥4.5:1」否则近黑 —— 黑夜主题的 danger 是浅粉, 必须配深字;
+ *  - success 以 chromeBg(侧栏/面板, 最亮的台面)为基准调到达标。
+ */
+export const THEMES: ThemeDef[] = PRESET_RAW.map(function (t) {
+  const dangerFg = contrastRatio("#ffffff", t.danger) >= 4.5 ? "#ffffff" : "#191919";
+  const success = ensureContrast(t.isDark ? "#5fd08a" : "#1f7a3d", t.chromeBg, 4.5);
+  return { ...t, dangerFg, success };
+});
+
+export const FONTS: FontDef[] = [  {
     id: "system",
     name: "系统默认",
     stack:
@@ -268,7 +298,7 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
   shortcutPrev: "alt+arrowleft",
   shortcutNext: "alt+arrowright",
   showStatusBar: true,
-  sideNavMode: "always",
+  sideNavMode: "hover",
 
   // 默认 true: 上次退出时阅读页开着, 重开窗口就原样恢复(章节+章内位置)。
   // 与"启动自动弹窗"无关 —— 全新窗口没有可恢复的 Tab, 压根不会走恢复流程。
@@ -362,7 +392,7 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
   if (typeof s.showStatusBar === "boolean") {
     out.showStatusBar = s.showStatusBar;
   }
-  if (s.sideNavMode === "always" || s.sideNavMode === "hover") {
+  if (s.sideNavMode === "always" || s.sideNavMode === "hover" || s.sideNavMode === "hidden") {
     out.sideNavMode = s.sideNavMode;
   }
   if (typeof s.fontSize === "number") {
@@ -698,8 +728,10 @@ function pickRepresentative(colors: { hex: string }[]): { hex: string } {
  * 把颜色推到与目标底色的对比度达标。
  * 方向自动判断: 底色偏暗就提亮, 偏亮就压暗 —— 深色主题的边框必须比底更亮,
  * 否则沿用"只压暗"的旧逻辑会得到一个几乎看不见的近黑线。
+ *
+ * 导出为公共能力: 派生主题的 dangerFg/success 也要用它逐主题校准（R10）。
  */
-function ensureContrast(fg: string, bg: string, target: number): string {
+export function ensureContrast(fg: string, bg: string, target: number): string {
   if (contrastRatio(fg, bg) >= target) {
     return fg;
   }
@@ -746,6 +778,9 @@ function paintTheme(repHex: string, name: string, id: string): ThemeDef {
   const accent = ensureContrast(repHex, pageBg, 4.5);
   const accentFg = contrastRatio("#ffffff", accent) >= 4.5 ? "#ffffff" : "#191919";
   const danger = ensureContrast("#b3261e", bg, 4.5);
+  // 危险文字色与成功色同样逐主题算: 58 套派生主题的底色差异很大, 写死必然有不可读的组合
+  const dangerFg = contrastRatio("#ffffff", danger) >= 4.5 ? "#ffffff" : "#191919";
+  const success = ensureContrast("#1f7a3d", chromeBg, 4.5);
   return {
     id,
     name,
@@ -760,6 +795,8 @@ function paintTheme(repHex: string, name: string, id: string): ThemeDef {
     muted,
     panelHover: hslToHex(h, 0.18, 0.9),
     danger,
+    dangerFg,
+    success,
     shadow: "rgba(0,0,0,.13)",
   };
 }
@@ -809,6 +846,8 @@ function paintFestivalNight(repHex: string, accentHex: string, name: string, id:
   const accent = ensureContrast(accentHex, chromeBg, 4.5);
   const accentFg = contrastRatio("#161310", accent) >= 4.5 ? "#161310" : "#ffffff";
   const danger = ensureContrast("#ff9d93", bg, 4.5);
+  const dangerFg = contrastRatio("#ffffff", danger) >= 4.5 ? "#ffffff" : "#191919";
+  const success = ensureContrast("#5fd08a", chromeBg, 4.5);
   return {
     id,
     name,
@@ -823,6 +862,8 @@ function paintFestivalNight(repHex: string, accentHex: string, name: string, id:
     muted,
     panelHover: hslToHex(h, 0.12, 0.22),
     danger,
+    dangerFg,
+    success,
     shadow: "rgba(0,0,0,.55)",
     isDark: true,
   };

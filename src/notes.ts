@@ -171,6 +171,19 @@ export class NotesStore {
         });
     }
 
+    /** 批量删除(按 id); @returns 实际删除条数 */
+    async removeMany(ids: string[]): Promise<number> {
+        const set = new Set((ids || []).filter((id) => typeof id === 'string' && !!id));
+        if (!set.size) { return 0; }
+        return this._enqueue(async () => {
+            const items = this._read();
+            const next = items.filter((n) => !set.has(n.id));
+            const removed = items.length - next.length;
+            if (removed > 0) { await this._write(next); }
+            return removed;
+        });
+    }
+
     /** 清空某本书的笔记 */
     async removeByBook(bookPath: string): Promise<number> {
         return this._enqueue(async () => {

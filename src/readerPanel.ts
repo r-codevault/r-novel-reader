@@ -9,7 +9,7 @@
  */
 
 import * as vscode from 'vscode';
-import { isOnlinePath } from './onlinePath';
+import { isOnlinePath, type OnlineRef } from './onlinePath';
 import * as crypto from 'crypto';
 import { Novel, parseNovel } from './novelParser';
 import { decodeBuffer } from './encoding';
@@ -22,6 +22,21 @@ import type { HistoryPayload } from './history';
 import type { SearchBookItem } from './online/ruleApply';
 import type { SearchBatch, SearchProgress, SourceSearchError } from './online/searchService';
 import { SearchControl } from './online/searchService';
+import {
+    PROTOCOL_VERSION,
+    type ChapterCachedPayload,
+    type ChapterErrorPayload,
+    type ChapterLoadingPayload,
+    type ChapterPayload,
+    type DownloadDonePayload,
+    type DownloadProgressPayload,
+    type DownloadTaskView,
+    type DownloadTasksPayload,
+    type OpKind,
+    type OpResultPayload,
+    type ShelfRefreshPlan,
+    type ShelfRefreshResult,
+} from './protocol';
 
 interface InitPayload {
     filePath: string;
@@ -50,16 +65,15 @@ interface InitPayload {
     sources: BookSourceView[];
     /** 在线书元信息(本地书为空) */
     online?: { sourceName: string; bookUrl: string; preview?: boolean };
-}
-
-interface ChapterPayload {
-    index: number;
-    title: string;
-    paragraphs: string[];
-    totalChapters: number;
-    /** 本章字数 */
-    chapterWords: number;
-    scrollRatio: number;
+    /** 本书的离线下载状态(没有下载过则为空) */
+    offline?: OfflineStatusView;
+    /**
+     * 协议版本号。webview 据此决定归属校验是"严格"还是"宽松":
+     * 只有宿主显式声明 >= PROTOCOL_VERSION 时才要求每条回包都带 filePath。
+     */
+    protocolVersion?: number;
+    /** 全局下载任务表快照(webview 任务表, 按 filePath 键) */
+    downloadTasks?: DownloadTaskView[];
 }
 
 type WebviewMessage =
@@ -72,16 +86,24 @@ type WebviewMessage =
     | { type: 'slackerStart' }
     // 左抽屉(书架/目录/存储)动作
     | { type: 'openBook'; filePath: string }
-    | { type: 'removeBook'; filePath: string }
+    | { type: 'removeBook'; filePath: string; opId?: string }
+    // 批量操作(书架多选移除 / 历史多选删除、清空)
+    | { type: 'removeBooks'; filePaths: string[]; opId?: string }
+    | { type: 'removeHistory'; filePaths: string[]; opId?: string }
+    | { type: 'clearHistory'; kind: 'local' | 'online'; opId?: string }
     | { type: 'pickLibrary' }
     | { type: 'clearLibrary' }
     | { type: 'openLibraryFolder' }
-    | { type: 'refreshLibrary' }
+    | { type: 'refreshLibrary'; opId?: string }
+    // 刷新书架: 预演 -> 确认 -> 执行(两阶段, planId 校验)
+    | { type: 'refreshLibraryPreview'; opId?: string }
+    | { type: 'refreshLibraryApply'; planId: number; opId?: string }
     // 阅读笔记
     | { type: 'addNote'; chapterTitle: string; chapterIndex: number; paragraphIndex: number; quote: string; text: string }
     | { type: 'updateNote'; id: string; text: string }
     | { type: 'removeNote'; id: string }
-    | { type: 'removeNoteGroup'; bookPath: string; chapterTitle?: string }
+    | { type: 'removeNotes'; ids: string[]; opId?: string }
+    | { type: 'removeNoteGroup'; bookPath: string; chapterTitle?: string; opId?: string }
     | { type: 'requestNotes' }
     // 网络书源
     | { type: 'requestSources' }
@@ -89,6 +111,8 @@ type WebviewMessage =
     | { type: 'sourceSearch'; key: string; sourceIds?: string[]; token: number }
     | { type: 'sourceSearchPause'; token: number; paused: boolean }
     | { type: 'sourceSearchCancel'; token: number }
+    /** 单源重试: 独立消息, 避免整体替换其它源的结果(D15) */
+    | { type: 'sourceRetry'; reqId: number; sourceId: string; key: string }
     | { type: 'addOnlineBook'; item: SearchBookItem }
     | { type: 'previewOnlineBook'; item: SearchBookItem }
     | { type: 'previewAddToShelf' }
@@ -105,7 +129,16 @@ type WebviewMessage =
     | { type: 'sourceRevive'; id: string }
     | { type: 'sourceReviveMany'; ids?: string[] }
     | { type: 'sourceClearDead' }
-    | { type: 'sourceSetEnabled'; patches: { id: string; enabled: boolean }[] };
+    | { type: 'sourceSetEnabled'; patches: { id: string; enabled: boolean }[] }
+    // 离线下载 / 缓存
+    | { type: 'offlineStatus' }
+    | { type: 'downloadStart'; start?: number; end?: number; filePath?: string }
+    | { type: 'downloadPause'; filePath?: string }
+    | { type: 'downloadResume'; filePath?: string }
+    | { type: 'downloadCancel'; filePath?: string }
+    | { type: 'offlineExportTxt'; opId?: string }
+    | { type: 'offlineClearCurrent'; opId?: string }
+    | { type: 'offlineClearAll'; opId?: string };
 
 /** 窗口重开时的恢复信息(VS Code 持久化 webview 状态用) */
 export interface ReaderPanelState {
@@ -124,11 +157,78 @@ export interface ShelfItemView {
     online?: boolean;
     /** 在线书来源名 */
     sourceName?: string;
+    /**
+     * 在线书的原始 bookUrl。
+     * 用于搜索结果行判断"是否已加入书架"以及反查书架记录做移出——
+     * 书架快照里只有 filePath(online://伪路径), 不能直接和 bookUrl 对上。
+     */
+    onlineBookUrl?: string;
     /** 最后阅读章节序号, -1 表示未开始 */
     chapterIndex: number;
     totalChapters: number;
     /** 是否为当前打开的书 */
     current: boolean;
+    /** 这本书的离线下载进度(有下载内容时才有) */
+    offline?: { done: number; total: number };
+}
+
+/** 离线下载状态(目录面板/存储面板渲染用) */
+export interface OfflineStatusView {
+    filePath: string;
+    /** 目录总章数 */
+    total: number;
+    /** 已下载章数 */
+    done: number;
+    /** 上次下载失败的章数(续传会自动重试) */
+    failed: number;
+    running: boolean;
+    paused: boolean;
+    /** 已下载章号(升序), 目录里点亮圆点用 */
+    downloaded: number[];
+    /** 本书离线占用字节 */
+    bytes: number;
+    /** 全部离线缓存合计字节 */
+    totalBytes: number;
+    /** 全部离线缓存书目数 */
+    bookCount: number;
+}
+
+/**
+ * 目录里每章的可用性/阅读标记(只在在线书上使用)。
+ * 用来一眼看出「哪些章没网也能读」:
+ *  - cached  临时读缓存(读过就自动存), 删书架/清缓存后会没
+ *  - 主动下载的章走 OfflineStatusView.downloaded(永久, 删书架可选保留)
+ */
+export interface ChapterMarksView {
+    /** 临时读缓存里已有的章号(升序) */
+    cached: number[];
+    /** 读过并留有章内位置记忆的章号(升序) */
+    read: number[];
+    /** 读到的最大章号; -1 = 还没开始(与状态栏「读至第 N 章」同一口径) */
+    readUpTo: number;
+}
+
+/** 离线下载能力接口(插件入口注入) */
+export interface OfflineApi {
+    /** 全部离线缓存汇总 */
+    stats(): { bytes: number; books: number };
+    /** 同步读内存快照(首帧/请求状态时用) */
+    status(): OfflineStatusView | undefined;
+    /**
+     * 开始下载。
+     * `filePath` 为显式目标书（= 在线书 `online://` 键）；缺省表示"当前这本书"。
+     * 显式传 key 是为了让"书架里对 A 发起下载，随后切到 B"仍然下的是 A。
+     */
+    start(range?: { start?: number; end?: number }, filePath?: string): Promise<{ ok: boolean; message?: string }>;
+    /** 暂停/继续/取消：**必须按 key**，不能依赖"当前书" */
+    pause(key?: string): boolean;
+    resume(key?: string): boolean;
+    cancel(key?: string): void;
+    exportTxt(): Promise<{ ok: boolean; message?: string; filePath?: string; chapters?: number; missing?: number }>;
+    clearCurrent(key?: string): Promise<void>;
+    clearAll(): Promise<void>;
+    /** 全部下载任务快照(webview 任务表; 与"当前书"无关) */
+    tasks(): DownloadTaskView[];
 }
 
 /** 左抽屉页签 */
@@ -186,6 +286,8 @@ export interface NotesApi {
     add(draft: NoteDraft, book: { bookPath: string; bookTitle: string }): Promise<NoteItem>;
     update(id: string, text: string): Promise<NoteItem | undefined>;
     remove(id: string): Promise<boolean>;
+    /** 批量删除(笔记「管理」多选) */
+    removeMany(ids: string[]): Promise<number>;
     removeByBook(bookPath: string): Promise<number>;
     removeByChapter(bookPath: string, chapterTitle: string): Promise<number>;
 }
@@ -197,6 +299,12 @@ export class ReaderPanel {
     public static onDidChangeChapter?: (index: number) => void;
     /** 设置变化(面板内改设置/重置后); 扩展用它把主题同步给侧边栏 */
     public static onDidChangeSettings?: (settings: ReadingSettings) => void;
+    /**
+     * 打开一本书(含同书重开 / 窗口恢复)后的钩子, 由插件入口注入。
+     * 用途: "打开即记阅读历史" —— 所有打开路径(本地/在线/预览/恢复/状态栏/抽屉)
+     * 都收敛到 createOrShow 与 restore 两个点, 不必在每个命令里各写一遍。
+     */
+    public static onOpen?: (novel: Novel, chapterIndex: number) => void;
     /** 阅读进度回调(由插件入口写入书架) */
     /**
  * 进度上报回调。**必须携带 filePath** —— 面板可能来自窗口恢复路径
@@ -222,6 +330,15 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
     public static onlineChapterLoader?: (novel: Novel, index: number) => Promise<string[]>;
     /** 窗口恢复时重建在线书(由插件入口注入) */
     public static onlineRestore?: (filePath: string) => Promise<Novel | null>;
+    /** 离线下载/缓存(由插件入口注入) */
+    public static offline?: OfflineApi;
+    /** 同步快照(init 首帧用; 由插件入口接内存索引) */
+    public static offlineView?: (filePath: string) => OfflineStatusView | undefined;
+    /**
+     * 目录的每章标记提供者(由插件入口注入)。
+     * init 是同步的, 读盘要走这里异步补一帧, 避免挡住首屏渲染。
+     */
+    public static chapterMarks?: (novel: Novel) => Promise<ChapterMarksView | null>;
     /** 视图就绪前的抽屉打开请求 */
     private static _pendingDrawer: DrawerTab | null = null;
 
@@ -238,8 +355,23 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
     private _pendingPreviewReady: string | null = null;
     private _pendingPreviewError: { message: string; bookUrl?: string } | null = null;
     private _lastPreviewReady = '';
-    /** 正在加载的在线章节序号 */
-    private readonly _loadingChapters = new Set<number>();
+    /**
+     * 书代号: 每次"换书"递增。用于判断一份异步回包是否还属于当前这本书。
+     * 单独用 `_novel.filePath` 比较是不够的 —— 同一本书打开两次(A → B → A)时
+     * filePath 相同, 但 A 的第一轮迟到回包不应该覆盖第三轮的正文。
+     */
+    private _bookGen = 1;
+    /** 面板级单调请求号: 章节/预览的每一轮请求都有唯一编号 */
+    private _reqSeq = 0;
+    /** 唯一活请求: 只有 reqId 与它一致的章节回包才允许投递 (I2) */
+    private _liveChapter: { reqId: number; gen: number; index: number } | null = null;
+    /** 在途请求(reqId -> 任务), 便于诊断与保证 finally 只清理自己的条目 */
+    private readonly _inflight = new Map<number, { gen: number; index: number }>();
+    /**
+     * 加载锁: `${gen}:${index}` -> reqId。
+     * 值存 reqId 而不是 boolean, 这样"重试产生的第二轮"不会被第一轮的 finally 解锁 (I3)。
+     */
+    private readonly _chapterLocks = new Map<string, number>();
     /** 当前运行中的搜索(暂停/取消用) */
     private _activeSearch: { token: number; control: SearchControl } | undefined;
     private _openSettingsOnLoad = false;
@@ -285,7 +417,11 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
                 // 兜底: 换书前把旧书当前章/位置落盘(webview 已 flush, 这里防其它入口漏掉)
                 ReaderPanel.onProgress?.(cur._novel.filePath, cur._chapterIndex, cur._scrollRatio);
                 cur._ratios.clear();
-                cur._loadingChapters.clear();
+                // 换书 = 新代号: 旧书所有在途回包从此不再属于本面板
+                cur._bookGen += 1;
+                cur._liveChapter = null;
+                cur._inflight.clear();
+                cur._chapterLocks.clear();
             }
             cur._novel = novel;
             cur._chapterIndex = Math.min(Math.max(0, chapterIndex), Math.max(0, novel.chapters.length - 1));
@@ -316,6 +452,7 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
                 cur._postInit();
             }
             cur._panel.reveal(column);
+            ReaderPanel.onOpen?.(novel, cur._chapterIndex);
             return;
         }
 
@@ -326,6 +463,7 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
         });
         ReaderPanel.current = new ReaderPanel(panel, novel, chapterIndex, scrollRatio, store);
         ReaderPanel.current._openSettingsOnLoad = openSettings;
+        ReaderPanel.onOpen?.(novel, ReaderPanel.current.chapterIndex);
     }
 
     /** 供 serializer 使用: 仅当传入的是当前面板时返回恢复信息 */
@@ -337,7 +475,8 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
 
     /** 窗口重开时保存给 VS Code 的恢复信息 */
     _serialize(): ReaderPanelState | undefined {
-        if (!this._novel) {
+        // 空态占位书(filePath 为空)不参与窗口恢复, 否则重开窗口会拿不到真书
+        if (!this._novel || !this._novel.filePath) {
             return undefined;
         }
         return {
@@ -409,6 +548,7 @@ public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio:
             const rawRatio = hasShelf ? shelved.scrollRatio : state.scrollRatio || 0;
             const scrollRatio = sameChapter && isFinite(rawRatio) ? Math.min(1, Math.max(0, rawRatio)) : 0;
             ReaderPanel.current = new ReaderPanel(panel, novel, idx, scrollRatio, store);
+            ReaderPanel.onOpen?.(novel, idx);
             return true;
         } catch {
             // 源文件被移动/删除: 不静默留一个坏面板
@@ -544,6 +684,41 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
         void this._panel.webview.postMessage({ type: 'previewError', message, bookUrl });
     }
 
+    /**
+     * 当前读的书被移出书架: 退回"预览态", 让正文里的「+ 加入书架」重新出现。
+     *
+     * @param filePath 被移出的书(online:// 伪路径)
+     * @param ref      移出前从书架记录里抓到的书源信息 —— 窗口恢复出来的 Novel
+     *                 可能没带完整 online 字段, 用它补全
+     * @returns 是否真的复位了(不是当前在读的书就返回 false)
+     */
+    static resetToPreview(filePath: string, ref?: OnlineRef): boolean {
+        const cur = ReaderPanel.current;
+        if (!cur || !cur._novel || cur._novel.filePath !== filePath) { return false; }
+        if (cur._novel.online) {
+            cur._novel.online.preview = true;
+        } else if (ref) {
+            cur._novel.online = {
+                sourceId: ref.sourceId,
+                sourceName: ref.sourceName,
+                bookUrl: ref.bookUrl,
+                tocUrl: ref.tocUrl,
+                preview: true,
+            };
+        } else {
+            return false;
+        }
+        cur.postPreviewReset(filePath);
+        return true;
+    }
+
+    /** 通知 webview: 这本书回到预览态(previewSaved 的反向) */
+    public postPreviewReset(filePath: string): void {
+        // 未就绪时不发: ready 之后的 _postInit 会把 online.preview 一起带下去
+        if (!this._ready) { return; }
+        void this._panel.webview.postMessage({ type: 'previewReset', filePath });
+    }
+
     /** 预览成功: webview 收到后才关闭搜索弹窗 */
     public postPreviewReady(bookUrl: string): void {
         if (!this._ready) {
@@ -565,6 +740,8 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
         this._activeSearch?.control.cancel();
         this._activeSearch = undefined;
         ReaderPanel.cancelSourceCheck?.();
+        // 离线下载**不**随面板关闭而取消: 用户关掉阅读页继续下载是合理预期,
+        // 下载队列挂在插件入口(extension 级), 这里只是不再有面板可推送进度。
         this._panel.dispose();
         for (const d of this._disposables) {
             d.dispose();
@@ -637,7 +814,8 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             case 'saveProgress':
                 // 进度交给插件入口写入书架(不再维护单独的 session);
                 // 连同 filePath 一起传, 窗口恢复出来的面板也能写到正确的书
-                if (this._novel) {
+                // 空态占位书(filePath 为空)跳过, 避免往书架/阅读历史里塞空记录
+                if (this._novel && this._novel.filePath) {
                     const ratio = Math.min(1, Math.max(0, msg.scrollRatio || 0));
                     // 如实记录当前位置(含顶部 0): 滚回顶部后离开也应回到顶部;
                     // 切章瞬间的旧位置上报已由 webview 侧抑制, 不会污染新章
@@ -709,6 +887,11 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                 void api.savePreview().then((res) => {
                     if (!res.ok) {
                         void vscode.window.showErrorMessage('加入书架失败: ' + (res.message || '未知原因'));
+                        // 回包给前端, 否则按钮会一直卡在「加入中…」
+                        void this._panel.webview.postMessage({
+                            type: 'previewAddFailed',
+                            message: res.message || '未知原因',
+                        });
                         return;
                     }
                     if (this._novel.online) { this._novel.online.preview = false; }
@@ -720,6 +903,71 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             }
             case 'retryChapter':
                 this._retryChapter(msg.index);
+                break;
+            // ---- 离线下载 / 缓存: 具体编排在插件入口, 这里只转发 ----
+            case 'offlineStatus':
+                this.postOfflineStatus(ReaderPanel.offlineView?.(this._novel.filePath));
+                this.postOfflineStats(ReaderPanel.offline?.stats() ?? { bytes: 0, books: 0 });
+                this.postDownloadTasks();
+                break;
+            case 'downloadStart': {
+                // 下载目标由消息显式给出(缺省 = 当前书), 不依赖"此刻谁是当前书"
+                const key = msg.filePath || this._novel.filePath;
+                void ReaderPanel.offline
+                    ?.start({ start: msg.start, end: msg.end }, key)
+                    .then((res) => {
+                        if (!res.ok) {
+                            this.postDownloadDone({
+                                ok: false, cancelled: false, done: 0, total: 0, failed: 0,
+                                message: res.message, filePath: key,
+                            });
+                        }
+                        // 无论成败都给一次任务表快照: 按钮状态靠它收敛
+                        this.postDownloadTasks();
+                    });
+                break;
+            }
+            case 'downloadPause':
+                ReaderPanel.offline?.pause(msg.filePath);
+                this.postDownloadTasks();
+                break;
+            case 'downloadResume':
+                ReaderPanel.offline?.resume(msg.filePath);
+                this.postDownloadTasks();
+                break;
+            case 'downloadCancel':
+                // 取消不 await: 中断在途请求是异步的, 避免 webview 等回包卡住
+                ReaderPanel.offline?.cancel(msg.filePath);
+                break;
+            case 'offlineExportTxt':
+                void ReaderPanel.offline?.exportTxt().then((res) => {
+                    void this._panel.webview.postMessage({ type: 'offlineExported', payload: res });
+                    this._replyOp(msg.opId, 'offline:export', !!res.ok, res.ok ? undefined : res.message);
+                }, (err: unknown) => {
+                    this._replyOp(msg.opId, 'offline:export', false, err instanceof Error ? err.message : String(err));
+                });
+                break;
+            case 'offlineClearCurrent': {
+                const key = this._novel.filePath;
+                void Promise.resolve(ReaderPanel.offline?.clearCurrent(key))
+                    .then(() => {
+                        this.postDownloadTasks();
+                        this._replyOp(msg.opId, 'offline:clearCurrent', true);
+                    }, (err: unknown) => {
+                        this._replyOp(msg.opId, 'offline:clearCurrent', false,
+                            err instanceof Error ? err.message : String(err));
+                    });
+                break;
+            }
+            case 'offlineClearAll':
+                void Promise.resolve(ReaderPanel.offline?.clearAll())
+                    .then(() => {
+                        this.postDownloadTasks();
+                        this._replyOp(msg.opId, 'offline:clearAll', true);
+                    }, (err: unknown) => {
+                        this._replyOp(msg.opId, 'offline:clearAll', false,
+                            err instanceof Error ? err.message : String(err));
+                    });
                 break;
             case 'openFile':
                 void vscode.commands.executeCommand('novelReader.openFile');
@@ -734,13 +982,42 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                 break;
             case 'removeBook':
                 // 失败要显式报错(命令未注册/存储异常时不再静默失败)
-                void vscode.commands
-                    .executeCommand('novelReader.removeFromShelf', msg.filePath)
-                    .then(undefined, (err: unknown) => {
-                        void vscode.window.showErrorMessage(
-                            `移除书籍失败: ${err instanceof Error ? err.message : String(err)}`
-                        );
-                    });
+                // skipConfirm: webview 侧已经用 ConfirmDialog 确认过, 这里不再弹宿主模态框
+                this._runOp(msg.opId, 'books:remove', () =>
+                    vscode.commands.executeCommand('novelReader.removeFromShelf', {
+                        filePaths: [msg.filePath],
+                        skipConfirm: true,
+                        opId: msg.opId,
+                    })
+                );
+                break;
+            // ---- 批量操作: 书架多选移除 / 历史多选删除、清空 ----
+            case 'removeBooks':
+                this._runOp(msg.opId, 'books:removeMany', () =>
+                    vscode.commands.executeCommand('novelReader.removeBooksFromShelf', {
+                        filePaths: msg.filePaths,
+                        skipConfirm: true,
+                        opId: msg.opId,
+                    })
+                );
+                break;
+            case 'removeHistory':
+                this._runOp(msg.opId, 'history:remove', () =>
+                    vscode.commands.executeCommand('novelReader.removeHistory', {
+                        filePaths: msg.filePaths,
+                        skipConfirm: true,
+                        opId: msg.opId,
+                    })
+                );
+                break;
+            case 'clearHistory':
+                this._runOp(msg.opId, 'history:clear', () =>
+                    vscode.commands.executeCommand('novelReader.clearHistory', {
+                        kind: msg.kind,
+                        skipConfirm: true,
+                        opId: msg.opId,
+                    })
+                );
                 break;
             case 'pickLibrary':
                 void vscode.commands.executeCommand('novelReader.pickLibraryPath');
@@ -752,14 +1029,21 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                 void vscode.commands.executeCommand('novelReader.openLibraryFolder');
                 break;
             case 'refreshLibrary':
-                // 按书库目录重新扫描书架(新增缺失 txt / 清理失效记录)
-                void vscode.commands
-                    .executeCommand('novelReader.refreshShelfFromLibrary')
-                    .then(undefined, (err: unknown) => {
-                        void vscode.window.showErrorMessage(
-                            `刷新书架失败: ${err instanceof Error ? err.message : String(err)}`
-                        );
-                    });
+                // 旧入口(直接执行): 保留, 命令面板与老 webview 仍走这里
+                this._runOp(msg.opId, 'shelf:refresh', () =>
+                    vscode.commands.executeCommand('novelReader.refreshShelfFromLibrary')
+                );
+                break;
+            case 'refreshLibraryPreview':
+                // 预演: 只算不写, 回 shelfRefreshPlan 供确认框展示
+                this._runOp(msg.opId, 'shelf:refresh', () =>
+                    vscode.commands.executeCommand('novelReader.refreshShelfPlan')
+                );
+                break;
+            case 'refreshLibraryApply':
+                this._runOp(msg.opId, 'shelf:refresh', () =>
+                    vscode.commands.executeCommand('novelReader.refreshShelfApply', msg.planId)
+                );
                 break;
             // ---- 阅读笔记: 增删改走 NotesStore, 成功后回推增量(失败回 noteError 保留草稿) ----
             case 'addNote':
@@ -807,14 +1091,35 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                     }
                 });
                 break;
+            case 'removeNotes':
+                // 笔记「管理」多选删除: 一次写盘, 完成后回发全量笔记
+                if (!ReaderPanel.notes) {
+                    this._replyOp(msg.opId, 'notes:remove', false, '笔记功能不可用');
+                    break;
+                }
+                void ReaderPanel.notes.removeMany(msg.ids).then((removed) => {
+                    if (removed > 0) { this.postNotes(); }
+                    this._replyOp(msg.opId, 'notes:remove', true, undefined, { removed });
+                }, (err: unknown) => {
+                    this._replyOp(msg.opId, 'notes:remove', false,
+                        err instanceof Error ? err.message : String(err));
+                });
+                break;
             case 'removeNoteGroup':
                 // 批量删除: 按书(整本)或按书+章; 完成后回发全量笔记刷新列表
-                if (!ReaderPanel.notes) { break; }
+                if (!ReaderPanel.notes) {
+                    this._replyOp(msg.opId, 'notes:removeGroup', false, '笔记功能不可用');
+                    break;
+                }
                 void (msg.chapterTitle !== undefined
                     ? ReaderPanel.notes.removeByChapter(msg.bookPath, msg.chapterTitle)
                     : ReaderPanel.notes.removeByBook(msg.bookPath)
                 ).then((removed) => {
                     if (removed > 0) { this.postNotes(); }
+                    this._replyOp(msg.opId, 'notes:removeGroup', true, undefined, { removed });
+                }, (err: unknown) => {
+                    this._replyOp(msg.opId, 'notes:removeGroup', false,
+                        err instanceof Error ? err.message : String(err));
                 });
                 break;
             case 'requestNotes':
@@ -823,11 +1128,9 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             case 'requestSources':
                 this.postSources();
                 break;
-            case 'requestHistory': {
-                const payload = ReaderPanel.historyProvider?.() || { local: [], online: [] };
-                void this._panel.webview.postMessage({ type: 'history', payload });
+            case 'requestHistory':
+                this.postHistory();
                 break;
-            }
             case 'sourceSearch': {
                 const api = ReaderPanel.bookSources;
                 if (!api) { break; }
@@ -889,6 +1192,39 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                 const active = this._activeSearch;
                 if (!active || active.token !== msg.token) { break; }
                 if (msg.paused) { active.control.pause(); } else { active.control.resume(); }
+                break;
+            }
+            case 'sourceRetry': {
+                // 单源重试走独立消息: 复用 sourceSearch 会整体替换 state.searchResults,
+                // 把其它源已经拿到的命中一起丢掉(D15)。
+                const api = ReaderPanel.bookSources;
+                if (!api) { break; }
+                const sourceName = (api.list().find((s) => s.id === msg.sourceId) || { name: msg.sourceId }).name;
+                void api.search(msg.key, [msg.sourceId], { control: new SearchControl() }).then((out) => {
+                    const err = out.errors && out.errors[0];
+                    void this._panel.webview.postMessage({
+                        type: 'sourceRetryResult',
+                        payload: {
+                            reqId: msg.reqId,
+                            sourceId: msg.sourceId,
+                            sourceName,
+                            ok: !err,
+                            message: err ? err.message : undefined,
+                            items: (!err ? out.items : []) as never,
+                        },
+                    });
+                }, (e: unknown) => {
+                    void this._panel.webview.postMessage({
+                        type: 'sourceRetryResult',
+                        payload: {
+                            reqId: msg.reqId,
+                            sourceId: msg.sourceId,
+                            sourceName,
+                            ok: false,
+                            message: e instanceof Error ? e.message : String(e),
+                        },
+                    });
+                });
                 break;
             }
             case 'sourceImport':
@@ -1019,11 +1355,176 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
         });
     }
 
+    /** 推送阅读历史(打开面板/批量删除后) */
+    public postHistory(): void {
+        if (!this._ready) { return; }
+        const payload = ReaderPanel.historyProvider?.() || { local: [], online: [] };
+        void this._panel.webview.postMessage({ type: 'history', payload });
+    }
+
     /** 把全量笔记推给 webview(init 后/路径迁移后调用) */
     public postNotes(): void {
         if (!this._ready) { return; }
         const items = ReaderPanel.notes ? ReaderPanel.notes.list() : [];
         void this._panel.webview.postMessage({ type: 'notes', items });
+    }
+
+    // ---------------------------------------------------------- 离线下载推送
+
+    /** 推送当前书的离线状态快照(请求状态 / 清缓存后) */
+    public postOfflineStatus(view: OfflineStatusView | undefined): void {
+        if (!this._ready) { return; }
+        void this._panel.webview.postMessage({
+            type: 'offlineStatus',
+            // I5: 归属字段。webview 只对"当前书"应用 offline, 其余仅更新任务表
+            filePath: view ? view.filePath : this._novel.filePath,
+            payload: view ?? null,
+        });
+    }
+
+    /** 下载任务表快照(与"当前书"无关的全局视图) */
+    private _downloadTasks(): DownloadTaskView[] {
+        const api = ReaderPanel.offline;
+        return api ? api.tasks() : [];
+    }
+
+    /** 推送刷新书架的预演计划(webview 据此弹确认框) */
+    public postShelfRefreshPlan(plan: ShelfRefreshPlan): void {
+        if (!this._ready) { return; }
+        void this._panel.webview.postMessage({ type: 'shelfRefreshPlan', payload: plan });
+    }
+
+    /** 推送刷新书房的执行结果(各分类计数 + 差异说明) */
+    public postShelfRefreshResult(result: ShelfRefreshResult): void {
+        if (!this._ready) { return; }
+        void this._panel.webview.postMessage({ type: 'shelfRefreshResult', payload: result });
+    }
+
+    /** 推送下载任务表全量快照(init / 控制回包后 / 下载结束) */
+    public postDownloadTasks(): void {
+        if (!this._ready) { return; }
+        const payload: DownloadTasksPayload = { tasks: this._downloadTasks() };
+        void this._panel.webview.postMessage({ type: 'downloadTasks', payload });
+    }
+
+    /** 推送写操作终态(opId 原样回传, webview 据此收敛 UI 并解除按钮禁用) */
+    public postOpResult(result: OpResultPayload): void {
+        if (!this._ready) { return; }
+        void this._panel.webview.postMessage({ type: 'opResult', payload: result });
+    }
+
+    /**
+     * 回写操作终态。
+     * **缺少 opId 的旧调用一律不回** —— 老 webview 没有对应的 pending 表，
+     * 多发一条无法匹配的消息只会变成噪音。
+     */
+    private _replyOp(
+        opId: string | undefined,
+        op: OpKind,
+        ok: boolean,
+        message?: string,
+        detail?: Record<string, number>
+    ): void {
+        if (!opId) { return; }
+        this.postOpResult({ opId, op, ok, message, detail });
+    }
+
+    /**
+     * 执行一个"命令型"写操作并回终态。
+     *
+     * 失败有两种表达方式，都支持：
+     *  - 命令 reject（异常）；
+     *  - 命令 resolve 出 `{ ok: false, message }`（用户取消 / 业务失败时更自然，
+     *    不会在命令面板调用路径上多弹一个"命令执行失败"）。
+     * 失败时**不改动 webview 的选择态与草稿**，由 UI 层保留上下文。
+     */
+    private _runOp(opId: string | undefined, op: OpKind, run: () => PromiseLike<unknown>): void {
+        void Promise.resolve(run()).then(
+            (res: unknown) => {
+                const r = res as { ok?: boolean; message?: string } | null | undefined;
+                if (r && typeof r === 'object' && r.ok === false) {
+                    this._replyOp(opId, op, false, r.message || '操作未完成');
+                    return;
+                }
+                this._replyOp(opId, op, true);
+            },
+            (err: unknown) => {
+                this._replyOp(opId, op, false, err instanceof Error ? err.message : String(err));
+            }
+        );
+    }
+
+    /** 推送下载进度(宿主侧已节流, 这里不再判断频率) */
+    public postDownloadProgress(p: {
+        done: number; total: number; failed: number;
+        running: boolean; paused: boolean;
+        index?: number; title?: string; added?: number[];
+        filePath?: string;
+        bookTitle?: string;
+    }): void {
+        if (!this._ready) { return; }
+        const payload: DownloadProgressPayload = {
+            done: p.done,
+            total: p.total,
+            failed: p.failed,
+            running: p.running,
+            paused: p.paused,
+            index: p.index,
+            title: p.title,
+            added: p.added,
+            bookTitle: p.bookTitle,
+            // 缺省回退到当前书: 旧调用点不传 key 时行为不变
+            filePath: p.filePath || this._novel.filePath,
+        };
+        void this._panel.webview.postMessage({ type: 'downloadProgress', payload });
+    }
+
+    /** 推送下载结束(成功/取消/有失败) */
+    public postDownloadDone(r: {
+        ok: boolean; cancelled: boolean; done: number; total: number; failed: number;
+        message?: string; filePath?: string;
+    }): void {
+        if (!this._ready) { return; }
+        const payload: DownloadDonePayload = {
+            ok: r.ok,
+            cancelled: r.cancelled,
+            done: r.done,
+            total: r.total,
+            failed: r.failed,
+            message: r.message,
+            filePath: r.filePath || this._novel.filePath,
+        };
+        void this._panel.webview.postMessage({ type: 'downloadDone', payload });
+    }
+
+    /** 推送全站离线缓存汇总(存储面板) */
+    public postOfflineStats(stats: { bytes: number; books: number }): void {
+        if (!this._ready) { return; }
+        void this._panel.webview.postMessage({ type: 'offlineStats', payload: stats });
+    }
+
+    /** 推送目录的每章标记(临时缓存 / 已读) */
+    public postChapterMarks(marks: ChapterMarksView, filePath?: string): void {
+        if (!this._ready) { return; }
+        void this._panel.webview.postMessage({
+            type: 'chapterMarks',
+            filePath: filePath || this._novel.filePath,
+            payload: marks,
+        });
+    }
+
+    /** 异步取一次每章标记并推给 webview(本地书跳过) */
+    private _postChapterMarks(): void {
+        const provider = ReaderPanel.chapterMarks;
+        if (!provider || !this._novel.online) { return; }
+        const novel = this._novel;
+        void provider(novel)
+            .then((marks) => {
+                // 期间可能已换书/关面板: 丢弃过期结果
+                if (!marks || ReaderPanel.current !== this || this._novel !== novel) { return; }
+                this.postChapterMarks(marks, novel.filePath);
+            })
+            .catch(() => { /* 读盘失败不影响阅读 */ });
     }
 
     /** 某章的恢复位置: 优先本会话记忆, 其次书架 chapterRatios(跨会话), 都没有则回顶部 */
@@ -1037,15 +1538,30 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
         return typeof shelved === 'number' ? Math.min(1, Math.max(0, shelved)) : 0;
     }
 
-    private _chapterPayload(): ChapterPayload {
-        const ch = this._novel.chapters[this._chapterIndex];
+    /**
+     * 组章节载荷。
+     *
+     * I1(捕获即冻结) 的落地: 所有读取都基于传入的 novel/index/ratio 快照,
+     * 不在方法体内二次读 `this._novel` / `this._chapterIndex` —— 否则
+     * "await 期间用户换了书"就会把 A 的正文配上 B 的章节号。
+     */
+    private _chapterPayload(
+        novel: Novel,
+        index: number,
+        scrollRatio: number,
+        reqId: number
+    ): ChapterPayload {
+        const ch = novel.chapters[index];
         return {
-            index: this._chapterIndex,
+            index,
             title: ch ? ch.title : '',
             paragraphs: ch ? ch.content.split('\n') : [],
-            totalChapters: this._novel.chapters.length,
+            totalChapters: novel.chapters.length,
             chapterWords: ch ? ch.wordCount : 0,
-            scrollRatio: this._scrollRatio,
+            scrollRatio,
+            // I5 归属必填: 每条异步回包都要能自证"属于哪本书 / 哪一轮"
+            filePath: novel.filePath,
+            reqId,
         };
     }
 
@@ -1078,9 +1594,15 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                     preview: !!this._novel.online.preview,
                 }
                 : undefined,
+            offline: ReaderPanel.offlineView?.(this._novel.filePath),
+            // 协议版本协商: 老 webview 忽略这两个字段, 新 webview 据此开严格模式
+            protocolVersion: PROTOCOL_VERSION,
+            downloadTasks: this._downloadTasks(),
         };
         this._openSettingsOnLoad = false;
         this._panel.webview.postMessage({ type: 'init', payload });
+        // 目录的「已缓存 / 已读」标记要读盘, 异步补一帧(不阻塞首屏)
+        this._postChapterMarks();
         // 在线书首章若尚未取到正文(预取失败), 打开后立刻走一次懒加载/错误提示
         if (this._novel.online && !this._novel.chapters[this._chapterIndex]?.content) {
             this._postChapter();
@@ -1093,67 +1615,122 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
         });
     }
 
-    private _postChapter(): void {
+    /**
+     * 投递当前章。
+     *
+     * 不变量:
+     *  I2 唯一活请求 —— `_liveChapter` 只保留最新一轮, 回包按 reqId 精确比对;
+     *  I3 锁按请求实例释放 —— 锁值存 reqId, 避免"第一轮结束把第二轮锁解掉";
+     *  I4 缓存写入与投递分离 —— 见 `_loadOnlineChapter`。
+     *
+     * @param force true = 允许同章再开一轮(重试用), 旧轮靠 I2 丢弃
+     */
+    private _postChapter(force = false): void {
         if (!this._ready) {
             return;
         }
+        // I1: 入口处一次捕获, 之后不再读任何 this._xxx 状态字段
+        const novel = this._novel;
+        const gen = this._bookGen;
         const index = this._chapterIndex;
-        const chapter = this._novel.chapters[index];
-        const needLoad = !!this._novel.online && !!chapter && !chapter.content && !!ReaderPanel.onlineChapterLoader;
+        const chapter = novel.chapters[index];
+        const needLoad = !!novel.online && !!chapter && !chapter.content && !!ReaderPanel.onlineChapterLoader;
         if (!needLoad) {
             this._postChapterPayload();
             return;
         }
-        if (this._loadingChapters.has(index)) { return; }
-        this._loadingChapters.add(index);
-        this._panel.webview.postMessage({
-            type: 'chapterLoading',
-            payload: { index, title: chapter.title },
-        });
-        void this._loadOnlineChapter(index);
+        const key = gen + ':' + index;
+        if (!force && this._chapterLocks.has(key)) {
+            return;
+        }
+        const reqId = ++this._reqSeq;
+        this._chapterLocks.set(key, reqId);
+        this._liveChapter = { reqId, gen, index };
+        this._inflight.set(reqId, { gen, index });
+        const payload: ChapterLoadingPayload = { index, title: chapter.title, filePath: novel.filePath, reqId };
+        void this._panel.webview.postMessage({ type: 'chapterLoading', payload });
+        void this._loadOnlineChapter({ novel, gen, index, reqId });
+    }
+
+    /**
+     * 该回包是否允许投递给 webview。
+     *
+     * 三个条件缺一不可: 本面板仍是当前面板 / 书代号没变 / 仍是最新一轮。
+     * 只比 filePath 不够(A → B → A 会误判), 只比 reqId 也不够(切书后编号继续增大)。
+     */
+    private _deliverable(task: { gen: number; reqId: number }): boolean {
+        return ReaderPanel.current === this
+            && task.gen === this._bookGen
+            && !!this._liveChapter
+            && this._liveChapter.reqId === task.reqId;
     }
 
     /** 在线章: 加载正文(缓存优先由 loader 处理) */
-    private async _loadOnlineChapter(index: number): Promise<void> {
+    private async _loadOnlineChapter(
+        task: { novel: Novel; gen: number; index: number; reqId: number }
+    ): Promise<void> {
         const loader = ReaderPanel.onlineChapterLoader;
-        if (!loader) { return; }
+        if (!loader) {
+            return;
+        }
         try {
-            const paragraphs = await loader(this._novel, index);
-            const chapter = this._novel.chapters[index];
+            const paragraphs = await loader(task.novel, task.index);
+            // I4: 正文写进**捕获到的** novel 对象。迟到的 A 正文仍进 A 的临时缓存
+            // (对 A 后续打开是有益的), 但下面的投递必须过归属校验。
+            const chapter = task.novel.chapters[task.index];
             if (chapter) {
                 chapter.content = paragraphs.join('\n');
                 chapter.wordCount = chapter.content.length;
+                if (this._deliverable(task)) {
+                    const payload: ChapterCachedPayload = {
+                        index: task.index,
+                        filePath: task.novel.filePath,
+                        reqId: task.reqId,
+                    };
+                    void this._panel.webview.postMessage({ type: 'chapterCached', payload });
+                }
             }
-            if (ReaderPanel.current === this && this._chapterIndex === index) {
-                this._postChapterPayload();
+            if (this._deliverable(task) && this._chapterIndex === task.index) {
+                this._postChapterPayload(task.reqId);
             }
         } catch (err) {
-            if (ReaderPanel.current === this && this._chapterIndex === index) {
-                this._panel.webview.postMessage({
-                    type: 'chapterError',
-                    payload: {
-                        index,
-                        message: err instanceof Error ? err.message : String(err),
-                    },
-                });
+            if (this._deliverable(task) && this._chapterIndex === task.index) {
+                const payload: ChapterErrorPayload = {
+                    index: task.index,
+                    message: err instanceof Error ? err.message : String(err),
+                    filePath: task.novel.filePath,
+                    reqId: task.reqId,
+                };
+                void this._panel.webview.postMessage({ type: 'chapterError', payload });
             }
         } finally {
-            this._loadingChapters.delete(index);
+            // I3: 只在"锁仍属于自己这一轮"时释放
+            const key = task.gen + ':' + task.index;
+            if (this._chapterLocks.get(key) === task.reqId) {
+                this._chapterLocks.delete(key);
+            }
+            this._inflight.delete(task.reqId);
         }
     }
 
-    /** 重试当前章(清掉空正文后重新走加载) */
+    /** 重试当前章: 显式释放锁并开新一轮(旧轮靠 I2 丢弃, 不会被误当成新一轮的回包) */
     private _retryChapter(index: number): void {
         if (index !== this._chapterIndex) { return; }
-        const chapter = this._novel.chapters[index];
-        if (chapter && !chapter.content) {
-            this._loadingChapters.delete(index);
-        }
-        this._postChapter();
+        this._chapterLocks.delete(this._bookGen + ':' + index);
+        this._liveChapter = null;
+        this._postChapter(true);
     }
 
-    private _postChapterPayload(): void {
-        this._panel.webview.postMessage({ type: 'chapter', payload: this._chapterPayload() });
+    private _postChapterPayload(reqId?: number): void {
+        const novel = this._novel;
+        const index = this._chapterIndex;
+        // 没有指定轮次(本地书 / 命中缓存)时也要占一个新编号,
+        // 保证 webview 侧 `reqId < chapterReqSeq` 的兜底判断始终有效
+        const rid = typeof reqId === 'number' ? reqId : ++this._reqSeq;
+        void this._panel.webview.postMessage({
+            type: 'chapter',
+            payload: this._chapterPayload(novel, index, this._scrollRatio, rid),
+        });
     }
 
     // ---------------------------------------------------------------- HTML
@@ -1196,6 +1773,9 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
     --accent-fg: ${t.accentFg};
     --fg-muted: ${t.muted};
     --danger: ${t.danger};
+    /* 危险/成功状态色: 与 webview 侧 applyThemeVars 同源, 否则首帧危险按钮文字是白色, 切主题后才变 */
+    --danger-fg: ${t.dangerFg};
+    --success: ${t.success};
     --shadow-color: ${t.shadow};
     /* 章节导航按钮(原悬浮球): 面板同色底 + 主题色图标/描边 */
     --nav-btn-bg: ${t.chromeBg};

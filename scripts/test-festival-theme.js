@@ -79,6 +79,12 @@ for (const f of FESTIVALS) {
   if (accentFg < 4.5) { failures.push(`${f.name} 强调色上的文字 ${accentFg.toFixed(2)} < 4.5`); }
   if (borderStrong < 3) { failures.push(`${f.name} 控件边框 ${borderStrong.toFixed(2)} < 3`); }
   if (danger < 4.5) { failures.push(`${f.name} 危险色 ${danger.toFixed(2)} < 4.5`); }
+  if (contrastRatio(t.dangerFg, t.danger) < 4.5) {
+    failures.push(`${f.name} 危险底色上的文字 ${contrastRatio(t.dangerFg, t.danger).toFixed(2)} < 4.5`);
+  }
+  if (contrastRatio(t.success, t.chromeBg) < 4.5) {
+    failures.push(`${f.name} 成功状态文字 ${contrastRatio(t.success, t.chromeBg).toFixed(2)} < 4.5`);
+  }
   if (stepBgChrome < 1.05) { failures.push(`${f.name} 纸面/面板台阶 ${stepBgChrome.toFixed(2)} < 1.05`); }
   if (stepChromePage < 1.08) { failures.push(`${f.name} 面板/留白台阶 ${stepChromePage.toFixed(2)} < 1.08`); }
   if (!!t.isDark !== !!f.night) { failures.push(`${f.name} isDark 标记错误(实际 ${t.isDark})`); }

@@ -1,20 +1,122 @@
 <script setup lang="ts">
 /**
  * HistoryPopup.vue — 阅读历史(本地 / 在线分栏, 各最多 1000 本, 列表 15 行滚动)
+ *
+ * 支持批量: 「管理」进入多选 -> 全选/删除所选; 另有「清空本栏」。
+ *
+ * 无障碍与终态约定（R1 / R7 / R9）：
+ *  - 行 = 容器 + `button.hist-row-main`，勾选用原生 checkbox；
+ *  - 删除与清空都走统一 ConfirmDialog（宿主的模态框只留给命令面板调用）；
+ *  - `opResult` 成功才退出管理模式并清空选择，失败保留（用户可以只重试）。
  */
 import { computed, ref, watch } from 'vue';
-import { send, state } from '../composables/vscode';
+import { send, state, opRunning } from '../composables/vscode';
 import type { HistoryItemView } from '../composables/vscode';
 import { flushProgress } from '../store';
+import { askConfirm } from '../composables/ops';
 
 const rootRef = ref<HTMLElement | null>(null);
-defineExpose({ el: rootRef });
+defineExpose({ el: rootRef, handleEscape: () => false });
 
 const list = computed(function () { return state.history[state.historyTab] || []; });
 const total = computed(function () {
   return (state.history.local ? state.history.local.length : 0)
     + (state.history.online ? state.history.online.length : 0);
 });
+
+/** 批量模式 */
+const selecting = ref(false);
+const selected = ref<string[]>([]);
+
+watch(function () { return state.historyOpen; }, function (open) {
+  if (open) {
+    send({ type: 'requestHistory' });
+    return;
+  }
+  selecting.value = false;
+  selected.value = [];
+});
+
+// 切栏 / 记录变少时要修剪选择(否则"已选 3 条"里混着另一栏的路径)
+watch(function () { return state.historyTab; }, function () {
+  selected.value = [];
+});
+watch(function () { return list.value.length; }, function () {
+  const alive = new Set(list.value.map(function (e) { return e.filePath; }));
+  const next = selected.value.filter(function (p) { return alive.has(p); });
+  if (next.length !== selected.value.length) { selected.value = next; }
+  if (!list.value.length) { selecting.value = false; }
+});
+
+/** 写操作终态: 成功才退出管理模式(R7-03) */
+watch(function () { return state.lastOp; }, function (op) {
+  if (!op || !op.ok) { return; }
+  if (op.op !== 'history:remove' && op.op !== 'history:clear') { return; }
+  selecting.value = false;
+  selected.value = [];
+});
+
+const allSelected = computed(function () {
+  return list.value.length > 0 && selected.value.length === list.value.length;
+});
+const someSelected = computed(function () {
+  return selected.value.length > 0 && selected.value.length < list.value.length;
+});
+
+/** 行键: 同一 filePath 只会在某一栏出现, 直接用它 */
+function isSelected(e: HistoryItemView): boolean {
+  return selected.value.indexOf(e.filePath) >= 0;
+}
+
+function toggleOne(e: HistoryItemView): void {
+  if (isSelected(e)) {
+    selected.value = selected.value.filter(function (p) { return p !== e.filePath; });
+  } else {
+    selected.value = selected.value.concat([e.filePath]);
+  }
+}
+
+function toggleSelecting(): void {
+  selecting.value = !selecting.value;
+  selected.value = [];
+}
+
+function selectAll(): void {
+  selected.value = allSelected.value ? [] : list.value.map(function (e) { return e.filePath; });
+}
+
+/** 删除所选: 统一确认框（含数量 + 是否可恢复） */
+function removeSelected(): void {
+  if (!selected.value.length) { return; }
+  askConfirm({
+    title: '删除 ' + selected.value.length + ' 条阅读记录',
+    lines: [
+      '将删除：' + selected.value.slice(0, 5).join('、') + (selected.value.length > 5 ? ' 等' : ''),
+      '只删阅读记录，不影响书架、笔记与已下载的离线内容',
+      '删除后无法恢复',
+    ],
+    confirmText: '删除',
+    op: 'history:remove',
+    payload: { filePaths: selected.value.slice() },
+  });
+}
+
+/** 清空当前栏 */
+function clearCurrent(): void {
+  if (!list.value.length) { return; }
+  const label = state.historyTab === 'online' ? '在线' : '本地';
+  askConfirm({
+    title: '清空' + label + '阅读记录',
+    lines: [
+      '共 ' + list.value.length + ' 条' + label + '记录',
+      '只删记录，不影响书架、笔记与已下载的离线内容',
+      '删除后无法恢复',
+    ],
+    confirmText: '清空',
+    op: 'history:clear',
+    payload: { kind: state.historyTab },
+  });
+}
 
 function tabCount(kind: 'local' | 'online'): number {
   return state.history[kind] ? state.history[kind].length : 0;
@@ -44,31 +146,39 @@ function timeText(ts: number): string {
     + String(d.getDate()).padStart(2, '0');
 }
 
+/** 主按钮动作: 打开这本书 */
 function openBook(e: HistoryItemView): void {
   if (!e.filePath) { return; }
+  if (selecting.value) {
+    toggleOne(e);
+    return;
+  }
   flushProgress();
   send({ type: 'openBook', filePath: e.filePath });
   state.historyOpen = false;
 }
-
-watch(function () { return state.historyOpen; }, function (open) {
-  if (open) { send({ type: 'requestHistory' }); }
-});
 </script>
 
 <template>
-  <section id="historyPopup" ref="rootRef" class="popup" :class="{ open: state.historyOpen }">
+  <section id="historyPopup" ref="rootRef" class="popup" :class="{ open: state.historyOpen }"
+    role="dialog" aria-modal="false" aria-labelledby="historyPopupTitle">
     <div class="popup-head">
-      <b class="popup-title">历史记录</b>
+      <h2 class="popup-title" id="historyPopupTitle" tabindex="-1">历史记录</h2>
       <span class="popup-sub">共 {{ total }} 本</span>
       <span class="spacer"></span>
+      <button v-show="list.length" class="popup-ghost" data-hist-batch title="管理历史记录（多选删除）"
+        :aria-pressed="selecting ? 'true' : 'false'" @click="toggleSelecting">
+        {{ selecting ? '完成' : '管理' }}
+      </button>
       <button class="popup-close" @click="state.historyOpen = false">关闭</button>
     </div>
 
     <div class="hist-tabs">
       <button class="hist-tab" :class="{ on: state.historyTab === 'local' }" data-hist-tab="local"
+        :aria-pressed="state.historyTab === 'local' ? 'true' : 'false'"
         @click="state.historyTab = 'local'">本地 {{ tabCount('local') }}</button>
       <button class="hist-tab" :class="{ on: state.historyTab === 'online' }" data-hist-tab="online"
+        :aria-pressed="state.historyTab === 'online' ? 'true' : 'false'"
         @click="state.historyTab = 'online'">在线 {{ tabCount('online') }}</button>
     </div>
 
@@ -76,17 +186,43 @@ watch(function () { return state.historyOpen; }, function (open) {
       <div v-if="!list.length" class="popup-empty">
         {{ state.historyTab === 'local' ? '还没有本地阅读记录。' : '还没有在线书阅读记录。' }}
       </div>
-      <div v-for="e in list" :key="e.kind + ':' + e.filePath" class="hist-row" :data-hist-path="e.filePath"
-        :title="e.title" @click="openBook(e)">
+      <div v-for="e in list" :key="e.kind + ':' + e.filePath" class="hist-row"
+        :class="{ sel: selecting && isSelected(e) }" :data-hist-path="e.filePath">
+        <label v-if="selecting" class="bk-check-label">
+          <input type="checkbox" class="bk-check" data-hist-check
+            :checked="isSelected(e)" :aria-label="'选择《' + e.title + '》的记录'"
+            @change="toggleOne(e)" />
+        </label>
         <span class="bk-tag">{{ e.kind === 'online' ? '在线' : '本地' }}</span>
-        <span class="hist-main">
+        <button type="button" class="hist-row-main" :title="e.title" @click="openBook(e)">
           <span class="hist-title">{{ e.title }}</span>
           <span class="hist-meta">{{ progress(e) }}{{ e.author ? ' · ' + e.author : '' }}</span>
-        </span>
+        </button>
         <span class="hist-time">{{ timeText(e.lastReadAt) }}</span>
       </div>
     </div>
 
-    <div class="hist-foot">本地 / 在线各保留最近 1000 本 · 列表 15 行内滚动</div>
+    <div v-if="!selecting" class="hist-foot">
+      <span class="hist-tip">本地 / 在线各保留最近 1000 本 · 列表 15 行内滚动</span>
+      <span class="spacer"></span>
+      <button v-show="list.length" class="popup-ghost" data-hist-clear
+        :disabled="opRunning('history:clear')" @click="clearCurrent">
+        清空{{ state.historyTab === 'online' ? '在线' : '本地' }}记录
+      </button>
+    </div>
+    <div v-else class="hist-foot">
+      <label class="bk-check-label">
+        <input type="checkbox" class="bk-check" data-hist-select-all
+          :checked="allSelected" :indeterminate.prop="someSelected"
+          aria-label="全选当前记录" @change="selectAll" />
+        <span>{{ allSelected ? '取消全选' : '全选' }}</span>
+      </label>
+      <span class="sel-count" data-hist-sel-count>已选 {{ selected.length }} 条</span>
+      <span class="spacer"></span>
+      <button class="popup-primary popup-danger" data-hist-remove-selected
+        :disabled="!selected.length || opRunning('history:remove')"
+        :title="!selected.length ? '请先勾选要删除的记录' : '删除所选'"
+        @click="removeSelected">删除所选</button>
+    </div>
   </section>
 </template>

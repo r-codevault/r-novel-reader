@@ -66,6 +66,10 @@ export function applyThemeVars(s: ReadingSettings): void {
   // 次要文字统一用实色令牌, 不再靠 opacity 叠色(透明度在不同底色上结果不可控, 也无法参与对比度校验)
   root.style.setProperty('--fg-muted', t.muted);
   root.style.setProperty('--danger', t.danger);
+  // 危险底色上的文字色与成功状态色: 以前 CSS 里硬编码 #fff / #2ea043,
+  // 深色主题上「删除」按钮与「已恢复」提示都读不清（R10/T05）
+  root.style.setProperty('--danger-fg', t.dangerFg);
+  root.style.setProperty('--success', t.success);
   root.style.setProperty('--shadow-color', t.shadow);
   // 设置面板配色: 全部来自 THEMES 主题变量(调试时改 settings.ts 即可)
   root.style.setProperty('--sp-bg', t.chromeBg);

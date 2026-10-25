@@ -281,3 +281,43 @@ export function findChapter(novel: Novel, keyword: string): NovelChapter | undef
         novel.chapters.find((c) => c.content.toLowerCase().includes(kw))
     );
 }
+
+/**
+ * 书架为空时的占位"空书"。
+ *
+ * 目的: 让阅读面板在没书的情况下也能正常打开, 正文显示引导文案。
+ * 否则「书源搜索」「笔记」「阅读设置」这些**只存在于面板内**的入口,
+ * 一本没导入时等于完全不可用 —— 用户想联网搜书都找不到门。
+ *
+ * 判定方式: `filePath === ''`。凡是把进度写回书架/阅读历史的地方都要跳过空路径。
+ */
+export function createEmptyNovel(shelfEmpty = true): Novel {
+    const content = [
+        shelfEmpty ? '书架里还没有小说。' : '书架上暂时没有可读的书。',
+        '',
+        '可以这样开始：',
+        '· 点左侧「书源」搜索在线书籍（需先导入书源）',
+        '· 按 Ctrl+Shift+P 执行「小说阅读器: 打开小说文件」，导入本地 txt',
+        '· 或在资源管理器里右键任意 .txt 文件 →「打开小说文件」',
+        '',
+        shelfEmpty
+            ? '导入后会自动登记进书架，阅读进度也会自动记录。'
+            : '若书架里有书但打不开，可能是原文件被移动或删除，重新导入即可。',
+    ].join('\n');
+    return {
+        filePath: '',
+        bookTitle: '小说阅读器',
+        author: '',
+        chapters: [
+            {
+                index: 0,
+                title: '还没有打开任何书',
+                content,
+                wordCount: content.replace(/\s/g, '').length,
+            },
+        ],
+        preface: '',
+        encoding: 'utf8',
+        totalWords: 0,
+    };
+}

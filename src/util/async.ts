@@ -27,6 +27,61 @@ export function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export interface CombinedSignal {
+    signal: AbortSignal;
+    /** 请求结束后调用, 摘掉监听(避免长会话里监听器堆积) */
+    dispose: () => void;
+}
+
+/**
+ * 合并多个中断信号: 任一触发即整体中断。
+ * (不直接用 AbortSignal.any: 旧版 Node/VSCode 里没有, 自己要能兜底)
+ */
+export function combineSignals(signals: (AbortSignal | undefined | null)[]): CombinedSignal {
+    const valid = signals.filter((s): s is AbortSignal => !!s);
+    if (valid.length === 0) {
+        return { signal: new AbortController().signal, dispose: () => { /* 无监听 */ } };
+    }
+    if (valid.length === 1) {
+        return { signal: valid[0], dispose: () => { /* 无监听 */ } };
+    }
+    const ctrl = new AbortController();
+    const onAbort = (): void => { ctrl.abort(); };
+    for (const s of valid) {
+        if (s.aborted) { ctrl.abort(); break; }
+        s.addEventListener('abort', onAbort);
+    }
+    return {
+        signal: ctrl.signal,
+        dispose: () => { for (const s of valid) { s.removeEventListener('abort', onAbort); } },
+    };
+}
+
+/**
+ * 同一 key 的并发调用只真正执行一次, 其余调用共享同一个 Promise。
+ *
+ * 用途: 阅读器按需加载某章时, 下载队列可能正好也在抓同一章 ——
+ * 没有这层去重会对同一 URL 发两次请求, 既浪费流量也可能触发站点限流。
+ */
+export class SingleFlight<K, V> {
+    private readonly inflight = new Map<K, Promise<V>>();
+
+    public run(key: K, fn: () => Promise<V>): Promise<V> {
+        const existing = this.inflight.get(key);
+        if (existing) { return existing; }
+        const task: Promise<V> = (async () => fn())();
+        this.inflight.set(key, task);
+        // 同时挂 then/catch: 既清理条目, 也让无人 await 的失败不会变成 unhandledRejection
+        const cleanup = (): void => {
+            if (this.inflight.get(key) === task) { this.inflight.delete(key); }
+        };
+        task.then(cleanup, cleanup);
+        return task;
+    }
+
+    public get size(): number { return this.inflight.size; }
+}
+
 export interface TimeoutResult<T> {
     ok: boolean;
     value?: T;

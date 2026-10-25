@@ -62,6 +62,15 @@ for (const p of PROVINCES) {
   if (dangerContrast < 4.5) {
     failures.push(`${p.name} 危险色 ${dangerContrast.toFixed(2)} < 4.5`);
   }
+  // 危险底色上的文字色与成功状态文字色: 派生主题也必须逐套达标（R10-04）
+  const dangerFgContrast = contrastRatio(t.dangerFg, t.danger);
+  const successContrast = contrastRatio(t.success, t.chromeBg);
+  if (dangerFgContrast < 4.5) {
+    failures.push(`${p.name} 危险底色上的文字 ${dangerFgContrast.toFixed(2)} < 4.5`);
+  }
+  if (successContrast < 4.5) {
+    failures.push(`${p.name} 成功状态文字 ${successContrast.toFixed(2)} < 4.5`);
+  }
   // 三级背景台阶: 纸面 → 面板 → 留白 必须逐级可辨
   const step1 = contrastRatio(t.bg, t.chromeBg);
   const step2 = contrastRatio(t.chromeBg, t.pageBg);

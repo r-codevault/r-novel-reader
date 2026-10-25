@@ -175,9 +175,14 @@ const source = {
   assert.ok(cachedToc && cachedToc.chapters.length === 3, '目录缓存应可读');
   await cache.writeChapter(key, 0, ['第一段', '第二段']);
   assert.deepStrictEqual(await cache.readChapter(key, 0), ['第一段', '第二段']);
+  // 目录面板靠它标出「已缓存、断网可读」的章
+  assert.deepStrictEqual(await cache.listChapters(key), [0], '应能列出已缓存章号');
+  await cache.writeChapter(key, 3, ['第三段']);
+  assert.deepStrictEqual(await cache.listChapters(key), [0, 3], '章号应升序');
   await cache.clear(key);
   assert.strictEqual(await cache.readToc(key), null, '清理后目录缓存应消失');
   assert.strictEqual(await cache.readChapter(key, 0), null, '清理后正文缓存应消失');
+  assert.deepStrictEqual(await cache.listChapters(key), [], '清理后不应再有缓存章');
   fs.rmSync(tmp, { recursive: true, force: true });
 
   console.log('在线书目录/正文/缓存测试全部通过 ✔ (请求 ' + requests + ' 次)');

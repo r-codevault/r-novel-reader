@@ -129,7 +129,7 @@ function onKeydown(e: KeyboardEvent): void {
     </template>
     <template v-else>
       <textarea ref="textRef" class="nc-text" v-model="comp.text" rows="3"
-        placeholder="写点什么…" @input="comp.error = ''"></textarea>
+        aria-label="笔记内容" placeholder="写点什么…" @input="comp.error = ''"></textarea>
       <div class="nc-foot nc-foot-stack">
         <!-- 两行布局: 按钮行在上, 提示/错误行在下 -->
         <div class="nc-foot-line">
@@ -142,7 +142,7 @@ function onKeydown(e: KeyboardEvent): void {
             @click="save()">{{ comp.phase === 'saving' ? '保存中…' : '保存' }}</button>
         </div>
         <div class="nc-foot-line">
-          <span v-if="comp.error" class="nc-err">{{ comp.error }}</span>
+          <span v-if="comp.error" class="nc-err" role="alert">{{ comp.error }}</span>
           <span class="nc-hint">Esc 取消 · Ctrl+Enter 保存</span>
         </div>
       </div>

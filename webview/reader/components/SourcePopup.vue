@@ -12,7 +12,26 @@ import SourceManageView from './SourceManageView.vue';
 import SourceDeadView from './SourceDeadView.vue';
 
 const rootRef = ref<HTMLElement | null>(null);
-defineExpose({ el: rootRef });
+/** 管理视图里的"更内层"(导入/更多子菜单)要能被先消费 */
+const manageRef = ref<{ handleEscape?: () => boolean } | null>(null);
+
+/**
+ * Esc 分层: 子菜单 → 管理/失效视图退回搜索 → 让位给"关面板"。
+ * 与 SettingsPanel/NotesPopup 的 handleEscape 同一套约定。
+ */
+function handleEscape(): boolean {
+  // 最内层: 管理视图的子菜单(它会自己收菜单并把焦点还给主按钮)
+  if (manageRef.value && typeof manageRef.value.handleEscape === 'function' && manageRef.value.handleEscape()) {
+    return true;
+  }
+  if (state.sourceView !== 'search') {
+    state.sourceView = 'search';
+    return true;
+  }
+  return false;
+}
+
+defineExpose({ el: rootRef, handleEscape });
 
 const searchableCount = computed(function () { return searchableSources(state.sources).length; });
 const deadCount = computed(function () { return deadSources(state.sources).length; });
@@ -26,9 +45,10 @@ watch(function () { return state.sourceOpen; }, function (open) {
 </script>
 
 <template>
-  <section id="sourcePopup" ref="rootRef" class="popup" :class="{ open: state.sourceOpen }">
+  <section id="sourcePopup" ref="rootRef" class="popup" :class="{ open: state.sourceOpen }"
+    role="dialog" aria-modal="false" aria-labelledby="sourcePopupTitle">
     <div class="popup-head">
-      <b class="popup-title">书源</b>
+      <h2 class="popup-title" id="sourcePopupTitle" tabindex="-1">书源</h2>
       <span class="popup-sub">
         {{ searchableCount }} 个可搜<template v-if="deadCount"> · {{ deadCount }} 个失效</template>
       </span>
@@ -49,7 +69,7 @@ watch(function () { return state.sourceOpen; }, function (open) {
       正在解析「{{ state.previewPending.title }}」· {{ state.previewPending.sourceName }}…
     </div>
     <SourceSearchView v-if="state.sourceView === 'search'" />
-    <SourceManageView v-else-if="state.sourceView === 'manage'" />
+    <SourceManageView v-else-if="state.sourceView === 'manage'" ref="manageRef" />
     <SourceDeadView v-else />
   </section>
 </template>

@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>阅读页控件设计稿 v1 · r-novel-reader</title>
+<style>
+  :root {
+    --page: #f4f3ef;
+    --card: #ffffff;
+    --ink: #1f1f1d;
+    --ink-2: #6d6a64;
+    --ink-3: #94908a;
+    --line: rgba(0,0,0,.10);
+    --line-2: rgba(0,0,0,.18);
+    --mark: #d9584f;
+
+    --reader-bg: #1b1b1b;
+    --paper-bg: #1e1e1e;
+    --text: #cfc9be;
+    --text-muted: #8b8781;
+    --accent: #e8b75d;
+    --accent-fg: #1a1a1a;
+    --hover-bg: rgba(232,183,93,.16);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 40px 32px 72px;
+    background: var(--page);
+    color: var(--ink);
+    font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1120px; margin: 0 auto; }
+
+  .page-head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 24px; flex-wrap: wrap;
+    padding-bottom: 20px; border-bottom: 1px solid var(--line);
+  }
+  .page-head h1 { margin: 0 0 6px; font-size: 20px; font-weight: 500; letter-spacing: .01em; }
+  .page-head p { margin: 0; font-size: 13px; color: var(--ink-2); }
+  .page-head .meta {
+    font-size: 11.5px; color: var(--ink-3);
+    border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px;
+    white-space: nowrap;
+  }
+
+  .block { margin-top: 40px; }
+  .block-head {
+    display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px;
+  }
+  .block-head h2 { margin: 0; font-size: 14px; font-weight: 500; }
+  .block-head span { font-size: 12px; color: var(--ink-3); }
+  .block-head .tag {
+    margin-left: auto; font-size: 11.5px; color: var(--ink-2);
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 999px; padding: 3px 10px;
+  }
+
+  /* ---------- 阅读器画布 ---------- */
+  .reader {
+    position: relative;
+    background: var(--reader-bg);
+    border-radius: 14px;
+    padding: 40px 96px;
+    display: flex; justify-content: center;
+    border: 1px solid rgba(0,0,0,.35);
+  }
+
+  .paper {
+    position: relative;
+    width: 100%; max-width: 720px;
+    padding: 8px 0 24px;
+  }
+
+  .paper .chapter-title {
+    margin: 0 0 22px; text-align: center;
+    font-size: 19px; font-weight: 600; letter-spacing: .05em;
+    color: #e6e1d8;
+    font-family: "Songti SC", "SimSun", "Source Han Serif SC", serif;
+  }
+
+  .paper p {
+    margin: 0 0 16px; text-indent: 2em;
+    font-size: 15px; line-height: 2.05; color: var(--text);
+    font-family: "Songti SC", "SimSun", "Source Han Serif SC", serif;
+  }
+
+  /* ---------- 两侧翻页箭头 ---------- */
+  .side-nav {
+    position: absolute; top: 50%;
+    width: 56px; height: 120px;
+    transform: translateY(-50%);
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: 0; padding: 0; cursor: pointer;
+    border-radius: 12px;
+    transition: background .16s ease, color .16s ease;
+    color: #a29c93;
+  }
+  .side-nav.left  { left: -76px; }
+  .side-nav.right { right: -76px; }
+
+  .side-nav svg {
+    width: 24px; height: 24px; display: block;
+    transition: transform .16s ease;
+  }
+
+  .side-nav::before {
+    content: "";
+    position: absolute; inset: 50% auto auto 50%;
+    width: 40px; height: 40px; margin: -20px 0 0 -20px;
+    border-radius: 50%;
+    background: transparent;
+    transition: background .16s ease, box-shadow .16s ease;
+  }
+  .side-nav svg { position: relative; z-index: 1; }
+
+  .side-nav:hover,
+  .side-nav:focus-visible {
+    color: var(--accent);
+    outline: none;
+  }
+  .side-nav:hover::before,
+  .side-nav:focus-visible::before {
+    background: var(--hover-bg);
+    box-shadow: 0 0 0 1px rgba(232,183,93,.28);
+  }
+  .side-nav:active svg { transform: scale(.94); }
+
+  .side-nav:disabled {
+    opacity: .3; cursor: default;
+    color: var(--text-muted);
+  }
+  .side-nav:disabled::before { background: transparent; box-shadow: none; }
+
+  /* ---------- 预览「加入书架」 ---------- */
+  .add-book {
+    position: absolute; top: 0; right: 0;
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 14px;
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    color: var(--accent-fg); background: var(--accent);
+    border: 1px solid transparent; border-radius: 8px;
+    cursor: pointer; white-space: nowrap;
+    transition: background .16s ease, transform .1s ease, opacity .2s ease;
+  }
+  .add-book .plus { font-size: 14px; line-height: 1; }
+  .add-book:hover:not(:disabled) { background: #f0c672; }
+  .add-book:active:not(:disabled) { transform: scale(.98); }
+  .add-book:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .add-book.is-loading {
+    background: #b9985c; color: #221f1a; cursor: default;
+    min-width: 112px; justify-content: center;
+  }
+  .add-book.is-loading .plus { display: none; }
+
+  .add-book.is-success {
+    background: transparent; color: var(--accent);
+    border-color: var(--accent); cursor: default;
+    min-width: 112px; justify-content: center;
+  }
+  .add-book.is-success .plus { display: none; }
+
+  /* ---------- 标注 ---------- */
+  .marker {
+    position: absolute; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--mark); color: #fff;
+    font-size: 11px; line-height: 18px; text-align: center;
+    font-weight: 500; z-index: 3; box-shadow: 0 0 0 3px rgba(217,88,79,.18);
+  }
+  .measure {
+    position: absolute; font-size: 11px; color: #b9b3a9;
+    border: 1px dashed rgba(232,183,93,.5); border-radius: 4px;
+    padding: 1px 5px; background: rgba(0,0,0,.35); white-space: nowrap;
+  }
+
+  .legend {
+    margin: 14px 0 0; padding: 0; list-style: none;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px 24px;
+  }
+  .legend li {
+    font-size: 12px; color: var(--ink-2); line-height: 1.6;
+    display: flex; gap: 8px; align-items: baseline;
+  }
+  .legend b, .legend em { font-style: normal; font-weight: 500; color: var(--ink); }
+  .legend .num {
+    flex: none; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--mark); color: #fff; font-size: 11px; font-weight: 500;
+    text-align: center; line-height: 18px;
+  }
+
+  /* ---------- 手机 ---------- */
+  .phone-row { display: flex; gap: 32px; flex-wrap: wrap; align-items: flex-start; }
+  .phone {
+    width: 390px; height: 560px; flex: none;
+    background: var(--reader-bg); border-radius: 22px;
+    border: 1px solid rgba(0,0,0,.35);
+    padding: 20px 20px 0; position: relative; overflow: hidden;
+  }
+  .phone .chapter-title { font-size: 15px; margin: 0 0 16px; color: #e6e1d8; }
+  .phone p { font-size: 13px; line-height: 1.95; margin: 0 0 12px; color: var(--text); }
+  .phone .add-book {
+    top: 14px; right: 14px;
+    height: 32px; padding: 0 10px; font-size: 12px;
+  }
+  .phone-note { flex: 1 1 240px; font-size: 12.5px; color: var(--ink-2); line-height: 1.75; }
+  .phone-note h3 { margin: 0 0 8px; font-size: 13px; font-weight: 500; color: var(--ink); }
+  .phone-note ul { margin: 0; padding-left: 18px; }
+  .phone-note li { margin-bottom: 4px; }
+
+  /* ---------- 状态一览 ---------- */
+  .states {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+  }
+  .state-card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 18px 16px 14px;
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+  }
+  .state-card .demo { display: flex; align-items: center; justify-content: center; min-height: 40px; }
+  .state-card .demo .add-book { position: static; }
+  .state-card .name { font-size: 12px; color: var(--ink-2); }
+  .state-card .note { font-size: 11.5px; color: var(--ink-3); text-align: center; }
+
+  .arrow-demo {
+    width: 40px; height: 40px; border-radius: 50%;
+    font-size: 22px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted);
+  }
+  .arrow-demo.hover { background: var(--hover-bg); color: var(--accent); }
+  .arrow-demo.off { opacity: .3; }
+
+  /* ---------- 页脚 ---------- */
+  .foot {
+    margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--ink-3); line-height: 1.8;
+  }
+  .foot b { color: var(--ink-2); font-weight: 500; }
+
+  @media (max-width: 900px) {
+    body { padding: 24px 16px 48px; }
+    .reader { padding: 28px 56px; }
+    .side-nav.left { left: -64px; }
+    .side-nav.right { right: -64px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page-head">
+    <div>
+      <h1>阅读页控件设计稿 · v1</h1>
+      <p>两侧翻页箭头 + 预览「加入书架」的布局与状态重设计 · r-novel-reader</p>
+    </div>
+    <div class="meta">设计稿 · 未在扩展内实测</div>
+  </header>
+
+  <section class="block">
+    <div class="block-head">
+      <h2>桌面</h2>
+      <span>纸面 720px 列宽 · 以下尺寸均为真实像素</span>
+      <span class="tag">悬停箭头可看 hover 态 · 点按钮可看状态流转</span>
+    </div>
+
+    <div class="reader">
+      <div class="paper">
+        <button class="side-nav left" aria-label="上一章" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <button class="side-nav right" aria-label="下一章">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+        </button>
+
+        <button class="add-book" id="addBtn"><span class="plus">＋</span><span class="label">加入书架</span></button>
+
+        <h3 class="chapter-title">第三十二章 深空问答</h3>
+        <p>问：天当棋盘星作子，何人能下？</p>
+        <p>答：地生万物人为主，科技能上！</p>
+        <p>科学家认为在那茫茫星际，可能没有其他智慧生物。</p>
+        <p>但因证据，至少来说，一个世纪的宇宙探索，未曾证实外星生物。</p>
+        <p>但人类科研组，并未停下对“第二颗生命星球”探寻。</p>
+        <p>2056年5月13日，华夏的科技已经进入了全新的阶段。</p>
+        <p>中国科研组，成功的研究出了新能源“反物质粒子”。</p>
+        <p>硬币大小的体积，可替代传统火箭燃料升空60次！</p>
+
+        <span class="marker" style="left:-70px; top:calc(50% - 78px);">1</span>
+        <span class="marker" style="right:-70px; top:calc(50% + 62px);">2</span>
+        <span class="marker" style="right:-2px; top:-22px;">3</span>
+        <span class="measure" style="left:-78px; bottom:-6px;">命中区 56 × 120</span>
+      </div>
+    </div>
+
+    <ul class="legend">
+      <li><span class="num">1</span><span>箭头字号从 52px 缩到 <b>24px</b>，形状不再大过正文行高</span></li>
+      <li><span class="num">2</span><span>hover 才出现 <b>40px 圆形底</b>（半透明强调色），平时完全安静</span></li>
+      <li><span class="num">3</span><span>「加入书架」移到纸面右上角，<b>32px 高 / 圆角 8 / 内缩 16px</b></span></li>
+    </ul>
+  </section>
+
+  <section class="block">
+    <div class="block-head">
+      <h2>窄屏 390px</h2>
+      <span>gutter 消失，箭头隐藏</span>
+    </div>
+    <div class="phone-row">
+      <div class="phone">
+        <button class="add-book" id="addBtnMobile"><span class="plus">＋</span><span class="label">加入书架</span></button>
+        <h3 class="chapter-title">第三十二章 深空问答</h3>
+        <p>问：天当棋盘星作子，何人能下？</p>
+        <p>答：地生万物人为主，科技能上！</p>
+        <p>科学家认为在那茫茫星际，可能没有其他智慧生物。</p>
+        <p>但因证据，至少来说，一个世纪的宇宙探索，未曾证实外星生物。</p>
+        <p>但人类科研组，并未停下对“第二颗生命星球”探寻。</p>
+        <p>2056年5月13日，华夏的科技已经进入了全新的阶段。</p>
+        <p>中国科研组，成功的研究出了新能源“反物质粒子”。</p>
+        <p>硬币大小的体积，可替代传统火箭燃料升空60次！</p>
+      </div>
+      <div class="phone-note">
+        <h3>为什么这里要收</h3>
+        <ul>
+          <li>侧边 gutter 不足 104px，按钮硬放会盖住正文（现在代码用 <code>min()</code> 夹取，就是这个后果）</li>
+          <li>翻页改由底部章节导航和 <code>←</code> / <code>→</code> 承担，不损失能力</li>
+          <li>按钮保留文案但压缩内边距；再窄可退化为 40×40 图标</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="block-head">
+      <h2>状态一览</h2>
+      <span>每个状态都必须可辨认</span>
+    </div>
+    <div class="states">
+      <div class="state-card">
+        <div class="demo"><span class="add-book" style="position:static">＋ 加入书架</span></div>
+        <div class="name">默认</div>
+        <div class="note">实心强调色，全页唯一主操作</div>
+      </div>
+      <div class="state-card">
+        <div class="demo"><span class="add-book" style="position:static; background:#f0c672">＋ 加入书架</span></div>
+        <div class="name">悬停</div>
+        <div class="note">提亮约 8%，0.16s 过渡</div>
+      </div>
+      <div class="state-card">
+        <div class="demo"><span class="add-book is-loading" style="position:static">加入中…</span></div>
+        <div class="name">加载</div>
+        <div class="note">锁定宽度，避免按钮跳动</div>
+      </div>
+      <div class="state-card">
+        <div class="demo"><span class="add-book is-success" style="position:static">✓ 已存书架</span></div>
+        <div class="name">成功</div>
+        <div class="note">描边态，1.2s 后淡出</div>
+      </div>
+      <div class="state-card">
+        <div class="demo"><span class="arrow-demo off">→</span></div>
+        <div class="name">箭头禁用</div>
+        <div class="note">opacity .3，保留形状不消失</div>
+      </div>
+      <div class="state-card">
+        <div class="demo"><span class="arrow-demo hover">→</span></div>
+        <div class="name">箭头悬停</div>
+        <div class="note">40px 圆底 + 强调色前景</div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <b>说明</b>：本稿为界面级设计验证，未在 VS Code 扩展内实测；间距基于 8pt 栅格（4 / 8 / 12 / 16 / 24），
+    颜色沿用主题 token（<code>--accent</code> / <code>--fg-muted</code> / <code>--sp-hover</code>），未新增色值。
+    箭头 glyph 为描边 SVG（stroke 2px），与现有实现同源。
+  </footer>
+</div>
+
+<script>
+  function wireStates(btn) {
+    if (!btn) { return; }
+    const label = btn.querySelector('.label');
+    let timer = null;
+    btn.addEventListener('click', function () {
+      if (btn.disabled) { return; }
+      btn.classList.add('is-loading');
+      btn.disabled = true;
+      if (label) { label.textContent = '加入中…'; }
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        btn.classList.remove('is-loading');
+        btn.classList.add('is-success');
+        if (label) { label.textContent = '✓ 已存书架'; }
+        timer = setTimeout(function () {
+          btn.classList.remove('is-success');
+          btn.disabled = false;
+          if (label) { label.textContent = '加入书架'; }
+          var plus = btn.querySelector('.plus');
+          if (plus) { plus.style.display = ''; }
+        }, 1600);
+      }, 900);
+    });
+  }
+  wireStates(document.getElementById('addBtn'));
+  wireStates(document.getElementById('addBtnMobile'));
+</script>
+</body>
+</html>

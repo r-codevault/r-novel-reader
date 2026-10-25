@@ -6,6 +6,7 @@
 import { computed } from 'vue';
 import { state, send } from '../composables/vscode';
 import { persistSettings } from '../store';
+import { toggleNoteMode } from '../composables/noteMode';
 // 品牌 logo 小图(48px, 米色圆角底+图形留白); 构建时 <4KB 自动内联为 data URL
 import logoUrl from '../assets/logo.png';
 // 摸鱼模式: 偷懒的猫图标(用户提供的摸鱼猫, 1000×1000, fill 已转 currentColor); vite ?raw 原样引入
@@ -155,7 +156,7 @@ function startSlacker(): void {
 
     <button v-for="it in items.filter(function (x) { return x.id === 'shelf' || x.id === 'history' || x.id === 'catalog' || x.id === 'notes'; })"
       :key="it.id" class="menu-item" :class="{ active: state[it.key] }" :data-menu="it.id"
-      :title="it.name" @click="toggle(it)">
+      :title="it.name" :aria-expanded="state[it.key] ? 'true' : 'false'" @click="toggle(it)">
       <span class="menu-ico" v-html="it.svg"></span>
       <span class="menu-label">{{ it.name }}</span>
       <span v-if="it.id === 'notes' && currentNoteCount > 0" class="menu-badge">{{ currentNoteCount }}</span>
@@ -184,9 +185,26 @@ function startSlacker(): void {
       <span class="menu-label">状态栏</span>
     </button>
 
+    <!-- 笔记本模式开关(Alt+N 同一动作): 开启后正文里所有段落的笔记按钮可见且可键盘到达。
+         aria-pressed 让读屏能播报"已按下/未按下"（R1-06）。 -->
+    <button class="menu-item menu-toggle-notemode" :class="{ active: state.noteMode }"
+      :data-menu="'note-mode'" :title="state.noteMode ? '退出笔记本模式（Alt+N）' : '笔记本模式（Alt+N）'"
+      :aria-pressed="state.noteMode ? 'true' : 'false'"
+      @click="toggleNoteMode">
+      <span class="menu-ico">
+        <svg viewBox="0 0 707 704" aria-hidden="true">
+          <rect x="60" y="80" width="587" height="544" rx="90" fill="none" stroke="currentColor" stroke-width="46"/>
+          <path d="M170 240 H540 M170 352 H540 M170 464 H400" fill="none" stroke="currentColor" stroke-width="42" stroke-linecap="round"/>
+          <circle cx="540" cy="464" r="96" fill="var(--sp-accent)" />
+          <path d="M540 410 V518 M486 464 H594" fill="none" stroke="var(--sp-accent-fg)" stroke-width="40" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="menu-label">笔记模式</span>
+    </button>
+
     <button v-for="it in items.filter(function (x) { return x.id !== 'shelf' && x.id !== 'history' && x.id !== 'catalog' && x.id !== 'notes'; })"
       :key="it.id" class="menu-item" :class="{ active: state[it.key] }" :data-menu="it.id"
-      :title="it.name" @click="toggle(it)">
+      :title="it.name" :aria-expanded="state[it.key] ? 'true' : 'false'" @click="toggle(it)">
       <span class="menu-ico" v-html="it.svg"></span>
       <span class="menu-label">{{ it.name }}</span>
     </button>

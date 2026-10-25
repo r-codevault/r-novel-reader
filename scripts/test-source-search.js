@@ -28,6 +28,13 @@ async function makeStore() {
   return store;
 }
 
+/** 模拟 fetch 被 abort 时抛出的错误(名字必须是 AbortError) */
+function makeAbortError() {
+  const err = new Error('This operation was aborted');
+  err.name = 'AbortError';
+  return err;
+}
+
 function makeResponse(status, body, contentType) {
   const buf = Buffer.isBuffer(body) ? body : Buffer.from(body, 'utf8');
   return {
@@ -402,7 +409,7 @@ const realFetch = globalThis.fetch;
     assert.strictEqual(out.skippedSources, 0, '不应再有源上限');
   }
 
-  // 20) 暂停/继续: 暂停后不再发起新请求, 继续后跑完
+  // 20) 暂停/继续: 暂停瞬间中断在途请求(进度立刻冻结), 恢复后补跑, 一个源都不漏
   {
     const store = await makeStore();
     const many = Array.from({ length: 20 }, (_, i) => ({
@@ -412,28 +419,44 @@ const realFetch = globalThis.fetch;
     }));
     await store.importText(JSON.stringify(many));
     let requests = 0;
-    globalThis.fetch = async () => {
+    // 模拟真实 fetch: 必须响应 abort, 否则测不出"在途被中断"
+    globalThis.fetch = async (url, init) => {
       requests += 1;
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, 10);
+        const signal = init && init.signal;
+        if (!signal) { return; }
+        if (signal.aborted) { clearTimeout(timer); reject(makeAbortError()); return; }
+        signal.addEventListener('abort', () => {
+          clearTimeout(timer);
+          reject(makeAbortError());
+        }, { once: true });
+      });
       return makeResponse(200, fx.SEARCH_HTML);
     };
     const control = new SearchControl();
     let paused = false;
+    let lastDone = 0;
     const running = new SearchService(store).search('遮天', {
       control,
       onProgress: (p) => {
+        lastDone = p.done;
         if (!paused && p.done >= 3) { paused = true; control.pause(); }
       },
     });
-    await new Promise((r) => setTimeout(r, 120));
+    // 让在途的请求收尾(被 abort 后不会再推进进度)
+    await new Promise((r) => setTimeout(r, 60));
     const atPause = requests;
+    const frozenDone = lastDone;
     await new Promise((r) => setTimeout(r, 150));
-    assert.strictEqual(requests, atPause, '暂停后不应再发起新请求(在途的会完成)');
+    assert.strictEqual(lastDone, frozenDone, '暂停后进度应立即冻结(在途请求已被中断)');
+    assert.strictEqual(requests, atPause, '暂停后不应再发起新请求');
     assert.ok(atPause < 20, '暂停时应还没跑完, 实际已请求 ' + atPause);
     control.resume();
     const out = await running;
     assert.strictEqual(out.sourceCount, 20);
-    assert.strictEqual(requests, 20, '继续后应跑完全部源');
+    assert.strictEqual(out.recorded, 20, '恢复后每个源都应有结果记录(被中断的源重跑, 不能漏)');
+    assert.strictEqual(lastDone, 20, '恢复后进度应跑满 20');
   }
 
   // 21) 流式批次: onBatch 回传新增结果, 合并后与最终结果一致

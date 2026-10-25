@@ -81,12 +81,49 @@ export function resultMeta(item: SearchBookItem): string {
   return parts.join(' · ');
 }
 
-/** 搜索结果统计文案 */
+/**
+ * 搜索结果统计文案（纯函数, 可单测）。
+ *
+ * 四种情况必须分开说, 否则用户看到的永远是"没有找到书籍"——
+ * 到底是"真的没有"还是"所有源都挂了", 处理方式完全不同（R9-02）。
+ */
 export function resultSummary(items: SearchBookItem[], errors: number): string {
-  const parts: string[] = [];
-  parts.push(items.length ? '找到 ' + items.length + ' 本' : '没有找到书籍');
-  if (errors > 0) { parts.push(errors + ' 个书源出错'); }
-  return parts.join(' · ');
+  if (!items.length && !errors) {
+    return '没有找到这本书：换个关键词，或在「书源」里调整启用范围';
+  }
+  if (!items.length && errors > 0) {
+    return '所有书源都失败了：展开明细查看原因，或对单个书源重试';
+  }
+  if (items.length && errors > 0) {
+    return '找到 ' + items.length + ' 本 · ' + errors + ' 个书源出错';
+  }
+  return '找到 ' + items.length + ' 本';
+}
+
+/**
+ * 宿主错误分类(kind) -> 中文类别标签。
+ *
+ * 宿主的 `errorOf()` 已经给出 kind(searchService/http/evalRule), 这里**只做展示映射**,
+ * 不在 webview 重新判断错误类型 —— 分类真相源只能有一个（R9-01）。
+ */
+export function errorCategory(kind: string | undefined): string {
+  switch (kind) {
+    case 'timeout': return '超时';
+    case 'network': return '网络';
+    case 'http': return '状态码';
+    case 'parse': return '解析';
+    case 'rule': return '规则';
+    case 'unsupported': return '不支持';
+    case 'abort': return '已取消';
+    case 'fatal': return '致命';
+    default: return '未知';
+  }
+}
+
+/** 失败原因精简: 超过 40 字截断(完整原因走 title) */
+export function shortReason(message: string): string {
+  const text = (message || '').replace(/\s+/g, ' ').trim();
+  return text.length > 40 ? text.slice(0, 40) + '…' : text;
 }
 
 /** 失败源名字摘要(最多 3 个) */
@@ -112,13 +149,20 @@ export interface ResultRows {
   histAlloc: number;
 }
 
+/**
+ * 搜索结果区行数分配: 当前/历史上下分栏, 分隔条高度另算。
+ *
+ * @param capacity 结果区实测可容纳的行数（默认取历史常量 RESULT_ROW_CAP）。
+ *                 第 5 参新增且带默认值 —— 旧的 4 参调用行为完全不变（R4-04）。
+ */
 export function allocResultRows(
   currentCount: number,
   historyCount: number,
   hasHistory: boolean,
-  dragRows: number | null
+  dragRows: number | null,
+  capacity: number = RESULT_ROW_CAP
 ): ResultRows {
-  const CAP = RESULT_ROW_CAP;
+  const CAP = Math.max(1, Math.round(Number(capacity) || RESULT_ROW_CAP));
   const clamp = function (n: number, lo: number, hi: number): number {
     return Math.min(hi, Math.max(lo, n));
   };
@@ -130,15 +174,18 @@ export function allocResultRows(
     const hist = Math.min(historyCount, CAP);
     return { curRender: 0, histRender: hist, curAlloc: 0, histAlloc: hist };
   }
+  // 对半分/差额分配都按"实测容量"缩放, 不再写死 5 与 10
+  const half = Math.max(1, Math.floor(CAP / 2));
+  const small = Math.max(1, Math.ceil(CAP / 2) - 1);
   let cur: number;
   if (dragRows !== null) {
     cur = dragRows;
-  } else if (currentCount < 5) {
+  } else if (currentCount < small) {
     cur = currentCount;                 // 当前 3 条 -> 3 / 7
-  } else if (historyCount < 5) {
+  } else if (historyCount < small) {
     cur = CAP - historyCount;           // 历史 3 条 -> 7 / 3
   } else {
-    cur = 5;                            // 两边都够 -> 5 / 5
+    cur = half;                         // 两边都够 -> 5 / 5
   }
   cur = clamp(cur, currentCount > 0 ? 1 : 0, Math.min(currentCount, CAP));
   const histAlloc = Math.max(0, CAP - cur);

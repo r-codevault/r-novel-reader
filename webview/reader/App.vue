@@ -5,7 +5,7 @@
  * 弹窗互斥: 任何时刻最多一个弹窗(目录/阅读设置/书架/存储)
  */
 import { onMounted, nextTick, ref, watch } from 'vue';
-import { send, state, vscode, gotoChapter, saveRestoreState, currentScrollRatio, type ChapterPayload, type DrawerTab, type NoteItem, type ShelfItemView } from './composables/vscode';
+import { send, state, vscode, gotoChapter, saveRestoreState, currentScrollRatio, currentBookKey, ownedBy, clearOpPending, type ChapterPayload, type DrawerTab, type NoteItem, type ShelfItemView, type OfflineStatusView, type ChapterMarksView, type DownloadTaskView, type OpResultPayload } from './composables/vscode';
 import { applyThemeVars, DEFAULT_SETTINGS, flushProgress, persistSettings, sendProgress, setProgressSuppressed, setSuppressParaClick, type ReadingSettings } from './store';
 import { resolveChapterIndex } from '../../src/noteAnchor';
 import { parseShortcut, matchShortcut } from './composables/shortcut';
@@ -20,6 +20,10 @@ import StoragePopup from './components/StoragePopup.vue';
 import NotesPopup from './components/NotesPopup.vue';
 import NoteComposer from './components/NoteComposer.vue';
 import SourcePopup from './components/SourcePopup.vue';
+import ConfirmDialog from './components/ConfirmDialog.vue';
+import { OVERLAY_SPECS, markOpen, focusInto, restoreFrom, handOff, type PopupKey } from './composables/overlay';
+import { toggleNoteMode, resetCursorForChapter } from './composables/noteMode';
+import { askConfirm, cancelConfirm, summarizeShelfPlan } from './composables/ops';
 import './reader.css';
 
 const catalogRef = ref<InstanceType<typeof CatalogPanel> | null>(null);
@@ -30,6 +34,26 @@ const sourceRef = ref<InstanceType<typeof SourcePopup> | null>(null);
 const storageRef = ref<InstanceType<typeof StoragePopup> | null>(null);
 const notesRef = ref<InstanceType<typeof NotesPopup> | null>(null);
 const readerRef = ref<InstanceType<typeof ReaderArea> | null>(null);
+const confirmRef = ref<InstanceType<typeof ConfirmDialog> | null>(null);
+
+/** popupKey -> 组件实例（`el` 与 `handleEscape` 由各组件 defineExpose） */
+function overlayRef(key: PopupKey): { el?: HTMLElement | null; handleEscape?: () => boolean } | null {
+  switch (key) {
+    case 'catalogOpen': return catalogRef.value;
+    case 'settingsOpen': return settingsRef.value;
+    case 'shelfOpen': return shelfRef.value;
+    case 'storageOpen': return storageRef.value;
+    case 'notesOpen': return notesRef.value;
+    case 'sourceOpen': return sourceRef.value;
+    case 'historyOpen': return historyRef.value;
+    default: return null;
+  }
+}
+
+/** 当前打开的浮层 key（按固定的内外层顺序：内部下拉由各组件的 handleEscape 先消费） */
+function openKeys(): PopupKey[] {
+  return popupKeys.filter(function (k) { return !!state[k]; }) as PopupKey[];
+}
 
 // ---------------------------------------------------------------- 设置应用 / 菜单宽度
 function applySettings(s: ReadingSettings): void {
@@ -99,8 +123,115 @@ function openTab(tab: DrawerTab | undefined): void {
   else { openOnly('shelfOpen'); }
 }
 
+// ---------------------------------------------------------------- 浮层焦点栈
+// 打开/关闭散落在 SideMenu / openTab / closeAllPopups / 组件内赋值 / init 五处,
+// 所以统一在 App 用 sync watch 观测 popupKeys 签名：
+//   某 key 0->1            -> markOpen(同步读 activeElement) + nextTick focusInto
+//   某 key 1->0 且无新开    -> nextTick restoreFrom
+//   同一 tick 内既有开也有关 -> handOff（只聚焦新浮层, 不为旧浮层恢复焦点）
+watch(function () {
+  return popupKeys.map(function (k) { return state[k] ? '1' : '0'; }).join('');
+}, function (sig, oldSig) {
+  const opened: PopupKey[] = [];
+  const closed: PopupKey[] = [];
+  for (let i = 0; i < popupKeys.length; i++) {
+    if (sig[i] === '1' && oldSig[i] === '0') { opened.push(popupKeys[i] as PopupKey); }
+    if (sig[i] === '0' && oldSig[i] === '1') { closed.push(popupKeys[i] as PopupKey); }
+  }
+  for (const key of opened) { markOpen(OVERLAY_SPECS[key]); }
+  if (opened.length > 0) {
+    const to = opened[opened.length - 1];
+    nextTick(function () {
+      // 互斥切换: 只为新浮层聚焦一次, 不给旧浮层恢复焦点（否则焦点会抖）
+      if (closed.length > 0) { handOff(closed, to); } else { focusInto(to); }
+    });
+    return;
+  }
+  if (closed.length > 0) {
+    const from = closed[closed.length - 1];
+    nextTick(function () { restoreFrom(from); });
+  }
+}, { flush: 'sync' });
+
 // ---------------------------------------------------------------- 扩展消息
 let previewTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * 写一条下载任务表记录(按 filePath 键)。
+ *
+ * 任务表是**全局**视图: 只有"当前打开的书"才会同步到 offline/dlRun,
+ * 别的书的进度只落在这里 —— 这正是修复"B 书显示 A 的下载进度"的关键。
+ */
+function upsertTask(filePath: string, patch: Partial<DownloadTaskView>): void {
+  if (!filePath) { return; }
+  const prev = state.downloadTasks[filePath];
+  state.downloadTasks[filePath] = {
+    filePath,
+    bookTitle: patch.bookTitle || (prev ? prev.bookTitle : ''),
+    done: typeof patch.done === 'number' ? patch.done : (prev ? prev.done : 0),
+    total: typeof patch.total === 'number' ? patch.total : (prev ? prev.total : 0),
+    failed: typeof patch.failed === 'number' ? patch.failed : (prev ? prev.failed : 0),
+    running: typeof patch.running === 'boolean' ? patch.running : (prev ? prev.running : false),
+    paused: typeof patch.paused === 'boolean' ? patch.paused : (prev ? prev.paused : false),
+    updatedAt: Date.now(),
+  };
+}
+
+/** 任务表全量快照(宿主下发): 以快照为准, 不保留快照里没有的运行中任务 */
+function replaceTasks(tasks: DownloadTaskView[]): void {
+  const next: Record<string, DownloadTaskView> = {};
+  for (const t of tasks || []) {
+    if (!t || !t.filePath) { continue; }
+    next[t.filePath] = {
+      filePath: t.filePath,
+      bookTitle: t.bookTitle || t.filePath,
+      done: t.done || 0,
+      total: t.total || 0,
+      failed: t.failed || 0,
+      running: !!t.running,
+      paused: !!t.paused,
+      updatedAt: t.updatedAt || Date.now(),
+    };
+  }
+  state.downloadTasks = next;
+}
+
+/** 归属 + 轮次校验后的章节回包是否可应用 */
+function acceptChapter(msg: { filePath?: string; reqId?: number }, tag: string): boolean {
+  if (!ownedBy(msg, tag)) { return false; }
+  if (typeof msg.reqId === 'number') {
+    // 回退的 reqId = 上一轮(或上一本书)的迟到回包
+    if (msg.reqId < state.chapterReqSeq) {
+      console.warn('[reader] 丢弃回退的章节回包', tag, msg.reqId, state.chapterReqSeq);
+      return false;
+    }
+    state.chapterReqSeq = msg.reqId;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------- 搜索播报节流
+// 读屏播报必须节流: 每完成一个源就播一次会把屏幕阅读器刷爆(R9-03)。
+let announceDone = -1;
+let announceAt = 0;
+
+/** 更新 sr-only 播报文案(done 变化 && (≥800ms 或已到总数)) */
+function announceSearchProgress(done: number, total: number): void {
+  if (done === announceDone) { return; }
+  const now = Date.now();
+  const finished = total > 0 && done >= total;
+  if (!finished && now - announceAt < 800) { return; }
+  announceDone = done;
+  announceAt = now;
+  state.searchAnnounce = total > 0 ? '正在搜索书源（' + done + '/' + total + '）' : '正在搜索书源';
+}
+
+/** 新一轮搜索开始时重置播报节流状态 */
+function resetSearchAnnounce(): void {
+  announceDone = -1;
+  announceAt = 0;
+  state.searchAnnounce = '';
+}
 
 function clearPreviewPending(): void {
   if (previewTimer) { clearTimeout(previewTimer); previewTimer = null; }
@@ -135,6 +266,14 @@ watch(function () { return state.sourceOpen; }, function (open, old) {
   if (old && !open && state.previewPending) { state.previewPending.dismissed = true; }
 });
 
+// 新一轮搜索: 重置播报节流、收起失败明细、清掉上一轮的单源重试状态
+watch(function () { return state.searching; }, function (on) {
+  if (!on) { return; }
+  resetSearchAnnounce();
+  state.searchErrorOpen = false;
+  state.sourceRetries = {};
+});
+
 function handleExtensionMessage(msg: { type?: string; payload?: Record<string, unknown> }): void {
   if (!msg || !msg.type) { return; }
   switch (msg.type) {
@@ -142,6 +281,14 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       const p = msg.payload as Record<string, unknown>;
       state.chapterLoading = null;
       state.chapterError = null;
+      // 协议协商: 宿主声明 protocolVersion>=2 才开严格归属校验(见 src/protocol.ts)
+      state.ownershipStrict = ((p.protocolVersion as number) || 0) >= 2;
+      // 换书/重开: 轮次归零, 旧书任何迟到的 reqId 都会因"归属不符"被丢弃
+      state.chapterReqSeq = 0;
+      // 任务表是全局视图, 不因换书清空
+      if (Array.isArray(p.downloadTasks)) {
+        replaceTasks(p.downloadTasks as DownloadTaskView[]);
+      }
       state.novel = {
         filePath: (p.filePath as string) || '',
         totalChapters: p.totalChapters as number,
@@ -187,6 +334,18 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.libraryPath = (p.libraryPath as string) || '';
       state.notes = (p.notes as NoteItem[]) || [];
       state.sources = (p.sources as typeof state.sources) || [];
+      // 离线下载状态: 随 init 首帧一次带下来, 避免目录面板再请求一次
+      state.offline = (p.offline as OfflineStatusView | undefined) || null;
+      state.dlRowOpen = false;
+      state.dlRun = null;
+      state.dlNotice = '';
+      // 换书先清空目录标记, 等 chapterMarks 异步补上(避免短暂显示上一本的标记)
+      state.marks = {
+        cached: [],
+        read: [],
+        readUpTo: (p.chapterIndex as number) || 0,
+      };
+      state.catFilter = 'all';
       // 换书/重开: 笔记相关的临时态一律清空
       state.noteComposer = null;
       state.noteReturn = null;
@@ -210,11 +369,18 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       }
       break;
     }
-    case 'chapter':
+    case 'chapter': {
+      const p = msg.payload as unknown as ChapterPayload;
+      if (!acceptChapter(p, 'chapter')) { break; }
       state.chapterLoading = null;
       state.chapterError = null;
-      state.chapter = msg.payload as unknown as ChapterPayload;
+      state.chapter = p;
+      // 阅读进度: 推进「读到的最大章号」, 目录里靠它把已读章压灰
+      if (state.chapter && state.chapter.index > state.marks.readUpTo) {
+        state.marks.readUpTo = state.chapter.index;
+      }
       break;
+    }
     case 'settings':
       applySettings(msg.payload as unknown as ReadingSettings);
       break;
@@ -222,13 +388,15 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       openOnly('settingsOpen');
       break;
     case 'chapterLoading': {
-      const p = msg.payload as { index: number; title?: string };
+      const p = msg.payload as { index: number; title?: string; filePath?: string; reqId?: number };
+      if (!acceptChapter(p, 'chapterLoading')) { break; }
       state.chapterLoading = { index: p.index, title: p.title || '' };
       state.chapterError = null;
       break;
     }
     case 'chapterError': {
-      const p = msg.payload as { index: number; message: string };
+      const p = msg.payload as { index: number; message: string; filePath?: string; reqId?: number };
+      if (!acceptChapter(p, 'chapterError')) { break; }
       state.chapterLoading = null;
       state.chapterError = { index: p.index, message: p.message || '加载失败' };
       break;
@@ -247,10 +415,24 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       break;
     }
     case 'previewSaved':
+      state.previewAddPending = false;
       if (state.novel && state.novel.online) {
         state.novel = { ...state.novel, online: { ...state.novel.online, preview: false } };
       }
       break;
+    // 加入失败: 扩展已弹错误通知, 这里只把按钮从「加入中…」恢复可点
+    case 'previewAddFailed':
+      state.previewAddPending = false;
+      break;
+    // 当前书被移出书架: 回到预览态, 正文「+ 加入书架」重新出现(previewSaved 的反向)
+    case 'previewReset': {
+      state.previewAddPending = false;
+      const fp = (msg as { filePath?: string }).filePath;
+      if (state.novel && state.novel.online && (!fp || state.novel.filePath === fp)) {
+        state.novel = { ...state.novel, online: { ...state.novel.online, preview: true } };
+      }
+      break;
+    }
     case 'onlineBookAdded': {
       const m = msg as { bookUrl?: string; ok?: boolean; message?: string };
       if (m.bookUrl) {
@@ -286,9 +468,17 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       };
       break;
     }
-    case 'shelf':
-      state.shelf = (msg as { items?: ShelfItemView[] }).items || [];
+    case 'shelf': {
+      const items = (msg as { items?: ShelfItemView[] }).items || [];
+      state.shelf = items;
+      // 书架快照是真相源: 清掉已不在书架里的"本次会话已加入"标记,
+      // 否则搜索结果里的「移出书架」执行后面板仍判定为已加入, 按钮不会复原
+      const urls = new Set(items.map((i) => i.onlineBookUrl).filter((u): u is string => !!u));
+      state.onlineAdded = state.onlineAdded.filter(
+        (u) => urls.has(u) || state.onlineAddPending.indexOf(u) >= 0
+      );
       break;
+    }
     case 'library':
       state.libraryPath = ((msg as { path?: string }).path) || '';
       break;
@@ -362,13 +552,18 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
     case 'searchProgress': {
       const m = msg as { token?: number; done?: number; total?: number; sourceName?: string; ok?: boolean; failed?: number };
       if (m.token !== undefined && m.token !== state.searchToken) { break; }
+      const done = m.done || 0;
+      const total = m.total || 0;
       state.searchProgress = {
-        done: m.done || 0,
-        total: m.total || 0,
+        done,
+        total,
         sourceName: m.sourceName || '',
         ok: !!m.ok,
         failed: m.failed || 0,
       };
+      // 播报节流(R9-03): 进度行本身 aria-live="off", 由这个 sr-only 区统一播报。
+      // 每完成一个源就播一次会把读屏刷屏, 所以 800ms 或结束时才更新。
+      announceSearchProgress(done, total);
       break;
     }
     case 'sources':
@@ -396,6 +591,200 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       }
       break;
     }
+    // ---- 离线下载 / 缓存 ----
+    case 'offlineStatus': {
+      const next = (msg.payload as OfflineStatusView | undefined) || null;
+      if (next && next.filePath && next.filePath !== currentBookKey()) {
+        // 别的书的离线状态: 只落任务表, 不动当前面板(否则 B 书会显示 A 的进度)
+        upsertTask(next.filePath, {
+          done: next.done, total: next.total, failed: next.failed,
+          running: next.running, paused: next.paused,
+        });
+        break;
+      }
+      // 下载进行中时宿主索引还没刷新(downloaded 可能是空的),
+      // 同一本书就用本地已有的章号列表兜住, 避免圆点突然全灭
+      state.offline = next && state.offline &&
+        next.filePath === state.offline.filePath &&
+        next.downloaded.length < state.offline.downloaded.length
+        ? { ...next, downloaded: state.offline.downloaded }
+        : next;
+      if (next && next.filePath) {
+        upsertTask(next.filePath, {
+          done: next.done, total: next.total, failed: next.failed,
+          running: next.running, paused: next.paused,
+        });
+      }
+      break;
+    }
+    case 'offlineStats':
+      state.offlineStats = (msg.payload as { bytes: number; books: number }) || { bytes: 0, books: 0 };
+      break;
+    case 'downloadProgress': {
+      const p = msg.payload as unknown as {
+        done: number; total: number; failed: number;
+        running: boolean; paused: boolean;
+        index?: number; title?: string; added?: number[];
+        filePath?: string; bookTitle?: string;
+      };
+      const fp = p.filePath || currentBookKey();
+      // 任务表: 无论是不是当前书都更新(R9-06 切走面板仍可查)
+      upsertTask(fp, {
+        done: p.done, total: p.total, failed: p.failed,
+        running: p.running, paused: p.paused, bookTitle: p.bookTitle,
+      });
+      if (fp !== currentBookKey()) { break; }   // 别的书: 只更新任务表
+      // 本轮进度单独放 dlRun: offline.total 是全书章数, 二者不能混用
+      // (区间下载时范围大小 != 全书章数)
+      state.dlRun = { done: p.done, total: p.total, failed: p.failed, running: p.running, paused: p.paused };
+      const base: OfflineStatusView = state.offline || {
+        filePath: state.novel?.filePath || '',
+        total: state.chapters.length,
+        done: 0, failed: 0,
+        running: false, paused: false,
+        downloaded: [], bytes: 0,
+        totalBytes: state.offlineStats.bytes,
+        bookCount: state.offlineStats.books,
+      };
+      // 只合并新增章号(扩展侧不会每帧重发全量 downloaded, 5000 章会拖慢渲染)
+      const added = p.added || [];
+      const downloaded = added.length
+        ? base.downloaded.concat(added)
+            .filter(function (v, i, arr) { return arr.indexOf(v) === i; })
+            .sort(function (a, b) { return a - b; })
+        : base.downloaded;
+      state.offline = {
+        ...base,
+        running: p.running,
+        paused: p.paused,
+        downloaded,
+      };
+      break;
+    }
+    case 'downloadDone': {
+      const p = msg.payload as {
+        ok?: boolean; cancelled?: boolean; done?: number; total?: number; failed?: number;
+        message?: string; filePath?: string;
+      };
+      const fp = p.filePath || currentBookKey();
+      upsertTask(fp, { done: p.done, total: p.total, failed: p.failed, running: false, paused: false });
+      if (fp !== currentBookKey()) { break; }   // 别的书结束: 只更新任务表
+      if (state.offline) {
+        state.offline = { ...state.offline, running: false, paused: false };
+      }
+      if (state.dlRun) { state.dlRun = { ...state.dlRun, running: false, paused: false }; }
+      state.dlNotice = p.cancelled
+        ? '已取消下载'
+        : p.failed
+          ? '下载结束，' + p.failed + ' 章失败（再次下载会自动重试）'
+          : p.message || '下载完成';
+      break;
+    }
+    case 'offlineExported': {
+      const p = msg.payload as { ok?: boolean; message?: string; chapters?: number; missing?: number; filePath?: string };
+      const name = p.filePath ? String(p.filePath).split(/[\\/]/).pop() : '';
+      state.dlNotice = p.ok
+        ? '已保存' + (name ? '：' + name : '') +
+          (p.chapters ? '（' + p.chapters + ' 章）' : '') +
+          (p.missing ? ' · ' + p.missing + ' 章未下载' : '')
+        : p.message || '导出失败';
+      break;
+    }
+    // 目录每章标记: 已缓存(临时) / 已读
+    case 'chapterMarks': {
+      if (!ownedBy(msg as { filePath?: string }, 'chapterMarks')) { break; }
+      const p = (msg.payload as ChapterMarksView | undefined) || { cached: [], read: [], readUpTo: -1 };
+      state.marks = {
+        cached: p.cached || [],
+        read: p.read || [],
+        // 本地已推进得更多时不要回退(读盘快照可能比当前阅读落后)
+        readUpTo: Math.max(p.readUpTo, state.marks.readUpTo),
+      };
+      break;
+    }
+    // 刚读完的章已落进临时缓存 → 目录立即点亮
+    case 'chapterCached': {
+      const p = msg.payload as { index?: number; filePath?: string; reqId?: number } | undefined;
+      if (!ownedBy(p || {}, 'chapterCached')) { break; }
+      const index = p && typeof p.index === 'number' ? p.index : -1;
+      if (index >= 0 && state.marks.cached.indexOf(index) < 0) {
+        state.marks = { ...state.marks, cached: state.marks.cached.concat([index]).sort(function (a, b) { return a - b; }) };
+      }
+      break;
+    }
+    // 刷新书架: 预演计划到达 -> 弹确认框（用户取消则什么都不写）
+    case 'shelfRefreshPlan': {
+      const plan = msg.payload as typeof state.shelfPlan;
+      if (!plan) { break; }
+      state.shelfPlan = plan;
+      askConfirm({
+        title: '刷新书架',
+        lines: summarizeShelfPlan(plan),
+        danger: false,
+        confirmText: '执行刷新',
+        op: 'shelf:refresh',
+        payload: { planId: plan.planId },
+      });
+      break;
+    }
+    // 刷新书架: 执行结果 -> 就地提示计数（不弹系统模态），差异说明追加一句
+    case 'shelfRefreshResult': {
+      const r = msg.payload as {
+        added?: number; skippedDup?: number; merged?: number;
+        retitled?: number; pruned?: number; driftNote?: string;
+      } | undefined;
+      if (!r) { break; }
+      state.shelfNotice =
+        '已刷新：新增 ' + (r.added || 0) + ' / 跳过 ' + (r.skippedDup || 0) +
+        ' / 合并 ' + (r.merged || 0) + ' / 修正 ' + (r.retitled || 0) +
+        ' / 清理 ' + (r.pruned || 0) + (r.driftNote ? '（' + r.driftNote + '）' : '');
+      break;
+    }
+    // 下载任务表全量快照
+    case 'downloadTasks': {
+      const p = msg.payload as { tasks?: DownloadTaskView[] } | undefined;
+      replaceTasks((p && p.tasks) || []);
+      break;
+    }
+    // 写操作终态: opId 匹配才收敛 UI(清 pending / 关确认框 / 退出管理态)
+    case 'opResult': {
+      const r = msg.payload as OpResultPayload | undefined;
+      if (!r || !r.opId) { break; }
+      clearOpPending(r.opId);
+      // 只有成功才关闭确认框。失败时**保留**它 —— 框内的 role=alert 会显示原因，
+      // 用户可以重试或取消；否则用户会以为"点了没反应"(R7-03/R9-05)。
+      if (r.ok && state.confirm && state.confirm.opId === r.opId) {
+        state.confirm = null;
+      }
+      // 各面板(书架/历史/笔记/存储)watch 这个广播来决定"退出管理态"还是"保留选择"
+      state.lastOp = { opId: r.opId, op: r.op, ok: !!r.ok, message: r.message || '', at: Date.now() };
+      state.opError = r.ok ? '' : (r.message || '操作失败');
+      break;
+    }
+    // 单源重试结果: 成功则把该源移出失败列表并合并命中
+    case 'sourceRetryResult': {
+      const p = msg.payload as {
+        reqId?: number; sourceId?: string; sourceName?: string;
+        ok?: boolean; message?: string; items?: typeof state.searchResults;
+      } | undefined;
+      if (!p || !p.sourceId) { break; }
+      state.sourceRetries[p.sourceId] = { running: false, ok: !!p.ok, message: p.message };
+      if (p.ok) {
+        state.searchErrors = state.searchErrors.filter(function (e) { return e.sourceId !== p.sourceId; });
+        const seen = new Set(state.searchResults.map(function (i) { return i.bookUrl; }));
+        for (const item of p.items || []) {
+          if (seen.has(item.bookUrl)) { continue; }
+          seen.add(item.bookUrl);
+          state.searchResults.push(item);
+        }
+      } else if (p.message) {
+        // 保留连续失败计数策略不变, 只更新就地原因
+        state.searchErrors = state.searchErrors.map(function (e) {
+          return e.sourceId === p.sourceId ? { ...e, message: p.message as string } : e;
+        });
+      }
+      break;
+    }
   }
 }
 
@@ -408,6 +797,8 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
  */
 watch(function () { return state.chapter; }, function (ch) {
   if (!ch) { return; }
+  // 换章后段落数变了: 笔记模式的 roving 游标必须重置, 否则会指到不存在的段落
+  resetCursorForChapter();
   // 笔记跳转: 章节到位后按段落定位, 不按比例滚动, 也不回写进度
   if (state.noteJump) {
     const target = state.noteJump;
@@ -530,6 +921,14 @@ function dismissNoteReturn(): void {
 function onDocMouseDown(e: MouseEvent): void {
   const target = e.target as Node;
   const el = e.target as HTMLElement;
+  // 确认框是"浮层内的确认层": 点它在对话框之外 = 取消（执行中不允许取消）
+  if (state.confirm && !(el.closest && el.closest('.confirm-dlg'))) {
+    const pending = !!state.pendingOps[state.confirm.opId];
+    if (!pending) {
+      state.confirm = null;
+      return;
+    }
+  }
   // 新建笔记卡片: 点卡片外任意处即关闭。
   // 关闭后吞掉紧随的一次段落 click —— 本次点击只"关而不选", 再点一次才选中新段落
   if (state.noteComposer && !(el.closest && el.closest('.note-composer'))) {
@@ -550,52 +949,61 @@ function onDocMouseDown(e: MouseEvent): void {
 }
 
 /**
- * 清掉当前焦点(仅用于 Esc 等键盘收尾动作)。
- * 原因: 鼠标点过的按钮仍持有焦点, 此时按任意键会让 Chromium 判定为
- *      "键盘导航" 并画出 :focus-visible 焦点框(视觉上像"莫名其妙多了个边框");
- *      主动 blur 可避免该残留, 同时不影响真正的 Tab 键盘导航。
+ * Esc 分层（PRD R5-05）：从最内层往外逐层消费。
+ *
+ * 顺序: 确认层 → 笔记卡片 → 各浮层的内部层（下拉/行内编辑/删除确认）→ 浮层本身 → 侧栏。
+ * 每一层都要求"确实消费了才 preventDefault"，否则 Esc 会同时关掉两层。
+ *
+ * 注: 这里**不再** `blurActiveElement()`。焦点残留问题已由 `:focus-visible` 规则解决，
+ * 而主动 blur 会让键盘用户在关掉浮层后直接掉到 body 上（R5-04 明确禁止）。
  */
-function blurActiveElement(): void {
-  const el = document.activeElement as HTMLElement | null;
-  if (el && typeof el.blur === 'function' && el !== document.body) {
-    el.blur();
-  }
-}
-
 function onKeyDown(e: KeyboardEvent): void {
   if (e.key === 'Escape') {
-    // 优先级: 新建笔记卡片 → 弹窗 → 菜单
+    if (state.confirm) {
+      e.preventDefault();
+      cancelConfirm();
+      return;
+    }
     if (state.noteComposer) {
       e.preventDefault();
       state.noteComposer = null;
-      blurActiveElement();
       return;
+    }
+    // 内部下拉 / 行内编辑 / 两步删除确认: 由各浮层自己决定是否吃掉这一层
+    for (const key of openKeys()) {
+      const ref = overlayRef(key);
+      if (ref && typeof ref.handleEscape === 'function' && ref.handleEscape()) {
+        e.preventDefault();
+        return;
+      }
     }
     if (anyPopupOpen()) {
       e.preventDefault();
       closeAllPopups();
-      blurActiveElement();
       return;
     }
     if (state.menuExpanded) {
       e.preventDefault();
       state.menuExpanded = false;
-      blurActiveElement();
       return;
     }
   }
   const tag = e.target && (e.target as HTMLElement).tagName
     ? String((e.target as HTMLElement).tagName).toLowerCase() : '';
   if (tag === 'input' || tag === 'select' || tag === 'textarea') { return; }
+  // Alt+N: 切换笔记本模式（与 alt+←/→ 翻章、ctrl+alt+* 摸鱼均不冲突）
+  if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'n' || e.key === 'N')) {
+    e.preventDefault();
+    toggleNoteMode();
+    return;
+  }
   if (matchShortcut(state.prevCombo, e)) {
     e.preventDefault();
-    blurActiveElement();
     if (state.chapter) { gotoChapter(state.chapter.index - 1); }
     return;
   }
   if (matchShortcut(state.nextCombo, e)) {
     e.preventDefault();
-    blurActiveElement();
     if (state.chapter) { gotoChapter(state.chapter.index + 1); }
   }
 }
@@ -676,8 +1084,11 @@ onMounted(function () {
       <NotesPopup ref="notesRef" @jump="jumpToNote" />
       <SourcePopup ref="sourceRef" />
       <NoteComposer />
+      <ConfirmDialog ref="confirmRef" />
       <ReaderArea ref="readerRef" />
       <StatusBar v-show="statusBarVisible()" />
+      <!-- 搜索进度播报: 可见进度区 aria-live=off, 由这个 sr-only 区统一播报(节流) -->
+      <span class="sr-only" role="status" aria-live="polite" aria-atomic="true">{{ state.searchAnnounce }}</span>
       <div v-if="state.noteReturn" class="note-return">
         <button class="nr-main" @click="backToReadingPos">↩ 返回上次阅读位置 · {{ state.noteReturn.chapterTitle }}</button>
         <button class="nr-close" @click="dismissNoteReturn">关闭</button>

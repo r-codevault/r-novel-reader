@@ -2,14 +2,14 @@
  * online/searchService.ts — 多书源并发搜索
  *
  * - 不做书源数量上限: 用户勾了多少就搜多少
- * - 支持暂停/继续/取消(SearchControl): 暂停时不再启动新源, 已在途的完成
+ * - 支持暂停/继续/取消(SearchControl): 暂停立即中断在途请求, 恢复后自动补跑
  * - 结果分批流式回传(onBatch), 上千个源时也能先看到结果
  * - 单源失败不影响其它源; 一轮搜索只写一次盘
  */
 import { BookSource, BookSourceStore, SourceResult } from '../bookSource';
 import { HttpError } from '../http';
 import { UnsupportedRuleError } from '../rules/evalRule';
-import { withTimeout } from '../util/async';
+import { withTimeout, combineSignals } from '../util/async';
 import { buildSearchRequest } from './searchUrl';
 import { parseSearchPage, relevanceScore, resultKey, SearchBookItem } from './ruleApply';
 import { fetchForSource, sandboxHttpFor, SourceHttpPool } from './sourceHttp';
@@ -75,16 +75,29 @@ export class SearchControl {
     public cancelled = false;
     private waiters: (() => void)[] = [];
     private readonly aborter = new AbortController();
+    /**
+     * 暂停专用的中断信号: 每次暂停换一个, 恢复时重建。
+     * 在途请求监听它, 暂停瞬间就被中断 —— 否则要等请求自己返回/超时,
+     * 进度条还会继续往前跳几条, 看起来像"暂停没生效"。
+     */
+    private pauseAborter = new AbortController();
 
     public get signal(): AbortSignal { return this.aborter.signal; }
 
+    /** 在途请求用的中断信号(暂停或取消任一触发即中断) */
+    public get pauseSignal(): AbortSignal { return this.pauseAborter.signal; }
+
     public pause(): void {
-        if (this.cancelled) { return; }
+        if (this.cancelled || this.paused) { return; }
         this.paused = true;
+        try { this.pauseAborter.abort(); } catch { /* 已中断 */ }
     }
 
     public resume(): void {
         this.paused = false;
+        if (this.pauseAborter.signal.aborted) {
+            this.pauseAborter = new AbortController();
+        }
         const list = this.waiters;
         this.waiters = [];
         for (const fn of list) { fn(); }
@@ -94,6 +107,7 @@ export class SearchControl {
     public cancel(): void {
         this.cancelled = true;
         this.resume();
+        try { this.pauseAborter.abort(); } catch { /* 已中断 */ }
         try { this.aborter.abort(); } catch { /* 已取消 */ }
     }
 
@@ -111,6 +125,10 @@ const PER_SOURCE_TIMEOUT = 10000;
 const MAX_TOTAL = 1000;
 /** 每完成多少个源回传一批结果 */
 const FLUSH_EVERY = 8;
+
+/**
+ * 合并多个中断信号(实现已提到 util/async.ts, 供下载队列复用)。
+ */
 
 function errorOf(err: unknown): { kind: string; message: string } {
     if (err instanceof UnsupportedRuleError) {
@@ -196,59 +214,83 @@ export class SearchService {
 
         const cancelled = (): boolean => control?.cancelled === true;
 
-        const runOne = async (source: BookSource): Promise<void> => {
-            if (cancelled()) { return; }
-            const task = (async () => {
-                const req = await buildSearchRequest(source, keyword, opts.page || 1, sandboxHttpFor(source, this.pool));
-                const res = await fetchForSource(source, this.pool, req.url, {
-                    method: req.method,
-                    headers: req.headers,
-                    body: req.body,
-                    signal,
-                });
-                return parseSearchPage(source, res.text, res.url, sandboxHttpFor(source, this.pool));
-            })();
-            const result = await withTimeout(task, perSource);
-            if (cancelled()) { return; }
+        /**
+         * 跑一个源。
+         * @returns true = 因「暂停」被中断, 该源要放回队列, 恢复后重跑
+         */
+        const runOne = async (source: BookSource): Promise<boolean> => {
+            if (cancelled()) { return false; }
+            // 已暂停: 还没发出去的请求直接回队, 不浪费一次往返
+            if (control?.paused) { return true; }
 
-            let ok = false;
-            if (result.timedOut) {
-                const message = '搜索超时(' + Math.round(perSource / 1000) + 's)';
-                outcomes.push({ id: source.id, ok: false, message });
-                const err = { sourceId: source.id, sourceName: source.bookSourceName, kind: 'timeout', message };
-                errors.push(err);
-                pendingErrors.push(err);
-            } else if (!result.ok || result.value === undefined) {
-                const e = errorOf(result.error);
-                // 用户取消(abort)不算书源失败
-                if (e.kind !== 'abort') { outcomes.push({ id: source.id, ok: false, message: e.message }); }
-                const err = { sourceId: source.id, sourceName: source.bookSourceName, ...e };
-                errors.push(err);
-                if (e.kind !== 'abort') { pendingErrors.push(err); }
-                ok = e.kind === 'abort';
-            } else {
-                const items = result.value as SearchBookItem[];
-                outcomes.push({ id: source.id, ok: true, message: items.length ? '命中 ' + items.length + ' 条' : '可请求, 但未命中结果' });
-                for (const item of items) { absorb(item); }
-                ok = true;
+            // 在途请求同时监听「取消」与「暂停」: 暂停瞬间就把它掐断
+            const link = combineSignals([signal, control?.pauseSignal]);
+            try {
+                const task = (async () => {
+                    const req = await buildSearchRequest(source, keyword, opts.page || 1, sandboxHttpFor(source, this.pool));
+                    const res = await fetchForSource(source, this.pool, req.url, {
+                        method: req.method,
+                        headers: req.headers,
+                        body: req.body,
+                        signal: link.signal,
+                    });
+                    return parseSearchPage(source, res.text, res.url, sandboxHttpFor(source, this.pool));
+                })();
+                const result = await withTimeout(task, perSource);
+                if (cancelled()) { return false; }
+                // 暂停打断的这一发: 不计完成、不报进度、不写失败记录, 恢复后重跑。
+                // 即便结果恰好已经拿到也丢掉 —— 「暂停」要的是当场停住,
+                // 代价最多是恢复时重跑在途的这几个源(并发上限 6)。
+                if (control?.paused) { return true; }
+
+                let ok = false;
+                if (result.timedOut) {
+                    const message = '搜索超时(' + Math.round(perSource / 1000) + 's)';
+                    outcomes.push({ id: source.id, ok: false, message });
+                    const err = { sourceId: source.id, sourceName: source.bookSourceName, kind: 'timeout', message };
+                    errors.push(err);
+                    pendingErrors.push(err);
+                } else if (!result.ok || result.value === undefined) {
+                    const e = errorOf(result.error);
+                    // 用户取消(abort)不算书源失败
+                    if (e.kind !== 'abort') { outcomes.push({ id: source.id, ok: false, message: e.message }); }
+                    const err = { sourceId: source.id, sourceName: source.bookSourceName, ...e };
+                    errors.push(err);
+                    if (e.kind !== 'abort') { pendingErrors.push(err); }
+                    ok = e.kind === 'abort';
+                } else {
+                    const items = result.value as SearchBookItem[];
+                    outcomes.push({ id: source.id, ok: true, message: items.length ? '命中 ' + items.length + ' 条' : '可请求, 但未命中结果' });
+                    for (const item of items) { absorb(item); }
+                    ok = true;
+                }
+
+                done += 1;
+                if (!ok) { failed += 1; }
+                sinceFlush += 1;
+                opts.onProgress?.({ done, total, sourceName: source.bookSourceName, ok, failed });
+                if (sinceFlush >= FLUSH_EVERY) { flush(); }
+                return false;
+            } finally {
+                link.dispose();
             }
-
-            done += 1;
-            if (!ok) { failed += 1; }
-            sinceFlush += 1;
-            opts.onProgress?.({ done, total, sourceName: source.bookSourceName, ok, failed });
-            if (sinceFlush >= FLUSH_EVERY) { flush(); }
         };
 
-        // 自定义调度: 支持暂停(不启动新源)与取消
-        let next = 0;
+        // 自定义调度: 队列取源, 暂停时在途的源会被退回队列, 恢复后重跑
+        const queue: number[] = list.map((_, i) => i);
         const worker = async (): Promise<void> => {
             while (!cancelled()) {
                 if (control) { await control.waitIfPaused(); }
                 if (cancelled()) { return; }
-                const idx = next++;
-                if (idx >= list.length) { return; }
-                await runOne(list[idx]);
+                const idx = queue.shift();
+                if (idx === undefined) { return; }
+                const requeue = await runOne(list[idx]);
+                if (requeue) {
+                    if (cancelled()) { return; }
+                    // 放回队头(暂停被按下的时机决定先后, 顺序无所谓:
+                    // 结果合并按书源顺序取优先级, 与到达顺序无关)
+                    queue.unshift(idx);
+                }
             }
         };
         const workers = Math.max(1, Math.min(CONCURRENCY, list.length));

@@ -7,6 +7,7 @@
  *  - 写盘做 1.2s 防抖, 避免滚动进度每 600ms 就写一次
  */
 
+import * as path from 'path';
 import * as vscode from 'vscode';
 
 export type HistoryKind = 'local' | 'online';
@@ -62,6 +63,72 @@ function normalize(e: HistoryEntry): HistoryEntry {
     };
 }
 
+/** 组装"打开一本书"的历史条目所需的最小信息(结构类型, 避免与 novelParser 互相依赖) */
+export interface OpenNovelInfo {
+    filePath: string;
+    bookTitle?: string;
+    author?: string;
+    chapters?: readonly unknown[];
+    online?: { sourceId?: string; sourceName?: string; bookUrl?: string };
+}
+
+/** 书架记录里用得到的字段(HistoryEntry 的元信息优先取它, 书名可能被用户改过) */
+export interface ShelfEntryInfo {
+    title?: string;
+    author?: string;
+    totalChapters?: number;
+    online?: { sourceId?: string; sourceName?: string; bookUrl?: string };
+}
+
+/**
+ * 构造"打开即记"的历史条目。
+ *
+ * 刻意**不查书架是否存在** —— 从书源搜出来、还没加入书架的预览书也要进历史
+ * (否则用户刚看过的书在历史里根本找不到)。书架门禁原本是历史为空的主因。
+ */
+export function buildOpenEntry(
+    novel: OpenNovelInfo | null | undefined,
+    shelfEntry: ShelfEntryInfo | undefined,
+    chapterIndex: number,
+    totalOverride?: number
+): HistoryEntry | null {
+    const filePath = String((novel && novel.filePath) || '');
+    if (!filePath) { return null; }   // 空态占位书(filePath 为空)不记
+
+    const onlineRef = (shelfEntry && shelfEntry.online) || (novel && novel.online);
+    const kind: HistoryKind = filePath.startsWith('online://') || !!onlineRef ? 'online' : 'local';
+
+    const shelfTotal = shelfEntry && Number.isFinite(shelfEntry.totalChapters)
+        ? Number(shelfEntry.totalChapters)
+        : 0;
+    const novelTotal = novel && Array.isArray(novel.chapters) ? novel.chapters.length : 0;
+    const total = typeof totalOverride === 'number' && Number.isFinite(totalOverride)
+        ? totalOverride
+        : shelfTotal || novelTotal;
+
+    const title = ((shelfEntry && shelfEntry.title) || '')
+        || (novel && novel.bookTitle)
+        || (kind === 'local' ? path.basename(filePath) : '');
+    const author = ((shelfEntry && shelfEntry.author) || '') || (novel && novel.author) || '';
+
+    return {
+        kind,
+        filePath,
+        title,
+        author,
+        chapterIndex: Number.isFinite(chapterIndex) ? Math.max(0, Math.floor(chapterIndex)) : 0,
+        totalChapters: total,
+        lastReadAt: Date.now(),
+        ...(kind === 'online'
+            ? {
+                sourceId: onlineRef?.sourceId,
+                sourceName: onlineRef?.sourceName,
+                bookUrl: onlineRef?.bookUrl,
+            }
+            : {}),
+    };
+}
+
 export class HistoryStore {
     private local: HistoryEntry[] = [];
     private online: HistoryEntry[] = [];
@@ -74,6 +141,36 @@ export class HistoryStore {
         const raw = this.state.get<StoredHistory>(HISTORY_KEY, { v: 1, local: [], online: [] });
         this.local = Array.isArray(raw.local) ? raw.local.filter((e) => e && e.filePath).map(normalize).slice(0, HISTORY_MAX_PER_KIND) : [];
         this.online = Array.isArray(raw.online) ? raw.online.filter((e) => e && e.filePath).map(normalize).slice(0, HISTORY_MAX_PER_KIND) : [];
+    }
+
+    /** 按 filePath 查一条(本地/在线都查): 给"从历史打开已下架在线书"兜底用 */
+    find(filePath: string): HistoryEntry | undefined {
+        if (!filePath) { return undefined; }
+        return this.online.find((e) => e.filePath === filePath)
+            || this.local.find((e) => e.filePath === filePath);
+    }
+
+    /**
+     * 只推进度: 章节没变直接返回 false —— 不写盘、不动 lastReadAt、不重排,
+     * 这样章内滚动(600ms 上报一次)不会让历史列表一直跳动。
+     */
+    updateProgress(filePath: string, chapterIndex: number): boolean {
+        if (!filePath) { return false; }
+        const arr = this.online.some((e) => e.filePath === filePath) ? this.online
+            : this.local.some((e) => e.filePath === filePath) ? this.local
+                : null;
+        if (!arr) { return false; }
+        const at = arr.findIndex((e) => e.filePath === filePath);
+        const cur = arr[at];
+        const chapter = Number.isFinite(chapterIndex) ? Math.max(0, Math.floor(chapterIndex)) : 0;
+        if (cur.chapterIndex === chapter) { return false; }
+        cur.chapterIndex = chapter;
+        cur.lastReadAt = Date.now();
+        arr.splice(at, 1);
+        arr.unshift(cur);
+        this.dirty = true;
+        this.schedule();
+        return true;
     }
 
     list(): HistoryPayload {
@@ -91,6 +188,40 @@ export class HistoryStore {
         if (arr.length > HISTORY_MAX_PER_KIND) { arr.length = HISTORY_MAX_PER_KIND; }
         this.dirty = true;
         this.schedule();
+    }
+
+    /**
+     * 批量删除(按 filePath, 本地/在线两栏一起查)。
+     * @returns 实际删除条数
+     */
+    removeMany(filePaths: string[]): number {
+        const set = new Set((filePaths || []).filter((p) => typeof p === 'string' && !!p));
+        if (!set.size) { return 0; }
+        let removed = 0;
+        for (const arr of [this.local, this.online]) {
+            const before = arr.length;
+            const kept = arr.filter((e) => !set.has(e.filePath));
+            if (kept.length === before) { continue; }
+            arr.length = 0;
+            for (const e of kept) { arr.push(e); }
+            removed += before - kept.length;
+        }
+        if (removed) {
+            this.dirty = true;
+            this.schedule();
+        }
+        return removed;
+    }
+
+    /** 清空某一栏; @returns 删除条数 */
+    clearKind(kind: HistoryKind): number {
+        const arr = kind === 'online' ? this.online : this.local;
+        const n = arr.length;
+        if (!n) { return 0; }
+        arr.length = 0;
+        this.dirty = true;
+        this.schedule();
+        return n;
     }
 
     /** 立即落盘(退出/测试用) */

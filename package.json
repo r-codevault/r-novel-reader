@@ -2,7 +2,7 @@
     "name": "r-novel-reader",
     "displayName": "小说阅读器",
     "description": "导入本地 txt 小说，自动解析章节目录，提供沉浸式阅读界面：悬浮球 + 起点风格目录面板、我的书架、书库目录、字体/主题个性化设置，自动延续上次阅读状态。",
-    "version": "1.47.9",
+    "version": "1.48.8",
     "publisher": "local",
     "license": "MIT",
     "repository": {
@@ -167,6 +167,23 @@
             {
                 "command": "novelReader.slackerBoss",
                 "title": "摸鱼模式: 老板键（立即隐藏）"
+            },
+            {
+                "command": "novelReader.downloadBook",
+                "title": "下载整本（离线）",
+                "icon": "$(cloud-download)",
+                "enablement": "novelReader.hasNovel"
+            },
+            {
+                "command": "novelReader.exportOfflineTxt",
+                "title": "导出为本地 txt",
+                "icon": "$(desktop-download)",
+                "enablement": "novelReader.hasNovel"
+            },
+            {
+                "command": "novelReader.clearOfflineCache",
+                "title": "清理离线缓存",
+                "icon": "$(trash)"
             }
         ],
         "menus": {
@@ -298,6 +315,20 @@
                     "command": "novelReader.slackerBoss",
                     "title": "小说阅读器: 摸鱼模式 · 老板键（立即隐藏）",
                     "when": "activeEditorScheme == novelfish"
+                },
+                {
+                    "command": "novelReader.downloadBook",
+                    "title": "小说阅读器: 下载整本（离线）",
+                    "when": "novelReader.hasNovel"
+                },
+                {
+                    "command": "novelReader.exportOfflineTxt",
+                    "title": "小说阅读器: 导出为本地 txt",
+                    "when": "novelReader.hasNovel"
+                },
+                {
+                    "command": "novelReader.clearOfflineCache",
+                    "title": "小说阅读器: 清理离线缓存"
                 }
             ],
             "explorer/context": [
@@ -468,7 +499,7 @@
         "compile": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p ./",
         "watch": "tsc -watch -p ./",
         "package": "vsce package --baseContentUrl https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader/blob/master --baseImagesUrl https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader/raw/master",
-        "test": "node scripts/test-shelf.js && node scripts/test-history.js && node scripts/test-library.js && node scripts/test-shelf-maintenance.js && node scripts/test-title.js && node scripts/test-theme-presets.js && node scripts/test-province-theme.js && node scripts/test-term-theme.js && node scripts/test-notes.js && node scripts/test-festival-theme.js && node scripts/test-parser.js && node scripts/test-encoding.js && node scripts/test-slacker.js && node scripts/test-rules-html.js && node scripts/test-rules-css.js && node scripts/test-rules-jsonpath.js && node scripts/test-rules-eval.js && node scripts/test-js-sandbox.js && node scripts/test-http.js && node scripts/test-source-store.js && node scripts/test-source-search.js && node scripts/test-online-book.js && node scripts/smoke-reader-vue.js",
+        "test": "node scripts/test-shelf.js && node scripts/test-history.js && node scripts/test-library.js && node scripts/test-shelf-maintenance.js && node scripts/test-title.js && node scripts/test-theme-presets.js && node scripts/test-province-theme.js && node scripts/test-term-theme.js && node scripts/test-notes.js && node scripts/test-festival-theme.js && node scripts/test-parser.js && node scripts/test-encoding.js && node scripts/test-slacker.js && node scripts/test-rules-html.js && node scripts/test-rules-css.js && node scripts/test-rules-jsonpath.js && node scripts/test-rules-eval.js && node scripts/test-js-sandbox.js && node scripts/test-http.js && node scripts/test-source-store.js && node scripts/test-source-search.js && node scripts/test-online-book.js && node scripts/test-offline-store.js && node scripts/test-download-service.js && node scripts/test-export-txt.js && node scripts/test-panel-msg.js && node scripts/test-ownership.js && node scripts/test-shelf-refresh.js && node scripts/test-source-view.js && node scripts/test-ui-ux-qa.js && node scripts/smoke-reader-vue.js",
         "build:webview": "vite build",
         "pretest": "npm run compile && npm run build:webview",
         "dev": "vite --open /webview/reader/dev.html"
