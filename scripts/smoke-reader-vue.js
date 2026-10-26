@@ -530,21 +530,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   assert(!menuEl.classList.contains('expanded'), '点菜单按钮应收起');
   assert(document.documentElement.style.getPropertyValue('--menu-w') === '48px', '收起时 --menu-w 应为 48px');
-  // 7 个弹窗功能项 + 状态栏开关 + 笔记模式开关 + 摸鱼入口
+  // 7 个弹窗功能项 + 状态栏开关 + 摸鱼入口(笔记模式已于 v1.48.18 下线)
   assert(
-    document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not(.menu-toggle-notemode):not([data-menu="slacker"])').length === 7,
-    '菜单应有 7 个弹窗功能项, 实际: ' + document.querySelectorAll('.menu-item').length + ' (含状态栏/笔记模式/摸鱼) / ' + document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not(.menu-toggle-notemode):not([data-menu="slacker"])').length + ' (弹窗项)'
+    document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not([data-menu="slacker"])').length === 7,
+    '菜单应有 7 个弹窗功能项, 实际: ' + document.querySelectorAll('.menu-item').length + ' (含状态栏/摸鱼) / ' + document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not([data-menu="slacker"])').length + ' (弹窗项)'
   );
-  assert(document.querySelectorAll('.menu-item[data-menu]').length === 10, '菜单共 10 项(状态栏开关 + 笔记模式开关 + 摸鱼入口 + 7 个弹窗)');
-  assert(document.querySelector('.menu-item[data-menu="note-mode"]'), '菜单应有「笔记模式」开关');
+  assert(document.querySelectorAll('.menu-item[data-menu]').length === 9, '菜单共 9 项(状态栏开关 + 摸鱼入口 + 7 个弹窗)');
+  assert(!document.querySelector('.menu-item[data-menu="note-mode"]'), '「笔记模式」开关应已下线(v1.48.18)');
+  assert(!document.querySelector('.menu-toggle-notemode'), '不应残留笔记模式开关的 class');
   assert(document.querySelector('.menu-item[data-menu="statusbar"]'), '菜单应有「状态栏」显隐开关');
   assert(document.querySelector('.menu-item[data-menu="slacker"]'), '菜单应有「摸鱼模式」入口');
-  // 顺序: 书架 → 目录 → 状态栏 → 阅读设置 → 存储位置 → 摸鱼模式, 分割线在最下方
+  // 顺序: 书架 → 书源 → 目录 → 笔记 → 状态栏 → 历史记录 → 阅读设置 → 存储位置 → 摸鱼模式
   const order = Array.from(document.querySelector('.menu').children).map((el) =>
     el.classList.contains('menu-divider') ? 'divider' : el.getAttribute('data-menu'));
   assert(
-    JSON.stringify(order) === JSON.stringify([null, 'divider', 'shelf', 'history', 'catalog', 'notes', 'statusbar', 'note-mode', 'settings', 'storage', 'source', 'slacker']),
-    '菜单顺序应为 折叠按钮 + 分割线 + 书架/历史/目录/笔记/状态栏/笔记模式/阅读设置/存储位置/书源/摸鱼模式, 实际: ' + JSON.stringify(order)
+    JSON.stringify(order) === JSON.stringify([null, 'divider', 'shelf', 'source', 'catalog', 'notes', 'statusbar', 'history', 'settings', 'storage', 'slacker']),
+    '菜单顺序应为 折叠按钮 + 分割线 + 书架/书源/目录/笔记/状态栏/历史记录/阅读设置/存储位置/摸鱼模式, 实际: ' + JSON.stringify(order)
   );
   // 摸鱼入口点击 -> postMessage slackerStart(转发到 novelReader.slackerStart 命令)
   {
@@ -875,7 +876,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   }
   console.log('地域色彩主题(自绘下拉/色卡/切换/构建期色板) + 细滚动条: 通过');
 
-  console.log('侧边菜单(占位布局/展开收起/4 功能项): 通过');
+  console.log('侧边菜单(占位布局/展开收起/9 项/顺序): 通过');
 
   // 切换按钮: 双状态图标(展开=右侧条纹, 收起=左侧条纹) + 无「菜单」文字
   const toggleHtml = document.querySelector('.menu-toggle').innerHTML;
@@ -1157,6 +1158,54 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await sleep(20);
   }
   console.log('历史记录(分栏/打开/管理/清空): 通过');
+
+  // 历史行单条删除: 行尾悬停「删除」-> 统一确认框 -> 只删这一条(复用 history:remove)
+  {
+    menuItem('history').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(40);
+    const del = document.querySelector('#historyPopup .hist-row [data-hist-del]');
+    assert(del && del.tagName === 'BUTTON', '历史行尾应有独立删除按钮');
+    assert(del.textContent.trim() === '删除', '按钮文案应为「删除」, 实际 ' + del.textContent.trim());
+    assert(/删除《.+》的阅读记录/.test(del.getAttribute('aria-label') || ''), '删除按钮 aria-label 应含书名');
+    const rowEl = del.closest('.hist-row');
+    assert(rowEl.children[rowEl.children.length - 1] === del, '删除按钮应排在行尾(时间列之后)');
+    assert(!document.querySelector('#historyPopup button button'), '历史行不允许按钮嵌套');
+    assert(/#historyPopup \.hist-row:hover \.bp-del[^{]*\{[^}]*opacity:\s*1/.test(capturedHtml),
+      '悬停历史行时应显形删除按钮');
+    // 点删除只弹确认框
+    posted.length = 0;
+    del.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(!posted.some((m) => m.type === 'removeHistory'), '未确认前不应发 removeHistory');
+    const cTitle = document.querySelector('.confirm-title');
+    assert(cTitle && /删除「.+」的阅读记录/.test(cTitle.textContent),
+      '确认框标题应含书名, 实际: ' + (cTitle ? cTitle.textContent : 'null'));
+    // 取消 -> 行仍在
+    const rowsBefore = document.querySelectorAll('#historyPopup .hist-row').length;
+    document.querySelector('[data-confirm-cancel]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(document.querySelectorAll('#historyPopup .hist-row').length === rowsBefore, '取消后不应删除记录');
+    // 确认 -> 只带这一条路径
+    posted.length = 0;
+    document.querySelector('#historyPopup .hist-row [data-hist-del]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    document.querySelector('[data-confirm-ok]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    const rmOneMsg = posted.find((m) => m.type === 'removeHistory');
+    assert(rmOneMsg && (rmOneMsg.filePaths || []).length === 1, '确认后应发只含 1 条路径的 removeHistory');
+    assert(typeof rmOneMsg.opId === 'string' && rmOneMsg.opId, '单条删除也必须带 opId');
+    sendMsg({ type: 'opResult', payload: { opId: rmOneMsg.opId, op: 'history:remove', ok: true } });
+    await sleep(30);
+    // 管理模式 -> 行内删除按钮隐藏(改走批量勾选)
+    document.querySelector('#historyPopup [data-hist-batch]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(30);
+    assert(!document.querySelector('#historyPopup [data-hist-del]'), '管理模式应隐藏行内删除按钮');
+    document.querySelector('#historyPopup [data-hist-batch]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+    document.querySelector('#historyPopup .popup-close').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await sleep(20);
+  }
+  console.log('历史记录单条删除(行尾按钮/确认框/单路径/管理模式隐藏): 通过');
 
   // 目录弹窗(菜单打开) + 章节跳转
   menuItem('catalog').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
@@ -3660,31 +3709,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     menuItem('shelf').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
     await sleep(30);
 
-    // 笔记模式: 整组只有 1 个 tabindex=0; 关闭后全部回到 -1; data-note-mode 同步
-    const nmToggle = document.querySelector('.menu-item[data-menu="note-mode"]');
-    assert(nmToggle, '菜单应有「笔记模式」开关');
-    assert(nmToggle.getAttribute('aria-pressed') === 'false', '默认应为未按下');
-    nmToggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-    await sleep(40);
-    assert(nmToggle.getAttribute('aria-pressed') === 'true', '开启后 aria-pressed 应为 true');
-    const paraBtns = Array.from(document.querySelectorAll('#content [data-para-btn]'));
-    assert(paraBtns.length > 0, '正文段落应渲染笔记按钮');
-    assert(paraBtns.filter((b) => b.tabIndex === 0).length === 1,
-      '笔记模式下整组只应有 1 个 tabindex=0, 实际 ' + paraBtns.filter((b) => b.tabIndex === 0).length);
-    assert(document.getElementById('content').getAttribute('data-note-mode') === 'on',
-      '根节点应有 data-note-mode="on"');
-    const zeroBtn = paraBtns.filter((b) => b.tabIndex === 0)[0];
-    zeroBtn.focus();
-    zeroBtn.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
-    await sleep(30);
-    assert(Array.from(document.querySelectorAll('#content [data-para-btn]')).filter((b) => b.tabIndex === 0).length === 1,
-      '方向键移动后仍应只有 1 个 tabindex=0(roving 不变式)');
-    nmToggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-    await sleep(40);
-    assert(Array.from(document.querySelectorAll('#content [data-para-btn]')).every((b) => b.tabIndex === -1),
-      '关闭笔记模式后所有段落按钮应回到 tabindex=-1');
-    assert(document.getElementById('content').getAttribute('data-note-mode') === 'off',
-      '根节点应回到 data-note-mode="off"');
+    // 笔记模式已下线(v1.48.18): 正文不再有段落徽章、也没有 data-note-mode;
+    // 建/看笔记的唯一入口是单击段落(另一处「段落点击建笔记」用例仍覆盖主链路)
+    assert(!document.querySelector('#content [data-para-btn]'), '正文不应再有段落笔记徽章');
+    assert(!document.querySelector('#content .rd-note-btn'), '正文不应残留 .rd-note-btn');
+    assert(!document.getElementById('content').hasAttribute('data-note-mode'), '正文根节点不应再有 data-note-mode');
 
     // 设置面板: 主题单选组 + 宽度档位名 + 自定义宽度 label 关联
     menuItem('settings').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
@@ -3765,7 +3794,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         '面板规则「' + got + '」不得由 --font-size 推导字号（只允许正文纸面与切章骨架）');
     }
   }
-  console.log('无障碍与键盘语义(dialog/aria-current/笔记模式 roving/主题单选/字号解耦): 通过');
+  console.log('无障碍与键盘语义(dialog/aria-current/段落徽章已下线/主题单选/字号解耦): 通过');
 
   console.log('\n阅读面板 Vue 冒烟测试全部通过 ✔');
   process.exit(0);

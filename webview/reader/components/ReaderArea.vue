@@ -8,7 +8,6 @@ import { previewAddLayout, layoutViewportWidth } from '../../../src/overlayLayou
 import { send, state, gotoChapter, type NoteItem } from '../composables/vscode';
 import { findParagraph } from '../../../src/noteAnchor';
 import { persistSettings, CONTENT_WIDTH, peekSuppressParaClick, setSuppressParaClick } from '../store';
-import { paraTabIndex, paraBtnLabel, onParaBtnKey } from '../composables/noteMode';
 
 // 与 settings.ts 的 CONTENT_WIDTH 一致: 上限放宽到 4000, 允许拖出窗口宽度(横向滚动)
 const WIDTH_MIN = CONTENT_WIDTH.min;
@@ -220,21 +219,6 @@ function onParaClick(index: number, e: MouseEvent): void {
   };
 }
 
-/**
- * 段落笔记按钮点击: 打开/查看该段笔记卡片。
- *
- * 与"点段落正文"走同一份构造逻辑，但锚点用**段落元素**的矩形 ——
- * 按钮本身在段落末尾，用它自己的矩形会把卡片顶到段落右下方。
- */
-function openComposerFor(index: number, e: MouseEvent): void {
-  const p = document.querySelector('#content p[data-p="' + index + '"]') as HTMLElement | null;
-  const target = p || (e.currentTarget as HTMLElement | null);
-  if (!target) { return; }
-  // 复用 onParaClick 的段落构造：传一个 currentTarget 指向 <p> 的代理事件
-  const fake = { currentTarget: target } as unknown as MouseEvent;
-  onParaClick(index, fake);
-}
-
 /** 滚动到指定段落并短暂高亮; 引文找不到时落到 hint 附近 */
 function scrollToParagraph(target: { paragraphIndex: number; quote: string }): { index: number; exact: boolean } {
   const ch = state.chapter;
@@ -365,7 +349,7 @@ defineExpose({ positionHandles, scrollToParagraph });
       :disabled="state.previewAddPending"
       :data-tip="state.previewAddPending ? '正在加入书架…' : '加入书架'"
       aria-label="加入书架" @click.stop="savePreview">+</button>
-    <article id="content" ref="contentRef" :data-note-mode="state.noteMode ? 'on' : 'off'">
+    <article id="content" ref="contentRef">
       <h2 class="chapter-title">{{ displayTitle }}</h2>
       <div v-if="chapterError" class="empty-tip reader-error" data-chapter-error>
         <span>章节加载失败：{{ chapterError.message }}</span>
@@ -380,13 +364,11 @@ defineExpose({ positionHandles, scrollToParagraph });
       <!-- 加载中即使正文为空也不能说"本章无内容"(要等这一轮出结果) -->
       <p v-else-if="paras.length === 0 && !state.chapterLoading" class="empty-tip">(本章无内容)</p>
       <template v-else>
-        <!-- 段落笔记按钮: 默认 tabindex=-1(不进 Tab 序列), 笔记模式下由 roving tabindex 接管 -->
+        <!-- 建/看笔记的唯一入口: 单击段落本体(v1.48.18 起不再有段落级徽章) -->
         <p v-for="(p, i) in paras" :key="i" class="rd-para" :data-p="i"
           :class="{ 'rd-para-noted': paraNotes.has(i), 'rd-para-active': composerPara === i }"
           @mousedown="onParaMouseDown" @click="onParaClick(i, $event)">
-          {{ p }}<button type="button" class="rd-note-btn" :data-para-btn="i"
-            :tabindex="paraTabIndex(i)" :aria-label="paraBtnLabel(i, paraNotes.has(i))"
-            @keydown="onParaBtnKey" @click.stop="openComposerFor(i, $event)">{{ paraNotes.has(i) ? '查看笔记' : '添加笔记' }}</button>
+          {{ p }}
         </p>
       </template>
     </article>

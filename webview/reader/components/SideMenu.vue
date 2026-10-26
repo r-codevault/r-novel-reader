@@ -6,7 +6,6 @@
 import { computed } from 'vue';
 import { state, send } from '../composables/vscode';
 import { persistSettings } from '../store';
-import { toggleNoteMode } from '../composables/noteMode';
 // 品牌 logo 小图(48px, 米色圆角底+图形留白); 构建时 <4KB 自动内联为 data URL
 import logoUrl from '../assets/logo.png';
 // 摸鱼模式: 偷懒的猫图标(用户提供的摸鱼猫, 1000×1000, fill 已转 currentColor); vite ?raw 原样引入
@@ -105,14 +104,19 @@ const SVG_STORAGE =
 
 
 
+/**
+ * 弹窗项清单。**数组顺序 = 侧栏显示顺序**：前四项由模板第一段 v-for 渲染，
+ * 其后的 history/settings/storage 由「状态栏」之后那段 v-for 渲染 ——
+ * 中间夹着的状态栏与末尾的摸鱼模式是硬编码块，所以顺序由「数组 + 两处 filter 切分点」共同决定。
+ */
 const items: MenuItem[] = [
   { id: 'shelf', name: '书架', key: 'shelfOpen', svg: SVG_SHELF },
-  { id: 'history', name: '历史记录', key: 'historyOpen', svg: SVG_HISTORY },
+  { id: 'source', name: '书源', key: 'sourceOpen', svg: SVG_SOURCE },
   { id: 'catalog', name: '目录', key: 'catalogOpen', svg: SVG_CATALOG },
   { id: 'notes', name: '笔记', key: 'notesOpen', svg: SVG_NOTES },
+  { id: 'history', name: '历史记录', key: 'historyOpen', svg: SVG_HISTORY },
   { id: 'settings', name: '阅读设置', key: 'settingsOpen', svg: SVG_SETTINGS },
   { id: 'storage', name: '存储位置', key: 'storageOpen', svg: SVG_STORAGE },
-  { id: 'source', name: '书源', key: 'sourceOpen', svg: SVG_SOURCE },
 ];
 
 /** 当前书的笔记条数(角标; 0 不显示) */
@@ -154,7 +158,7 @@ function startSlacker(): void {
     <!-- 菜单分隔线(位于折叠按钮与菜单项之间) -->
     <div class="menu-divider"></div>
 
-    <button v-for="it in items.filter(function (x) { return x.id === 'shelf' || x.id === 'history' || x.id === 'catalog' || x.id === 'notes'; })"
+    <button v-for="it in items.filter(function (x) { return x.id === 'shelf' || x.id === 'source' || x.id === 'catalog' || x.id === 'notes'; })"
       :key="it.id" class="menu-item" :class="{ active: state[it.key] }" :data-menu="it.id"
       :title="it.name" :aria-expanded="state[it.key] ? 'true' : 'false'" @click="toggle(it)">
       <span class="menu-ico" v-html="it.svg"></span>
@@ -162,7 +166,7 @@ function startSlacker(): void {
       <span v-if="it.id === 'notes' && currentNoteCount > 0" class="menu-badge">{{ currentNoteCount }}</span>
     </button>
 
-    <!-- 状态栏显示/隐藏开关(默认显示; 放在「目录」下方)
+    <!-- 状态栏显示/隐藏开关(默认显示; 放在「笔记」与「历史记录」之间)
          图标: 底栏样式(矩形+底部实心条), 避免用眼睛被误认为护眼模式 -->
     <button class="menu-item menu-toggle-statusbar" :class="{ active: statusBarVisible() }"
       :data-menu="'statusbar'" :title="statusBarVisible() ? '隐藏状态栏' : '显示状态栏'"
@@ -185,24 +189,7 @@ function startSlacker(): void {
       <span class="menu-label">状态栏</span>
     </button>
 
-    <!-- 笔记本模式开关(Alt+N 同一动作): 开启后正文里所有段落的笔记按钮可见且可键盘到达。
-         aria-pressed 让读屏能播报"已按下/未按下"（R1-06）。 -->
-    <button class="menu-item menu-toggle-notemode" :class="{ active: state.noteMode }"
-      :data-menu="'note-mode'" :title="state.noteMode ? '退出笔记本模式（Alt+N）' : '笔记本模式（Alt+N）'"
-      :aria-pressed="state.noteMode ? 'true' : 'false'"
-      @click="toggleNoteMode">
-      <span class="menu-ico">
-        <svg viewBox="0 0 707 704" aria-hidden="true">
-          <rect x="60" y="80" width="587" height="544" rx="90" fill="none" stroke="currentColor" stroke-width="46"/>
-          <path d="M170 240 H540 M170 352 H540 M170 464 H400" fill="none" stroke="currentColor" stroke-width="42" stroke-linecap="round"/>
-          <circle cx="540" cy="464" r="96" fill="var(--sp-accent)" />
-          <path d="M540 410 V518 M486 464 H594" fill="none" stroke="var(--sp-accent-fg)" stroke-width="40" stroke-linecap="round"/>
-        </svg>
-      </span>
-      <span class="menu-label">笔记模式</span>
-    </button>
-
-    <button v-for="it in items.filter(function (x) { return x.id !== 'shelf' && x.id !== 'history' && x.id !== 'catalog' && x.id !== 'notes'; })"
+    <button v-for="it in items.filter(function (x) { return x.id !== 'shelf' && x.id !== 'source' && x.id !== 'catalog' && x.id !== 'notes'; })"
       :key="it.id" class="menu-item" :class="{ active: state[it.key] }" :data-menu="it.id"
       :title="it.name" :aria-expanded="state[it.key] ? 'true' : 'false'" @click="toggle(it)">
       <span class="menu-ico" v-html="it.svg"></span>

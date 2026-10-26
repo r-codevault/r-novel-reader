@@ -727,7 +727,9 @@
   .ng-del:hover { color: var(--accent); border-color: var(--accent); }
   /* 显形: 悬停整行, 或键盘焦点落在行内任一控件 */
   .bk:hover .bp-del,
-  .bk:focus-within .bp-del { opacity: 1; }
+  .bk:focus-within .bp-del,
+  #historyPopup .hist-row:hover .bp-del,
+  #historyPopup .hist-row:focus-within .bp-del { opacity: 1; }
   .bp-del:focus-visible { opacity: 1; }
   /* 移除进行中: 可点性收掉, 但不要变成强调色 */
   .bp-del:disabled { cursor: default; }
@@ -740,7 +742,8 @@
    * 与 .popup-close / .bp-del 同一套视觉语言。三态靠"描边 + 标记形状"区分。
    * 关掉 UA 原生控件(appearance:none), 标记画在 input 自身 ::after 上:
    * 不用 span 包裹, 原生 role / 键盘 / indeterminate 全部保留。
-   * 尺寸: 书架 / 历史 / 笔记条目 16×16; 笔记书·章组头 24×24 由 .nt-head-check 覆盖。
+   * 尺寸: 书架 / 历史 / 笔记条目 / 笔记书·章组头**统一 16×16**;
+   *       组头的 24×24 只作命中区, 由 .nt-head-check-label 承担(视觉框仍是 16)。
    */
   .bk-check {
     flex: none; appearance: none; -webkit-appearance: none;
@@ -1722,27 +1725,10 @@
   .cat-title { margin: 0; }
   .sp-title { margin: 0; }
 
-  /* ---------------- 2. 正文段落笔记按钮 (T02: R1-05 R1-06 R11-06) ----------------
-     默认不进 Tab 序列(tabindex=-1), 靠"笔记模式 + roving tabindex"进入,
-     否则一章 100+ 段会变成 100+ 个 Tab 停靠点。 */
-  .rd-note-btn {
-    opacity: 0; transition: opacity .12s ease; margin-left: 6px;
-    font-size: var(--ui-font-sub); color: var(--accent); background: none;
-    border: 1px solid transparent; border-radius: 4px; padding: 0 6px; cursor: pointer;
-    font-family: inherit;
-    /* 已读段落的虚线下划线会穿过按钮文字 -> 显式取消 */
-    text-decoration: none;
-  }
-  .rd-para:hover .rd-note-btn, .rd-note-btn:focus-visible {
-    opacity: 1; border-color: var(--accent);
-  }
-  /* 已有笔记: 始终可见(不只靠虚线下划线这一"颜色/形状"单通道) */
-  .rd-para-noted .rd-note-btn { opacity: 1; }
-  /* 笔记模式: 全量可见可聚焦 */
-  #content[data-note-mode="on"] .rd-note-btn { opacity: 1; }
-  @media (pointer: coarse) {
-    .rd-note-btn { opacity: 1; min-height: 40px; min-width: 40px; }
-  }
+  /* ---------------- 2. (原正文段落笔记按钮, v1.48.18 已下线) ----------------
+     笔记模式、roving tabindex 与段落里的「添加/查看笔记」徽章一并移除;
+     建/看笔记的唯一入口 = 单击段落本体(ReaderArea.onParaClick)。
+     正文因此不再有任何段落级按钮, 原先的 40px 粗指针命中区规则也一并删除。 */
 
   /* ---------------- 3. 响应式收敛 (T03: R3-01 ~ R3-06) ---------------- */
   /* 侧栏内部可滚动 + 品牌区吸顶: 窗口矮于菜单内容时最后一项仍可达(R3-03) */
@@ -1764,6 +1750,12 @@
     /* 目录次级动作折叠进「更多」(R3-05) */
     .cat-tools-secondary { display: none; }
     .cat-more { display: inline-flex; }
+    /* 极窄屏历史行: 行首「本地/在线」标签与上方 Tab 重复, 让位给书名与行尾删除按钮 */
+    #historyPopup .hist-row > .bk-tag { display: none; }
+  }
+  /* 更窄(侧栏仍展开时浮层只剩 ~130px): 连时间列也让位, 只留书名与行尾删除按钮 */
+  @media (max-width: 420px) {
+    #historyPopup .hist-time { display: none; }
   }
   .cat-more { display: none; }
   .cat-more-menu {
@@ -1908,5 +1900,11 @@
   .nt-book-head.managing { padding-left: 16px; }
   .nt-chap-head.managing { padding-left: 26px; }
   .nt-head-group { display: flex; align-items: center; gap: 6px; }
-  .nt-head-check { flex: none; width: 24px; height: 24px; margin: 0; }
+  /* 组头勾选: 与条目同构 —— 外层 24×24 label 当命中区, 视觉框 16×16 (R12-01 命中区不变) */
+  .nt-head-check-label {
+    flex: none; width: 24px; height: 24px;
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .nt-head-check { flex: none; width: 16px; height: 16px; margin: 0; }
 

@@ -384,11 +384,6 @@ export const state = reactive({
    * 面板的 managing/selected 是组件局部状态, App 不能直接改, 只能广播。
    */
   lastOp: null as null | { opId: string; op: string; ok: boolean; message: string; at: number },
-  // ---- 键盘与笔记模式
-  /** 笔记本模式: 开启后全量段落笔记按钮可见且可聚焦 */
-  noteMode: false,
-  /** roving tabindex 停靠段落下标 */
-  noteParaCursor: 0,
   // ---- 搜索终态
   /** 失败明细区是否展开 */
   searchErrorOpen: false,

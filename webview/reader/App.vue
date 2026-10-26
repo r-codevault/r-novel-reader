@@ -22,7 +22,6 @@ import NoteComposer from './components/NoteComposer.vue';
 import SourcePopup from './components/SourcePopup.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import { OVERLAY_SPECS, markOpen, focusInto, restoreFrom, handOff, type PopupKey } from './composables/overlay';
-import { toggleNoteMode, resetCursorForChapter } from './composables/noteMode';
 import { askConfirm, cancelConfirm, summarizeShelfPlan } from './composables/ops';
 import './reader.css';
 
@@ -797,8 +796,6 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
  */
 watch(function () { return state.chapter; }, function (ch) {
   if (!ch) { return; }
-  // 换章后段落数变了: 笔记模式的 roving 游标必须重置, 否则会指到不存在的段落
-  resetCursorForChapter();
   // 笔记跳转: 章节到位后按段落定位, 不按比例滚动, 也不回写进度
   if (state.noteJump) {
     const target = state.noteJump;
@@ -991,12 +988,6 @@ function onKeyDown(e: KeyboardEvent): void {
   const tag = e.target && (e.target as HTMLElement).tagName
     ? String((e.target as HTMLElement).tagName).toLowerCase() : '';
   if (tag === 'input' || tag === 'select' || tag === 'textarea') { return; }
-  // Alt+N: 切换笔记本模式（与 alt+←/→ 翻章、ctrl+alt+* 摸鱼均不冲突）
-  if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'n' || e.key === 'N')) {
-    e.preventDefault();
-    toggleNoteMode();
-    return;
-  }
   if (matchShortcut(state.prevCombo, e)) {
     e.preventDefault();
     if (state.chapter) { gotoChapter(state.chapter.index - 1); }

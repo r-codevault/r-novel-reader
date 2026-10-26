@@ -81,7 +81,7 @@
 
 | 类 | 状态 | 关键依据 |
 | --- | --- | --- |
-| R1 键盘主链路 | **PASS** | 目录章节/卷头原生 `button` + `aria-current/expanded/controls`；书架/历史行主按钮+独立删除按钮、无嵌套、名称含书名；笔记组头三件套 + 原生 `indeterminate`；笔记模式 roving 唯一 `tabindex=0`；条目复选框三处点击均净切换一次 |
+| R1 键盘主链路 | **PASS** | 目录章节/卷头原生 `button` + `aria-current/expanded/controls`；书架/历史行主按钮+独立删除按钮、无嵌套、名称含书名；笔记组头三件套 + 原生 `indeterminate`；段落徽章与笔记模式已下线（v1.48.18），建笔记改由单击段落承担；条目复选框三处点击均净切换一次 |
 | R2 异步归属 | **PASS** | 异书/无归属/回退 `reqId` 全部丢弃、合法回包不误杀；下载进度按 `filePath` 路由（异书只进任务表、当前书正常驱动）；`test-ownership` 覆盖迟到回包/缓存写入/换书清锁/同章两轮锁/按 key 控制/I1 静态守卫 |
 | R3 响应式 | **PASS** | 15 组窄屏几何全过；侧栏 `overflow-y:auto`；`.src-results` 保留 `display:flex`/`overflow:hidden` + `flex:1 1 auto`/`min-height:0`；`--src-alloc-h`；长名称省略/双行 |
 | R4 字号解耦 | **PASS** | 规则级审计 + smoke 新白名单断言（恰好 `['#content','.chapter-skeleton']`）；`--ui-font:14px`/`--ui-font-sub:12px`；行高用 `min-height`；容量实测 |

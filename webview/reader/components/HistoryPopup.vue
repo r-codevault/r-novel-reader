@@ -101,6 +101,27 @@ function removeSelected(): void {
   });
 }
 
+/**
+ * 单条删除: 复用批量协议 —— `history:remove` 收的是 filePaths 数组,
+ * 传 [e.filePath] 即可, 宿主与协议零改动(HistoryStore.removeMany 对单元素已生效)。
+ * 管理模式下行内按钮不渲染, 这里再兜一层, 避免批量进行中重复提交。
+ */
+function removeOne(e: HistoryItemView): void {
+  if (selecting.value || opRunning('history:remove')) { return; }
+  askConfirm({
+    title: '删除「' + e.title + '」的阅读记录',
+    lines: [
+      '书籍：' + e.title + (e.author ? ' · ' + e.author : ''),
+      progress(e),
+      '只删阅读记录，不影响书架、笔记与已下载的离线内容',
+      '删除后无法恢复',
+    ],
+    confirmText: '删除',
+    op: 'history:remove',
+    payload: { filePaths: [e.filePath] },
+  });
+}
+
 /** 清空当前栏 */
 function clearCurrent(): void {
   if (!list.value.length) { return; }
@@ -199,6 +220,10 @@ function openBook(e: HistoryItemView): void {
           <span class="hist-meta">{{ progress(e) }}{{ e.author ? ' · ' + e.author : '' }}</span>
         </button>
         <span class="hist-time">{{ timeText(e.lastReadAt) }}</span>
+        <!-- 单条删除: 与书架行同款悬停描边小按钮; 管理模式走批量勾选, 故隐藏 -->
+        <button v-if="!selecting" type="button" class="bp-del hist-del" data-hist-del
+          :aria-label="'删除《' + e.title + '》的阅读记录'" title="删除阅读记录"
+          :disabled="opRunning('history:remove')" @click.stop="removeOne(e)">删除</button>
       </div>
     </div>
 

@@ -432,13 +432,16 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
             <span class="nt-book-count">{{ g.items.length }}</span>
           </button>
           <span class="spacer"></span>
-          <!-- 半选用原生 indeterminate, 全选用 checked; 不再靠 role=checkbox 模拟 -->
-          <input v-if="managing" type="checkbox" class="bk-check nt-head-check"
-            :data-note-book-check="selState(g.items)"
-            :checked="selState(g.items) === 'all'"
-            :indeterminate.prop="selState(g.items) === 'some'"
-            :aria-label="'选择《' + g.bookTitle + '》的全部笔记'"
-            @change="toggleGroupNotes(g.items)" />
+          <!-- 半选用原生 indeterminate, 全选用 checked; 不再靠 role=checkbox 模拟。
+               外层 label 只负责把命中区撑到 24×24(视觉框与条目同为 16px)。 -->
+          <label v-if="managing" class="nt-head-check-label">
+            <input type="checkbox" class="bk-check nt-head-check"
+              :data-note-book-check="selState(g.items)"
+              :checked="selState(g.items) === 'all'"
+              :indeterminate.prop="selState(g.items) === 'some'"
+              :aria-label="'选择《' + g.bookTitle + '》的全部笔记'"
+              @change="toggleGroupNotes(g.items)" />
+          </label>
           <template v-else>
             <button type="button" v-if="groupDeleteConfirming(bookDelKey(g))" class="ng-del ng-cancel"
               aria-label="取消删除" title="取消删除" @click="cancelGroupDelete()">取消</button>
@@ -471,12 +474,14 @@ const emptyText = '还没有笔记。在正文中单击任意段落，写下第�
                 <span class="nt-book-count">{{ c.items.length }}</span>
               </button>
               <span class="spacer"></span>
-              <input v-if="managing" type="checkbox" class="bk-check nt-head-check"
-                :data-note-chap-check="selState(c.items)"
-                :checked="selState(c.items) === 'all'"
-                :indeterminate.prop="selState(c.items) === 'some'"
-                :aria-label="'选择本章全部笔记：' + c.chapterTitle"
-                @change="toggleGroupNotes(c.items)" />
+              <label v-if="managing" class="nt-head-check-label">
+                <input type="checkbox" class="bk-check nt-head-check"
+                  :data-note-chap-check="selState(c.items)"
+                  :checked="selState(c.items) === 'all'"
+                  :indeterminate.prop="selState(c.items) === 'some'"
+                  :aria-label="'选择本章全部笔记：' + c.chapterTitle"
+                  @change="toggleGroupNotes(c.items)" />
+              </label>
               <template v-else>
                 <button type="button" v-if="groupDeleteConfirming(chapDelKey(g.bookPath, c))"
                   class="ng-del ng-cancel" aria-label="取消删除" title="取消删除"

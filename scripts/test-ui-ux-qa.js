@@ -1073,6 +1073,20 @@ const QA_NOVEL = {
         const visualW = baseValue('.nt-item .nt-check', 'width');
         assert(visualW === '16px', '视觉框应为 16px, 实际 ' + visualW);
     });
+    check('R12-01 笔记书/章组头命中区 24×24、视觉框与条目统一 16px', function () {
+        const cb = $('#notesPopup .nt-book-head input[type="checkbox"]');
+        assert(cb, '管理态书组头应有原生复选框');
+        assert(cb.closest('label'), '组头复选框应被 <label> 包裹以扩大命中区');
+        const w = baseValue('.nt-head-check-label', 'width');
+        const h = baseValue('.nt-head-check-label', 'height');
+        assert(w === '24px' && h === '24px', '组头命中区应为 24×24, 实际 ' + w + '×' + h);
+        const vis = baseValue('.nt-head-check', 'width');
+        assert(vis === '16px', '组头视觉框应与条目统一为 16px, 实际 ' + vis);
+    });
+    check('笔记模式下线：正文不再有段落笔记徽章', function () {
+        assert(document.querySelectorAll('#content .rd-note-btn').length === 0, '正文不应再有段落徽章');
+        assert(!/\.rd-note-btn\s*\{/.test(distCss), 'reader.css 不应再有 .rd-note-btn 规则');
+    });
     check('R12-03 条目复选框名称唯一且含笔记内容（同书两条不会同名）', function () {
         const l1 = $('#notesPopup [data-note-id="n1"] [data-note-check]').getAttribute('aria-label');
         const l2 = $('#notesPopup [data-note-id="n2"] [data-note-check]').getAttribute('aria-label');

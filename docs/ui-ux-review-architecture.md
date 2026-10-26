@@ -15,7 +15,7 @@
 在**不动布局骨架、不动主题美术、不动解析/存储引擎**的前提下，补三样"基础设施"：
 
 1. **归属协议**（`filePath` + 单调 `reqId`）——让所有异步回包能自证"属于哪本书、哪一轮请求"；
-2. **焦点/键盘基元**（浮层焦点栈 + roving tabindex 笔记本模式 + 原生 `button` 行语义）——让键盘与读屏能走完主链路；
+2. **焦点/键盘基元**（浮层焦点栈 + 原生 `button` 行语义）——让键盘与读屏能走完主链路；段落笔记的"笔记模式 + roving tabindex"于 v1.48.18 下线，见 §4.b.3；
 3. **终态回包**（`opId` + 统一确认框 + 预演/执行两阶段）——让写操作有明确"进行中 → 成功/失败"，失败保留上下文。
 
 其余（响应式 CSS、字号解耦、状态色令牌、控件尺寸与名称）都是"改属性值 + 追加分区 CSS"即可，不引入结构重排。
@@ -30,8 +30,8 @@
 | D4 | 危险操作确认框放 **webview 内**（新组件 `ConfirmDialog.vue`），宿主命令通过 `skipConfirm` 参数跳过 `showWarningMessage({modal:true})` | 维持宿主模态框 | 宿主模态框：① 抢焦点、脱离浮层上下文；② 无法展示"数量/书名/章数/占用空间"多字段结构；③ happy-dom 冒烟测试无法断言。webview 内可用现成 `.popup-*` 视觉语言，且"失败保留选择与草稿"天然成立 |
 | D5 | 保留宿主 `showWarningMessage` **调用形态向后兼容**：命令参数接受 `string[]`（旧）或 `{ filePaths, skipConfirm, opId }`（新） | 新增独立命令 | 命令面板/其他内部调用仍传数组（`novelReader.removeFromShelf` 等），只在 webview 路径上走对象；不破坏既有调用 |
 | D6 | 行条目一律改**原生 `<button type="button">`**，保留全部现有 class 与 DOM 层级 | `div` + `tabindex=0` + `role="button"` + 手写 Enter/Space | 原生 button 自带 Enter/Space、disabled、读屏角色，且 `:focus-visible` 规则已存在（`reader.css:781-790`）；代价是需要在 CSS 里补一行 `font/color/background/border` 重置 |
-| D7 | 段落笔记按钮**默认不进 Tab 序列**，靠"笔记模式 + roving tabindex"进入（PRD Q2） | 每段 `tabindex="0"` | 一章 100+ 段会产生 100+ 个 Tab 停靠点，键盘用户无法使用；roving 让整组只占 1 个停靠点 |
-| D8 | 笔记模式入口 = **侧栏菜单开关 + `Alt+N`** | 新增正文浮动工具条 | 浮动工具条会改变"左侧导航—居中纸面—底部状态栏"布局（PRD 明确保留）；侧栏已有 `状态栏` 开关先例（`SideMenu.vue:166-185`），复用同一形态。`Alt+N` 与现有 `alt+←/→`（翻章）、`ctrl+alt+*`（摸鱼）无冲突 |
+| D7 | 段落笔记按钮**默认不进 Tab 序列**，靠"笔记模式 + roving tabindex"进入（PRD Q2） | 每段 `tabindex="0"` | 一章 100+ 段会产生 100+ 个 Tab 停靠点，键盘用户无法使用；roving 让整组只占 1 个停靠点。**（v1.48.18 已下线：段落徽章、笔记模式、roving tabindex、`Alt+N` 一并移除；建/看笔记唯一入口 = 单击段落）** |
+| D8 | 笔记模式入口 = **侧栏菜单开关 + `Alt+N`** | 新增正文浮动工具条 | 浮动工具条会改变"左侧导航—居中纸面—底部状态栏"布局（PRD 明确保留）；侧栏已有 `状态栏` 开关先例（`SideMenu.vue:166-185`），复用同一形态。`Alt+N` 与现有 `alt+←/→`（翻章）、`ctrl+alt+*`（摸鱼）无冲突。**（v1.48.18 已下线）** |
 | D9 | UI 字号**固定 14/12px**，并把面板内所有由 `--font-size` 推导的字号改为由 `--ui-font` 推导（PRD Q6、R4-01） | 新增独立 UI 缩放设置 | 本轮不做新设置项；但只改 `--ui-font` 定义而保留 `calc(var(--font-size) * 1.2)` 等写法，R4-01 的"computed style 差值 = 0"验收仍不成立，必须一并改 |
 | D10 | 页面宽度档位**只改展示层**（窄/标准/宽/特宽），`widthRatio` 数值与存储不变（PRD Q5、R8-04） | 改存储值并迁移 | 迁移引入数据风险，收益为零；档位名映射表放 `SettingsPanel.vue` 常量 |
 | D11 | 新增 `dangerFg` / `success` 令牌，派生主题（省/节气/节日）用 `ensureContrast()` **逐主题算**，不写死颜色（PRD Q7/Q8、R10） | 全局固定 `#fff` + `#2ea043` | 现有 7 预设 + 58 派生主题底色差异大；`ensureContrast` 已是 `src/settings.ts` 现成能力（`src/settings.ts:707`），派生主题自动纳入 R10-04 |
@@ -46,7 +46,6 @@
 ┌──────────────────────────── webview (Vue 3, dist-webview 生成) ────────────────────────────┐
 │ App.vue        浮层编排 + Esc 分层 + 消息路由（新增：归属/任务表/opResult 分支）              │
 │ composables/overlay.ts   ★新增 焦点栈 + Esc 注册表 + 初始聚焦                              │
-│ composables/noteMode.ts  ★新增 笔记模式 + roving tabindex                                 │
 │ components/*            行语义 button 化、aria、确认框、任务表渲染                          │
 └───────────────────────────────────────▲────────────────────────────────────────────────────┘
                      postMessage（src/protocol.ts 单一类型源，双向）
@@ -70,7 +69,7 @@
 | `src/protocol.ts` | 宿主 ↔ webview 消息载荷类型与 `PROTOCOL_VERSION` 单一来源（纯类型 + 常量，无 vscode 依赖） | 低。webview 通过相对路径 `../../src/protocol` 引入（`App.vue:10` 已有同型先例 `../../src/noteAnchor`），类型在构建期擦除 |
 | `src/shelfRefresh.ts` | 刷新书架预演/执行计划的纯函数：`planShelfRefresh()`、`summarizePlan()`、`ShelfRefreshPlan/Result` 类型。不 import `vscode`，便于单测 | 低。新增模块，不触碰现有 `shelfMaintenance.ts` 的 `planDuplicateRemoval`（继续复用） |
 | `webview/reader/composables/overlay.ts` | 浮层焦点栈：保存触发元素、打开后初始聚焦、关闭后恢复、Esc 分层注册表 | 中。是全 webview 的焦点中枢，写错会"焦点到处乱跳"。必须只由 App 调用，组件不直接调 |
-| `webview/reader/composables/noteMode.ts` | 笔记模式状态 + roving tabindex 计算 + 方向键移动 + 关闭时焦点归位 | 中。与 `ReaderArea` 渲染紧密耦合 |
+| `webview/reader/composables/noteMode.ts` | ~~笔记模式状态 + roving tabindex 计算 + 方向键移动 + 关闭时焦点归位~~ **v1.48.18 已随笔记模式下线删除** | — |
 | `webview/reader/components/ConfirmDialog.vue` | 统一危险操作确认框（数量/对象/空间/可恢复性和主次按钮） | 中。被 4 处复用，props 契约要一次定对 |
 | `scripts/test-ownership.js` | A/B 切书归属回归：驱动 `dist/readerPanel.js`，断言迟到回包被丢弃、加载锁按请求实例释放、下载控制按 key 生效 | 低（新增测试） |
 | `scripts/test-shelf-refresh.js` | `dist/shelfRefresh.js` 的预演/执行一致性、`ENOENT` vs 不可访问降级 | 低 |
@@ -85,19 +84,19 @@
 | `src/settings.ts` | 修改。`ThemeDef` 增 `dangerFg`/`success`；7 套预设赋值；`paintTheme`/`paintFestivalNight` 计算两令牌 | 中。令牌被 4 个测试脚本断言，改错直接 `npm test` 红 |
 | `webview/reader/App.vue` | 修改。消息路由（归属校验、任务表、`opResult`）、Esc 分层（删 `blurActiveElement`）、浮层焦点编排、`init` 协议版本 | **高**。816 行，是全 webview 的路由中枢 |
 | `webview/reader/store.ts` | 修改。`applyThemeVars` 写入 `--danger-fg`/`--success`；新增 `state` 字段的辅助函数（如 `currentBookKey()`） | 中。`applyThemeVars` 影响首帧配色 |
-| `webview/reader/composables/vscode.ts` | 修改。`state` 新增 `noteMode`/`downloadTasks`/`pendingOps`/`searchErrorOpen` 等；`ChapterPayload` 增 `filePath`/`reqId`；`gotoChapter` 携带 `curBook` | 中。所有组件都 import 这个文件 |
+| `webview/reader/composables/vscode.ts` | 修改。`state` 新增 `downloadTasks`/`pendingOps`/`searchErrorOpen` 等；`ChapterPayload` 增 `filePath`/`reqId`；`gotoChapter` 携带 `curBook` | 中。所有组件都 import 这个文件 |
 | `webview/reader/components/CatalogPanel.vue` | 修改。分卷/章节 button 化 + `aria-expanded/aria-controls/aria-current`；窄屏「更多」折叠容器；下载控件 `filePath`；进度区 `role=status`/`progressbar`；下载终态就地可见 | 中高。目录是高频面板 |
 | `webview/reader/components/ShelfPopup.vue` | 修改。行 → 容器 + `button.bk-main` + 独立删除按钮（`aria-label="从书架移除《书名》"`、`aria-current`）；批量复选框原生；危险操作走确认框 + `opId` 终态 | 中 |
 | `webview/reader/components/HistoryPopup.vue` | 修改。同上（行主按钮 + 批量复选框 + 确认框 + 终态） | 中 |
 | `webview/reader/components/NotesPopup.vue` | 修改。书/章组头拆为并列控件（展开 button + 原生 checkbox + 删除 button）；`indeterminate` 半选；条目操作组常显（定位原文/编辑/删除，无「更多」开关）；textarea `aria-label`；确认框 + 终态 | **高**。现有 DOM 是 button 内嵌可聚焦 span（`:352-392`），拆分会改变 Tab 序与样式，需回归 |
 | `webview/reader/components/NoteComposer.vue` | 修改。`aria-label="笔记内容"`、错误 `role="alert"`、保存中禁用、失败保留草稿（现有逻辑已对，只补语义） | 低 |
-| `webview/reader/components/ReaderArea.vue` | 修改。段落笔记按钮 + roving tabindex + `data-note-mode`；已有笔记可见标记；空态文案区分 | 中 |
+| `webview/reader/components/ReaderArea.vue` | 修改。段落点击打开笔记卡片（v1.48.18 起正文无任何段落按钮）；已有笔记可见标记；空态文案区分 | 中 |
 | `webview/reader/components/SettingsPanel.vue` | 修改。主题预设 → `role="radio"` 组（保留 `.sp-dot[data-theme]` 便于既有测试）、可见名称、方向键；三个下拉 + `settingsOpen` 统一 `restoreTheme()`；宽度档位名；自定义输入 `label`；`handleEscape()` 暴露 | **高**。预览/主题/下拉三者耦合，是 R8 全部风险的集中点 |
 | `webview/reader/components/SourceSearchView.vue` | 修改。结果行 → 容器 + 主按钮 + 操作组；失败明细展开（类型/原因/单源重试）；空结果 vs 失败文案分流；`status`/`alert`/`progressbar` 语义；容量实测 | **高**。400 行，含拖拽分栏与搜索状态机 |
 | `webview/reader/components/SourceManageView.vue` | 修改。主操作唯一化（导入 + 子菜单）、次操作/更多、管理模式批量条、危险区隔离；复选框 `<label>` + 24×24 + `aria-label` 含源名；图标按钮 `aria-label`；输入 label | 中高 |
 | `webview/reader/components/SourcePopup.vue` | 修改。标题 `<h2 id>` + `role="dialog" aria-modal="false" aria-labelledby`；`handleEscape` 透传（自身 `sourceView` 从 manage/dead 回 search 也算一层） | 低 |
 | `webview/reader/components/StoragePopup.vue` | 修改。dialog 语义；清除本书/导出按钮禁用 + 原因；确认框（书名/章数/占用）；任务表渲染 | 中 |
-| `webview/reader/components/SideMenu.vue` | 修改。`overflow-y:auto`、品牌区 sticky；新增「笔记模式」开关菜单项（`aria-pressed`） | 中。侧栏是布局骨架的一环，`min-height:100vh` 与 sticky 交互需实测 |
+| `webview/reader/components/SideMenu.vue` | 修改。`overflow-y:auto`、品牌区 sticky；菜单项改为可重排的清单（v1.48.18 重排为九项；「笔记模式」开关已下线） | 中。侧栏是布局骨架的一环，`min-height:100vh` 与 sticky 交互需实测 |
 | `webview/reader/reader.css` | 修改。1542 行。分区改：① UI 字号解耦 ② 浮层宽度模型 ③ 侧栏/结果区滚动 ④ 焦点与行按钮重置 ⑤ `danger-fg`/`success` 接入 ⑥ 24×24 与粗指针 ⑦ 笔记动作组非 hover 可达 | **最高**。回归面最广 |
 | `README.md` | 修改。仅两处：档位名（`:283`）、首次书源入口行为（`:249` 附近） | 低，但**已有未提交改动**，只允许改这两处 |
 | `scripts/smoke-reader-vue.js` | 修改。9 处既有断言与本次改动冲突，必须同步（清单见 §8.2） | 中。3037 行，是唯一的 DOM 级回归网 |
@@ -250,9 +249,6 @@ chapterReqSeq: 0,                // 已接受的最大 reqId（init 时归零）
 downloadTasks: {} as Record<string, DownloadTaskView>,
 pendingOps: {} as Record<string, { op: OpKind; at: number }>,
 opSeq: 0,
-// 键盘与笔记模式
-noteMode: false,
-noteParaCursor: 0,
 // 搜索终态
 searchErrorOpen: false,
 sourceRetries: {} as Record<string, { running: boolean; ok?: boolean; message?: string }>,
@@ -433,7 +429,7 @@ assert(posted.some(m => m.type === 'chapterLoading'), '同章锁必须已释放�
 
 ---
 
-### 4.b 键盘语义与笔记模式
+### 4.b 键盘语义（笔记模式已于 v1.48.18 下线）
 
 #### 4.b.1 行条目：禁止按钮嵌套
 
@@ -532,57 +528,22 @@ export function handOff(from: PopupKey[], to: PopupKey): void;
 4. **非模态不圈禁**（R5-02）：不监听 Tab、不设置 `inert`、不拦截焦点离开。语义用 `role="dialog" aria-modal="false" aria-labelledby="<h2 id>"`。
 5. **标题改真 `<h2>`**：`<b class="popup-title">书架</b>` → `<h2 class="popup-title" id="shelfPopupTitle" tabindex="-1">书架</h2>`。`h2` 默认有 margin，CSS 需补 `.popup-title{margin:0;font-size:calc(var(--ui-font) + 1px);font-weight:700}`（现有规则 `reader.css:567` 只设 font-size，`b` 无 margin，`h2` 有 → 必须显式 `margin:0`）。
 
-#### 4.b.3 笔记模式与 roving tabindex（`composables/noteMode.ts`）
+#### 4.b.3 笔记模式与 roving tabindex（**v1.48.18 已下线**）
 
-状态：`state.noteMode`（开/关）、`state.noteParaCursor`（roving 停靠段落下标）、`state.noteModeReturn`（开启时焦点元素，关闭时回位；放在模块内变量，不必进 reactive）。
+原设计：段落内「添加/查看笔记」徽章 + 侧栏「笔记模式」开关 + `Alt+N` + roving tabindex
+（`state.noteMode` / `state.noteParaCursor` / `composables/noteMode.ts`）。
 
-渲染（`ReaderArea.vue`）：
+下线原因：评审要求去掉菜单开关与段落徽章，只保留笔记功能本身。
 
-```html
-<p v-for="(p, i) in paras" :key="i" class="rd-para" :data-p="i"
-   :class="{ 'rd-para-noted': paraNotes.has(i), 'rd-para-active': composerPara === i }"
-   @mousedown="onParaMouseDown" @click="onParaClick(i, $event)">
-  {{ p }}<button type="button" class="rd-note-btn" :data-para-btn="i"
-     :tabindex="paraTabIndex(i)" :aria-label="paraBtnLabel(i)"
-     @click.stop="openComposerFor(i, $event)">{{ paraNotes.has(i) ? '查看笔记' : '添加笔记' }}</button>
-</p>
-```
+下线范围：`noteMode.ts` 整文件、`state.noteMode` / `noteParaCursor`、`reader.css` 的 `.rd-note-btn` 分区、
+`App.vue` 的 `Alt+N` 分支与 `resetCursorForChapter()`、`SideMenu.vue` 的开关项。
 
-```ts
-export function paraTabIndex(i: number): number {
-  return state.noteMode && i === state.noteParaCursor ? 0 : -1;   // 默认 -1：不进 Tab 序列
-}
-export function toggleNoteMode(): void {
-  state.noteMode = !state.noteMode;
-  state.noteParaCursor = firstNonEmptyPara();
-  if (!state.noteMode) { focusMenuToggle(); }           // 关闭：焦点回开关（R1-06）
-}
-export function moveParaCursor(delta: 1 | -1): void {
-  const next = nextNonEmpty(state.noteParaCursor, delta);   // 跳过空段落，到边界停住
-  if (next === state.noteParaCursor) { return; }
-  state.noteParaCursor = next;
-  nextTick(() => (document.querySelector(`[data-para-btn="${next}"]`) as HTMLElement | null)?.focus());
-}
-```
+保留路径：单击正文段落 → `ReaderArea.onParaClick()` 构造 `state.noteComposer`（新建/查看/编辑/删除全不变）；
+`#content p.rd-para-noted` 虚线下划线、`note-focus` 高亮、`NoteComposer.vue` / `NotesPopup.vue` 均不变。
 
-键盘绑定放在段落按钮上：`ArrowDown/ArrowRight → moveParaCursor(1)`、`ArrowUp/ArrowLeft → -1`、`Home/End` 到首/末非空段落；`Enter/Space` 走原生 button 行为（触发 click → 打开/查看笔记卡片）。切章时 `watch(state.chapter)` → `state.noteParaCursor = firstNonEmptyPara()`。
-
-可见性（CSS，追加分区）：
-
-```css
-.rd-note-btn { opacity: 0; transition: opacity .12s ease; margin-left: 6px;
-  font-size: var(--ui-font-sub); color: var(--accent); background: none;
-  border: 1px solid transparent; border-radius: 4px; padding: 0 6px; cursor: pointer; }
-.rd-para:hover .rd-note-btn, .rd-note-btn:focus-visible { opacity: 1; border-color: var(--accent); }
-/* 已有笔记：始终可见（不只依赖虚线下划线这一"颜色/形状"单通道 + R11-06 双通道） */
-.rd-para-noted .rd-note-btn { opacity: 1; }
-/* 笔记模式：全量可见可聚焦 */
-#content[data-note-mode="on"] .rd-note-btn { opacity: 1; }
-```
-
-`ReaderArea` 根 `<article id="content" :data-note-mode="state.noteMode ? 'on' : 'off'">`。
-
-> 注意：`.rd-para-noted` 现在对 `p` 加虚线下划线（`reader.css:1460`），按钮文字也会被下划线穿过 → 改为 `#content p.rd-para-noted .rd-text`（把正文包一层 `span.rd-text`）或 `text-decoration-skip-ink` + 按钮 `text-decoration: none`。**取最小改动**：`.rd-note-btn { text-decoration: none; }`。
+取舍记录：由此**键盘用户无法仅用键盘新建笔记**（正文不再有段落停靠点）。这是本轮用户明确要求，
+PRD R1-05 / R1-06 已标记为「废弃」而非补替代入口；若日后要补，建议"单个当前段游标"方案，
+不要逐段 `tabindex=0`。
 
 #### 4.b.4 焦点栈与"非模态浮层不被破坏"的边界
 
@@ -895,10 +856,10 @@ CSS 接入（写死 `#fff`/`#2ea043` 全部清除）：
 |---|---|
 | 优先级 | P0（R1）/ P1（R5） |
 | 依赖 | T01（`opId`/`reqId` 通道已就位，避免 R1 的 `Enter` 触发与异步终态互相等待） |
-| 源文件 | 新增 `webview/reader/composables/overlay.ts`、`composables/noteMode.ts`；修改 `App.vue`、`SideMenu.vue`、`CatalogPanel.vue`、`ShelfPopup.vue`、`HistoryPopup.vue`、`NotesPopup.vue`、`NoteComposer.vue`、`ReaderArea.vue`、`SourceSearchView.vue`、`SourcePopup.vue`、`SettingsPanel.vue`（仅 `handleEscape` + `defineExpose`）、`reader.css`（**只追加"键盘与焦点基线"分区**，不改既有声明）、`scripts/smoke-reader-vue.js` |
-| 内容 | ① 行条目 button 化（目录/书架/历史/搜索结果）+ `aria-current`/`aria-expanded`/`aria-controls`；② 笔记组头拆三件套 + `indeterminate`；③ 段落笔记按钮 + 笔记模式 + roving tabindex + `Alt+N`；④ 浮层 `role="dialog" aria-modal="false" aria-labelledby` + `<h2 id tabindex="-1">`；⑤ 焦点栈（打开聚焦/关闭恢复/互斥交接/外部打开 fallback）；⑥ 删除 `blurActiveElement` 与其 5 处调用；⑦ Esc 分层（各浮层 `handleEscape`）；⑧ 行按钮 CSS 重置分区 |
+| 源文件 | 新增 `webview/reader/composables/overlay.ts`；修改 `App.vue`、`SideMenu.vue`、`CatalogPanel.vue`、`ShelfPopup.vue`、`HistoryPopup.vue`、`NotesPopup.vue`、`NoteComposer.vue`、`ReaderArea.vue`、`SourceSearchView.vue`、`SourcePopup.vue`、`SettingsPanel.vue`（仅 `handleEscape` + `defineExpose`）、`reader.css`（**只追加"键盘与焦点基线"分区**，不改既有声明）、`scripts/smoke-reader-vue.js`（注：原计划的 `composables/noteMode.ts` 已于 v1.48.18 删除） |
+| 内容 | ① 行条目 button 化（目录/书架/历史/搜索结果）+ `aria-current`/`aria-expanded`/`aria-controls`；② 笔记组头拆三件套 + `indeterminate`；③ ~~段落笔记按钮 + 笔记模式 + roving tabindex + `Alt+N`~~（v1.48.18 下线，改由单击段落承担）；④ 浮层 `role="dialog" aria-modal="false" aria-labelledby` + `<h2 id tabindex="-1">`；⑤ 焦点栈（打开聚焦/关闭恢复/互斥交接/外部打开 fallback）；⑥ 删除 `blurActiveElement` 与其 5 处调用；⑦ Esc 分层（各浮层 `handleEscape`）；⑧ 行按钮 CSS 重置分区 |
 | 验收（PRD） | R1-01 ~ R1-08、R5-01 ~ R5-06 |
-| 测试 | `smoke-reader-vue.js` 新增：Esc 后焦点回到触发元素（**替换原"Esc 后应清掉焦点"断言**）、浮层 `role/aria-modal/aria-labelledby`、章节为 `button` 且 `aria-expanded` 正确、书架/历史/搜索结果 Tab 序、笔记模式 roving（`tabindex` 唯一为 0、方向键移动 `activeElement`）、Shift+Tab 可离开浮层 |
+| 测试 | `smoke-reader-vue.js` 新增：Esc 后焦点回到触发元素（**替换原"Esc 后应清掉焦点"断言**）、浮层 `role/aria-modal/aria-labelledby`、章节为 `button` 且 `aria-expanded` 正确、书架/历史/搜索结果 Tab 序、Shift+Tab 可离开浮层（原「笔记模式 roving」断言已随功能下线删除） |
 | 风险 | 高。`NotesPopup` 组头拆分与 `ReaderArea` 段落按钮会改变 DOM 结构；`reader.css` 只追加分区、禁改既有声明，避免与 T03 冲突 |
 
 ### T03 · 响应式收敛、字号解耦与控件基线（P1/P2）
@@ -941,7 +902,7 @@ CSS 接入（写死 `#fff`/`#2ea043` 全部清除）：
 
 | PRD | 覆盖任务 | 说明 |
 |---|---|---|
-| R1-01 ~ R1-08 键盘主链路 | T02 | 行 button 化、aria、笔记模式 roving、端到端链 |
+| R1-01 ~ R1-08 键盘主链路 | T02 | 行 button 化、aria、端到端链（R1-05/R1-06 的「笔记模式」于 v1.48.18 下线） |
 | R2-01 ~ R2-07 异步归属 | T01 | 全部 |
 | R3-01 ~ R3-06 响应式 | T03 | 全部 |
 | R4-01 ~ R4-05 字号解耦 | T03 | 全部 |
@@ -1027,7 +988,7 @@ graph TD
 - 键盘：打开后 `activeElement` 在浮层内且为标题/关闭/首个控件之一；关闭后回到触发按钮；外部 `openDrawer` 打开后关闭落到 `[data-menu="source"]`。
 - 无 focus trap：浮层内 `Shift+Tab` 不循环（断言不做特殊处理即可，happy-dom 无 Tab 实现 → 改为断言"未设置 `inert`、未注册 keydown 拦截 Tab"）。
 - 目录：每章 `tagName === 'BUTTON'`、`type === 'button'`、当前章 `aria-current`、分卷 `aria-expanded` 随交互翻转。
-- 笔记模式：开启后全组仅 1 个 `tabindex="0"`；方向键后 `activeElement` 变为下一段按钮；关闭后全部 `tabindex="-1"` 且焦点在开关上。
+- 正文：段落点击即打开笔记卡片；`#content` 内不存在任何段落级按钮，也没有 `data-note-mode`（原「笔记模式 roving」验收于 v1.48.18 下线）。
 - 危险操作：确认框取消 → 选择仍在；`opResult{ok:false}` → 选择仍在 + 出现 `role="alert"`；`opResult{ok:true}` → 选择清空 + 退出管理。
 - 搜索：失败明细 `aria-expanded` 翻转；`role="progressbar"` 的 `aria-valuenow` 随进度更新；最终失败恰出现一个 `role="alert"`。
 - 设置：`role="radiogroup"` 内 7 个 `role="radio"`，仅选中项 `aria-checked="true"`；下拉打开后按 Esc，`--bg` 回到保存主题对应值。
@@ -1074,7 +1035,7 @@ graph TD
 
 | # | 待明确 | 默认决策 |
 |---|---|---|
-| Q3' | 笔记模式快捷键是否做成可配置项 | **本轮固定 `Alt+N`**，不新增设置项；在设置面板提示文案里写明（与"Ctrl+滚轮 缩放"同列） |
+| Q3' | 笔记模式快捷键是否做成可配置项 | **已作废（v1.48.18）**：笔记模式与 `Alt+N` 已下线，不再需要取值 |
 | Q12' | README 与 docs 截图是否一起更新 | **只改 README 两处文案**；截图不动（工作区已有未提交改动） |
 | Q14 | 下载任务表是否要做"取消单任务"入口 | **本轮只做暂停/继续/查看**（取消继续走目录里的"取消"），任务表不作为完整下载中心 |
 | Q15 | 单源重试是否要显示"连续失败计数" | 不显示计数，只显示类别徽章；连续失败 2 次移入失效的策略不变（PRD Q11） |
@@ -1200,13 +1161,6 @@ classDiagram
         +restoreFrom(key)
         +handOff(from, to)
     }
-    class NoteMode {
-        <<module>>
-        +paraTabIndex(i)
-        +toggleNoteMode()
-        +moveParaCursor(delta)
-        +resetCursorForChapter()
-    }
     class ConfirmDialog {
         <<component>>
         +model
@@ -1222,7 +1176,6 @@ classDiagram
     ShelfRefreshPlanner --> ShelfRefreshPlan : 产出
     ConfirmDialog ..> OpResultPayload : 等待
     OverlayFocusStack ..> ConfirmDialog : 焦点交接
-    NoteMode ..> ChapterPayload : 段落渲染
 ```
 
 ## 附录 B：关键时序（危险操作 + 刷新书架预演 + 浮层焦点）
