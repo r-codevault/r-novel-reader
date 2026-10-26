@@ -3104,14 +3104,41 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(document.querySelector('#catalogPanel .cat-no').textContent.includes('第1章'), '章节号应去掉卷前缀');
   console.log('目录分卷(带卷前缀章节): 通过');
 
-  // 同名卷(多个「正文」): 折叠状态按分组 id 记, 不能拿卷名当 key, 否则一收全收
+  // 独立篇名: 「第一篇 X」后面的普通章节必须归进该篇, 不能被拆成新的「正文」组
+  // (回归 2026-10-26: 用户报「目录全是正文」, 根因是 curKey !== null 时又起了一个正文组)
+  sendMsg({ type: 'init', payload: {
+    filePath: 'catalog-vol', bookTitle: '分篇书', author: '',
+    chapters: [
+      { index: 0, title: '第一篇 炼一口飞剑' },
+      { index: 1, title: '第一章 归录' },
+      { index: 2, title: '第二章 撸下' },
+      { index: 3, title: '第二篇 风起' },
+      { index: 4, title: '第三章 再会' },
+    ],
+    chapterIndex: 1, chapterTitle: '第一章 归录', paragraphs: ['p'], totalChapters: 5,
+    totalWords: 5, scrollRatio: 0, chapterWords: 1, settings: { ...defaults }, shelf: [], libraryPath: '',
+    notes: [], sources: [],
+  } });
+  await sleep(40);
+  menuItem('catalog').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(40);
+  const volGroups = Array.from(document.querySelectorAll('#catalogPanel .cat-group'));
+  assert(volGroups.length === 2, '应分成 2 篇, 实际 ' + volGroups.length);
+  assert(volGroups[0].textContent.includes('第一篇 炼一口飞剑'), '第一组应显示篇名, 不能是「正文」');
+  assert(volGroups[1].textContent.includes('第二篇 风起'), '第二组应显示篇名');
+  assert(!volGroups.some((g) => g.textContent.includes('正文')), '有篇名时不应再出现「正文」组');
+  assert(document.querySelectorAll('#catalogPanel .cat-item').length === 3, '3 个章节条目(篇名不占条目)');
+  assert(document.querySelector('#catalogPanel .cat-sub').textContent.includes('共 3 章'), '总章数不应含篇名');
+  console.log('目录独立篇名分组: 通过');
+
+  // 同名卷(两个「第二篇」): 折叠状态按分组 id 记, 不能拿卷名当 key, 否则一收全收
   sendMsg({ type: 'init', payload: {
     filePath: 'catalog-dup', bookTitle: '同名卷书', author: '',
     chapters: [
       { index: 0, title: '第一章 甲' },
-      { index: 1, title: '第二篇 起' },
+      { index: 1, title: '第二篇' },
       { index: 2, title: '第二章 乙' },
-      { index: 3, title: '第二篇 承' },
+      { index: 3, title: '第二篇' },
       { index: 4, title: '第三章 丙' },
     ],
     chapterIndex: 0, chapterTitle: '第一章 甲', paragraphs: ['p'], totalChapters: 5,
@@ -3122,13 +3149,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   menuItem('catalog').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(40);
   const dupGroups = Array.from(document.querySelectorAll('#catalogPanel .cat-group'));
-  assert(dupGroups.length === 3, '应得到 正文/正文/第二篇 三组, 实际 ' + dupGroups.length);
-  assert(dupGroups[0].textContent.includes('正文') && dupGroups[1].textContent.includes('正文'),
-    '前两组都叫「正文」');
+  assert(dupGroups.length === 3, '应得到 正文/第二篇/第二篇 三组, 实际 ' + dupGroups.length);
+  assert(dupGroups[0].textContent.includes('正文'), '首组应为「正文」');
+  assert(dupGroups[1].textContent.includes('第二篇') && dupGroups[2].textContent.includes('第二篇'),
+    '后两组同名「第二篇」');
   assert.strictEqual(dupGroups[0].querySelector('.cat-group-head').getAttribute('aria-expanded'), 'true',
-    '当前章所在的第一个「正文」应展开');
+    '当前章所在的「正文」应展开');
   assert.strictEqual(dupGroups[1].querySelector('.cat-group-head').getAttribute('aria-expanded'), 'false',
-    '同名但不同组的第二个「正文」必须各自收起');
+    '同名但不同组的第一个「第二篇」必须收起');
+  assert.strictEqual(dupGroups[2].querySelector('.cat-group-head').getAttribute('aria-expanded'), 'false',
+    '同名但不同组的第二个「第二篇」必须收起');
   console.log('目录同名卷独立开合: 通过');
 
   // ---------------- 离线下载(目录面板 / 书架标签 / 存储容量) ----------------

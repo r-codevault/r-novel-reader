@@ -81,8 +81,11 @@ export function buildCatalogGroups(chapters: CatalogChapter[]): CatalogGroup[] {
       cur.items.push(c);
       continue;
     }
-    if (!cur || curKey !== null) {
-      if (cur) { groups.push(cur); }
+    // 只有「还没有任何组」时才起「正文」组。
+    // 这里不能因为 curKey !== null 就另起一组: 那会把「第一篇 炼一口飞剑」后面
+    // 那批普通章节(「第一章 …」)全拆进新的「正文」组, 卷组永远是空壳被 UI 过滤掉
+    // —— 目录里就只剩一长串「正文 共 N 章」, 真正的篇名一个都看不到。
+    if (!cur) {
       cur = makeGroup('正文', -1);
       curKey = null;
     }
