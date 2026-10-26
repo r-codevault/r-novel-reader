@@ -710,36 +710,84 @@
   .bk-tag-offline { color: var(--accent); border-color: var(--accent); }
   /* 存储面板里两组信息之间留白 */
   .sp-row-gap { margin-top: 14px; }
-  .bp-del {
-    flex: none; opacity: 0; padding: 2px 6px; border-radius: 5px; font-size: 12px;
-    transition: opacity .12s ease;
+  /* 行内「移除 / 删除」弱化按钮: 透明底 + 1px 描边 + 灰小字。
+     书架行 .bp-del 与笔记书/章组头 .ng-del 共用这一套外观, 各自只保留显形规则。
+     font-family: inherit 必须写 —— button 默认吃 UA 字体, 不写会跟全站 UI 字体不一致。 */
+  .bp-del,
+  .ng-del {
+    flex: none; padding: 1px 6px; border-radius: 3px;
+    background: transparent; color: var(--fg-muted);
+    border: 1px solid var(--chrome-border);
+    font-family: inherit; font-size: calc(var(--ui-font-sub) - 1px);
+    cursor: pointer; user-select: none;
+    opacity: 0;
+    transition: opacity .12s ease, color .12s ease, border-color .12s ease;
   }
-  .bk:hover .bp-del { opacity: .6; }
-  .bp-del:hover { opacity: 1; background: var(--sp-hover); color: var(--danger); }
+  .bp-del:hover,
+  .ng-del:hover { color: var(--accent); border-color: var(--accent); }
+  /* 显形: 悬停整行, 或键盘焦点落在行内任一控件 */
+  .bk:hover .bp-del,
+  .bk:focus-within .bp-del { opacity: 1; }
+  .bp-del:focus-visible { opacity: 1; }
+  /* 移除进行中: 可点性收掉, 但不要变成强调色 */
+  .bp-del:disabled { cursor: default; }
+  .bp-del:disabled:hover { color: var(--fg-muted); border-color: var(--chrome-border); }
 
   /* ---------- 批量选择(书架 / 历史通用) ---------- */
   .bk.sel, #historyPopup .hist-row.sel { background: var(--sp-control-bg); }
+  /*
+   * 勾选框 = 描边按钮脸: 纸面色底 + 1px 描边, 勾/横杠用主题强调色描绘, **三态都不填底色** ——
+   * 与 .popup-close / .bp-del 同一套视觉语言。三态靠"描边 + 标记形状"区分。
+   * 关掉 UA 原生控件(appearance:none), 标记画在 input 自身 ::after 上:
+   * 不用 span 包裹, 原生 role / 键盘 / indeterminate 全部保留。
+   * 尺寸: 书架 / 历史 / 笔记条目 16×16; 笔记书·章组头 24×24 由 .nt-head-check 覆盖。
+   */
   .bk-check {
-    flex: none; width: 15px; height: 15px; border-radius: 4px;
-    border: 1px solid var(--sp-border-strong); background: var(--page-bg);
-    position: relative; box-sizing: border-box;
+    flex: none; appearance: none; -webkit-appearance: none;
+    /* margin 必须归零: Chromium 给 input 默认 3px/4px, 在 24×24 命中区里会偏 */
+    width: 16px; height: 16px; margin: 0; padding: 0;
+    box-sizing: border-box; position: relative;
+    background: var(--page-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 4px; cursor: pointer;
+    transition: border-color .12s ease;
   }
-  .bk-check.on { border-color: var(--accent); background: var(--accent); }
-  .bk-check.on::after {
-    content: ''; position: absolute; left: 4px; top: 1px;
-    width: 5px; height: 9px;
-    border: solid var(--accent-fg); border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
+  /* 悬停: 整个命中区都算, 不止中间 16px 的方块 */
+  .bk-check:hover,
+  .bk-check-label:hover > .bk-check,
+  .nt-check-label:hover > .bk-check { border-color: var(--accent); }
+  /* 选中: 强调色描边 + 强调色对勾, 不填底 */
+  .bk-check:checked { border-color: var(--accent); }
+  /* 对勾: 只描两条边再旋转, 百分比宽高让 16 / 24 两种框共用同一套几何 */
+  .bk-check:checked::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    width: 30%; height: 55%;
+    border: solid var(--accent); border-width: 0 2px 2px 0;
+    transform: translate(-50%, -58%) rotate(45deg);
   }
   /*
-   * 半选(该组只选中一部分): 只用"空心框 + 强调色横杠"表示,
-   * 不填充底色 —— 填充色是"整组已全选"的专属信号,
-   * 否则只选了部分时书名/章名看着也像被选中了。
+   * 半选(该组只选中一部分): 强调色描边 + 强调色横杠。
+   * 必须写在 :checked 之后(同特异性, 靠次序压过对勾)。
    */
-  .bk-check.part { border-color: var(--accent); background: transparent; }
-  .bk-check.part::after {
-    content: ''; position: absolute; left: 3px; top: 6px;
-    width: 7px; height: 2px; background: var(--accent);
+  .bk-check:indeterminate { border-color: var(--accent); }
+  .bk-check:indeterminate::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    width: 55%; height: 2px; border-radius: 1px;
+    background: var(--accent);
+    transform: translate(-50%, -50%);
+  }
+  .bk-check:disabled { opacity: .45; cursor: default; }
+  /* 框只有 16px, 焦点环画到框外 2px(压过通用 input:focus-visible) */
+  .bk-check:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* 命中区: 勾选框外层 label ≥24×24(R12-01) */
+  .bk-check-label {
+    display: inline-flex; align-items: center; gap: 6px;
+    cursor: pointer; user-select: none;
+  }
+  /* 行内 label 只包勾选框: 定成 24×24 命中区, 不参与文字排版 */
+  .bk > .bk-check-label,
+  #historyPopup .hist-row > .bk-check-label {
+    flex: none; width: 24px; height: 24px; justify-content: center;
   }
   .sel-count { font-size: var(--ui-font-sub); color: var(--fg-muted); font-variant-numeric: tabular-nums; }
   .popup-foot .spacer, .hist-foot .spacer { flex: 1 1 auto; }
@@ -1321,18 +1369,10 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* 书/章组头的删除按钮: 悬浮组头才出现; 确认态常显并跟随主题强调色 */
-  .ng-del {
-    flex: none; padding: 1px 6px; border-radius: 3px;
-    background: transparent; color: var(--fg-muted);
-    border: 1px solid var(--chrome-border);
-    font-size: calc(var(--ui-font-sub) - 1px); cursor: pointer;
-    opacity: 0; transition: opacity .12s ease, color .12s ease, border-color .12s ease;
-    user-select: none;
-  }
+  /* 书/章组头的删除按钮: 基础外观见上方 .bp-del/.ng-del 共享规则,
+     这里只管「悬浮组头才显形」与两步确认态 */
   .nt-book-head:hover .ng-del, .nt-chap-head:hover .ng-del,
   .nt-book-head:focus-within .ng-del, .nt-chap-head:focus-within .ng-del { opacity: 1; }
-  .ng-del:hover { color: var(--accent); border-color: var(--accent); }
   .ng-del.confirming { opacity: 1; color: var(--accent); border-color: var(--accent); }
   /* 确认态旁的「取消」: 常显(不依赖 hover), 保持中性边框 */
   .ng-del.ng-cancel { opacity: 1; }
@@ -1450,9 +1490,9 @@
     cursor: pointer;
   }
   .nt-item .nt-check {
-    position: static; left: auto; top: auto;
+    /* relative 是给 ::after 的对勾当包含块用的; 不加偏移, 布局与 static 一致 */
+    position: relative; left: auto; top: auto;
     width: 16px; height: 16px; margin: 0; cursor: pointer;
-    accent-color: var(--accent);
   }
   .nt-item.sel { background: var(--sp-control-bg); border-left-color: var(--accent); }
   .nt-item.managing { cursor: pointer; padding-left: 44px; }
@@ -1745,6 +1785,9 @@
     .src-check { width: 40px; height: 40px; }
     .src-ico { width: 40px; height: 40px; }
     .nt-act, .src-bulk-btn, .popup-ghost, .popup-close, .cat-btn { min-height: 40px; }
+    /* 勾选框: 放大命中区, 视觉框仍保持 16px(40px 的方框会把行高顶开) */
+    .bk > .bk-check-label, #historyPopup .hist-row > .bk-check-label { width: 40px; height: 40px; }
+    .bk-check-label { min-height: 40px; }
   }
 
   /* ---------------- 5. 状态语义与任务表 (T04: R9-01 ~ R9-07) ---------------- */
@@ -1857,12 +1900,13 @@
   /* 组头三件套(展开按钮 + 原生复选框 + 删除按钮) */
   /* 容器不再是按钮: 点击目标下移到 .nt-expand, 容器自己不响应点击 */
   .nt-book-head, .nt-chap-head { cursor: default; }
-  /* 复选框改为 flex 流内的原生 input, 不再绝对定位(绝对定位会压住标题) */
+  /* 复选框改为 flex 流内的原生 input, 不再绝对定位(绝对定位会压住标题)。
+     relative 是给 ::after 的对勾当包含块用的, 不带偏移所以布局不变。 */
   .nt-book-head .nt-head-check, .nt-chap-head .nt-head-check {
-    position: static; left: auto; top: auto; transform: none;
+    position: relative; left: auto; top: auto; transform: none;
   }
   .nt-book-head.managing { padding-left: 16px; }
   .nt-chap-head.managing { padding-left: 26px; }
   .nt-head-group { display: flex; align-items: center; gap: 6px; }
-  .nt-head-check { flex: none; width: 24px; height: 24px; margin: 0; accent-color: var(--accent); }
+  .nt-head-check { flex: none; width: 24px; height: 24px; margin: 0; }
 

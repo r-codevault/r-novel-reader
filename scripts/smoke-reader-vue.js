@@ -935,10 +935,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   menuItem('shelf').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   posted.length = 0;
-  // 移除走统一确认框: 点 ✕ 只打开确认框, 确认后才发 removeBook
+  // 移除走统一确认框: 点行内「移除」只打开确认框, 确认后才发 removeBook
   document.querySelector('#shelfPopup .bp-del').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
-  assert(document.querySelector('[data-confirm-ok]'), '点行内 ✕ 应弹出统一确认框');
+  assert(document.querySelector('[data-confirm-ok]'), '点行内「移除」应弹出统一确认框');
   assert(!posted.some((m) => m.type === 'removeBook'), '未确认前不应发 removeBook');
   assert(
     document.querySelectorAll('#shelfPopup .bk').length === 2,
@@ -989,7 +989,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       '进入后按钮应变「完成」');
     assert(document.querySelectorAll('#shelfPopup [data-shelf-check]').length === 3,
       '管理模式每行都应有勾选框');
-    assert(!document.querySelector('#shelfPopup .bp-del'), '管理模式应隐藏行内 ✕(避免误点)');
+    assert(!document.querySelector('#shelfPopup .bp-del'), '管理模式应隐藏行内「移除」(避免误点)');
 
     posted.length = 0;
     // 多动作行: 勾选走原生 checkbox, 点行本身不再打开书也不再勾选

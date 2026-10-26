@@ -200,7 +200,7 @@ function openTaskList(): void {
         </button>
         <button v-if="!selecting" type="button" class="bp-del" data-bk-del
           :aria-label="'从书架移除《' + b.title + '》'" title="从书架移除"
-          :disabled="opRunning('books:remove')" @click="removeOne(b)">✕</button>
+          :disabled="opRunning('books:remove')" @click="removeOne(b)">移除</button>
       </div>
     </div>
     <div v-if="!selecting" class="popup-foot">

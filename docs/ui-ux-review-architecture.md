@@ -446,7 +446,7 @@ assert(posted.some(m => m.type === 'chapterLoading'), '同章锁必须已释放�
 多动作（书架行、笔记条目）:
   <div class="bk [cur]" data-bk-path>            ← 容器：无 click、无 role
     <button type="button" class="bk-main">…书名/进度…</button>   ← 主动作
-    <button type="button" class="bp-del" aria-label="从书架移除《书名》">✕</button>
+    <button type="button" class="bp-del" aria-label="从书架移除《书名》">移除</button>
   </div>
 
 组头三件套（笔记书/章组、书源批量）:
@@ -458,6 +458,8 @@ assert(posted.some(m => m.type === 'chapterLoading'), '同章锁必须已释放�
 ```
 
 现有 `NotesPopup.vue:336-393` 是 `<button class="nt-book-head">` 内嵌 `role="button" tabindex="0"` 的 `.ng-del`——**这会被浏览器解析成"按钮内嵌可聚焦 span"**，读屏与 Enter 行为都不确定。必须按上面第三式拆分：外层改 `div`（保留 `.nt-book-head` 类与布局），展开动作移到内部 `button.nt-expand`。
+
+> 勾选框（`.bk-check`，书架 / 历史 / 笔记三处共用）用 `appearance: none` + 自身 `::after` 绘制三态：未选 = 细描边空框、选中 = 强调色描边 + 对勾、半选 = 强调色描边 + 横杠，**三态都不填底色**（描边按钮脸，与 `.popup-close` / `.bp-del` 同一套语言）。不额外包 `<span>`，原生 `role` / 键盘 / `indeterminate` 全部保留；命中区由外层 label 撑到 24×24。
 
 CSS 配套（追加分区，不改既有布局值）：
 
