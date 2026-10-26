@@ -186,9 +186,15 @@ const PRESET_RAW: Omit<ThemeDef, "dangerFg" | "success">[] = [
   {
     id: "sepia",
     name: "羊皮纸",
-    bg: "#f4e8cd",
-    fg: "#4b3f2a",
-    pageBg: "#dfcfa6",
+    // 正文纸面 = 原页面色(#dfcfa6): 早先的 #f4e8cd 在真实纸纹下偏白, 像"泡过水的米纸"。
+    // 页面留白随之提亮到 #e6d7b5 —— 留白若也压到 #dfcfa6 会与纸面同色:
+    //   ① #content 的边框与阴影失去意义 ② 弹窗底(--bg)与内部控件底(--page-bg)拉不开层次。
+    // 另需加深正文色 #4b3f2a -> #453a25: 纸面变深后原字色只有 6.66, 跌破本项目
+    // 「正文 ≥ 7:1」的 AAA 契约(test-theme-presets.js); 加深后 7.22。
+    // accent 与 chromeBg 均未动(accent 有设计值快照), 强调色 on 留白 5.15(原 4.75)。
+    bg: "#dfcfa6",
+    fg: "#453a25",
+    pageBg: "#e6d7b5",
     chromeBg: "#eee1c0",
     chromeBorder: "#c5b58e",
     borderStrong: "#917f51",

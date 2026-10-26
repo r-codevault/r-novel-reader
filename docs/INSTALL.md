@@ -61,7 +61,7 @@ npm run compile    # 编译 src/*.ts → dist/*.js
 npm run package
 ```
 
-成功后当前目录会出现 `r-novel-reader-<版本号>.vsix`，例如 `r-novel-reader-1.48.21.vsix`。
+成功后当前目录会出现 `r-novel-reader-<版本号>.vsix`，例如 `r-novel-reader-1.48.22.vsix`。
 
 > **为什么不用 `npx @vscode/vsce package`？** vsce 只能自动识别 GitHub/GitLab 仓库，本项目托管在 Gitee，README 中的相对链接会让打包报错。`npm run package` 已在脚本中固化所需参数：
 >
@@ -76,13 +76,13 @@ npm run package
 ### 4. 安装
 
 ```bash
-code --install-extension r-novel-reader-1.48.21.vsix
+code --install-extension r-novel-reader-1.48.22.vsix
 ```
 
 Windows 上若 `code` 不在 PATH，请用 VS Code 安装目录下的命令：
 
 ```powershell
-& "D:\Program Files (x86)\Microsoft VS Code\bin\code.cmd" --install-extension r-novel-reader-1.48.21.vsix
+& "D:\Program Files (x86)\Microsoft VS Code\bin\code.cmd" --install-extension r-novel-reader-1.48.22.vsix
 ```
 
 或直接用图形界面（见方式二）。
@@ -98,9 +98,9 @@ Windows 上若 `code` 不在 PATH，请用 VS Code 安装目录下的命令：
 ### 命令行安装
 
 ```bash
-code --install-extension r-novel-reader-1.48.21.vsix
+code --install-extension r-novel-reader-1.48.22.vsix
 # 覆盖安装时加 --force：
-code --install-extension r-novel-reader-1.48.21.vsix --force
+code --install-extension r-novel-reader-1.48.22.vsix --force
 ```
 
 ### 图形界面安装
@@ -149,14 +149,14 @@ npm test        # 可选：跑一遍解析器与界面冒烟测试
 
 2. **解包 vsix**
 
-   将 `r-novel-reader-1.48.21.vsix` 改名为 `.zip` 后解压（或直接解压 vsix），取出内层 `extension/` 目录的内容。
+   将 `r-novel-reader-1.48.22.vsix` 改名为 `.zip` 后解压（或直接解压 vsix），取出内层 `extension/` 目录的内容。
 
 3. **放入正确的目录名**
 
    目录名必须是 `<publisher>.<name>-<version>`，本插件为：
 
    ```
-   <扩展目录>/local.r-novel-reader-1.48.21/
+   <扩展目录>/local.r-novel-reader-1.48.22/
        ├── package.json
        ├── README.md
        ├── dist/
@@ -204,7 +204,7 @@ npm test        # 可选：跑一遍解析器与界面冒烟测试
 **方式二/三（vsix 安装）**：直接安装新 vsix 即可覆盖
 
 ```bash
-code --install-extension r-novel-reader-1.48.21.vsix
+code --install-extension r-novel-reader-1.48.22.vsix
 ```
 
 **方式四（离线解包）**：
