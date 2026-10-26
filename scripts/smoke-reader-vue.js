@@ -114,7 +114,7 @@ assert(
   '弹窗底色应统一为正文纸面色(--bg)'
 );
 assert(
-  /left:\s*calc\(var\(--menu-w,\s*48px\)\s*\+\s*16px\)/.test(capturedHtml),
+  /left:\s*calc\(var\(--menu-w\)\s*\+\s*16px\)/.test(capturedHtml),
   '弹窗应靠左显示(贴菜单: left = menu-w + 16px)'
 );
 assert(
@@ -525,11 +525,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(menuEl, '应有侧边菜单');
   assert(document.querySelector('.shell .menu') && document.querySelector('.shell .main'), '布局应为 shell[menu|main](占位式, 非浮层)');
   assert(menuEl.classList.contains('expanded'), '默认应展开菜单');
-  assert(document.documentElement.style.getPropertyValue('--menu-w') === '176px', '展开时 --menu-w 应为 176px(状态栏让位)');
+  assert(!document.documentElement.classList.contains('menu-collapsed'), '展开时不应挂 menu-collapsed(宽度由 CSS 决定)');
+  assert(capturedHtml.indexOf('--menu-w: var(--menu-w-expanded)') >= 0, 'CSS 应定义展开态 --menu-w = 176px');
   document.querySelector('.menu-toggle').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await sleep(30);
   assert(!menuEl.classList.contains('expanded'), '点菜单按钮应收起');
-  assert(document.documentElement.style.getPropertyValue('--menu-w') === '48px', '收起时 --menu-w 应为 48px');
+  assert(document.documentElement.classList.contains('menu-collapsed'), '收起时应挂 menu-collapsed');
+  assert(/html\.menu-collapsed\s*\{[^}]*--menu-w:\s*var\(--menu-w-collapsed\)/.test(capturedHtml),
+    'CSS 应有 .menu-collapsed -> 48px 的规则');
   // 7 个弹窗功能项 + 状态栏开关 + 摸鱼入口(笔记模式已于 v1.48.18 下线)
   assert(
     document.querySelectorAll('.menu-item:not(.menu-toggle-statusbar):not([data-menu="slacker"])').length === 7,
@@ -1073,7 +1076,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(20);
   assert(posted.some((m) => m.type === 'openBook' && m.filePath === 'online://s1/h'), '点历史行主按钮应发 openBook');
   assert(!$('#historyPopup').classList.contains('open'), '打开后历史弹窗应关闭');
-  assert(/\.hist-list\s*\{[^}]*max-height:\s*660px/.test(capturedHtml), '历史列表应限制 15 行高度');
+  // 15 行容量现在由 --src-result-h 乘出来(以前写死 calc(44px * 15), 压缩器会折叠成 660px)
+  assert(/\.hist-list\s*\{[^}]*max-height:\s*calc\(var\(--src-result-h/.test(capturedHtml),
+    '历史列表应限制 15 行高度(用 --src-result-h 计算)');
 
   // 历史管理: 全选 -> 删除所选; 切换分栏清空选择; 清空本栏
   {
@@ -2138,15 +2143,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '应显示历史搜索关键词');
   assert(document.querySelectorAll('#sourcePopup [data-src-history-result]').length === 2,
     '历史区应显示上一次的 2 条结果');
-  // 行高改用 CSS 变量 --src-alloc-h（架构 §5.1：内联 maxHeight -> 变量，高度跟随实测行高）
+  // 行数契约: JS 只给 --src-alloc-rows, 高度由 CSS 用 --src-result-h 乘出来(方案 §4.2)
   const curPane = document.querySelector('#sourcePopup [data-src-pane="current"]');
   const histPane = document.querySelector('#sourcePopup [data-src-pane="history"]');
-  assert(curPane.style.getPropertyValue('--src-alloc-h').trim() === '132px',
-    '当前 3 条应为 3 行高, 实际 ' + curPane.style.getPropertyValue('--src-alloc-h'));
-  assert(histPane.style.getPropertyValue('--src-alloc-h').trim() === '88px',
-    '历史 2 条应为 2 行高');
-  assert(capturedHtml.indexOf('--src-alloc-h') >= 0,
-    '.src-pane 的 max-height 应读取 --src-alloc-h 变量');
+  assert(curPane.style.getPropertyValue('--src-alloc-rows').trim() === '3',
+    '当前 3 条应给 3 行, 实际 ' + curPane.style.getPropertyValue('--src-alloc-rows'));
+  assert(histPane.style.getPropertyValue('--src-alloc-rows').trim() === '2',
+    '历史 2 条应给 2 行');
+  assert(capturedHtml.indexOf('calc(var(--src-result-h, 44px) * var(--src-alloc-rows') >= 0,
+    '.src-pane 的高度应由 --src-result-h × --src-alloc-rows 计算');
 
   posted.length = 0;
   document.querySelector('#sourcePopup [data-src-cancel]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
@@ -2201,10 +2206,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   }));
   sendMsg({ type: 'searchBatch', token: splitStart.token, errors: [], items: six });
   await sleep(30);
-  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.getPropertyValue('--src-alloc-h').trim() === '264px',
-    '当前 6 条应占 6 行(264px)');
-  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.getPropertyValue('--src-alloc-h').trim() === '44px',
-    '历史 1 条应占 1 行(44px)');
+  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.getPropertyValue('--src-alloc-rows').trim() === '6',
+    '当前 6 条应给 6 行');
+  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.getPropertyValue('--src-alloc-rows').trim() === '1',
+    '历史 1 条应给 1 行');
 
   // 16) 再搜: 上一轮 6 条进历史, 本次 6 条 -> 5/5 行, 拖动 +1 行
   posted.length = 0;
@@ -2224,10 +2229,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     '历史应为 6 条');
   assert(!document.querySelector('#sourcePopup [data-src-history-result] .src-add'),
     '历史结果不应显示加入书架按钮');
-  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.getPropertyValue('--src-alloc-h').trim() === '220px',
-    '两边都 6 条时当前区应为 5 行');
-  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.getPropertyValue('--src-alloc-h').trim() === '220px',
-    '两边都 6 条时历史区应为 5 行');
+  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.getPropertyValue('--src-alloc-rows').trim() === '5',
+    '两边都 6 条时当前区应给 5 行');
+  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.getPropertyValue('--src-alloc-rows').trim() === '5',
+    '两边都 6 条时历史区应给 5 行');
 
   const splitEl = document.querySelector('#sourcePopup [data-src-split]');
   const pt = (type, y) => {
@@ -2241,10 +2246,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   document.dispatchEvent(pt('pointermove', 144));
   document.dispatchEvent(pt('pointerup', 144));
   await sleep(30);
-  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.getPropertyValue('--src-alloc-h').trim() === '264px',
-    '拖动 +1 行后当前区应增高 44px');
-  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.getPropertyValue('--src-alloc-h').trim() === '176px',
-    '拖动后历史区应减少 44px');
+  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.getPropertyValue('--src-alloc-rows').trim() === '6',
+    '拖动 +1 行后当前区应给 6 行');
+  assert(document.querySelector('#sourcePopup [data-src-pane="history"]').style.getPropertyValue('--src-alloc-rows').trim() === '4',
+    '拖动后历史区应给 4 行');
   assert(document.querySelector('#sourcePopup [data-src-split]').getAttribute('aria-valuenow') === '6',
     '分隔条当前行数应更新');
 
@@ -2254,7 +2259,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   }));
   sendMsg({ type: 'searchBatch', token: dragStart.token, errors: [], items: four });
   await sleep(30);
-  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.getPropertyValue('--src-alloc-h').trim() === '264px',
+  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.getPropertyValue('--src-alloc-rows').trim() === '6',
     '补到 10 条后仍按拖动分得的 6 行显示(超出内滚)');
   const splitEl2 = document.querySelector('#sourcePopup [data-src-split]');
   splitEl2.dispatchEvent(pt('pointerdown', 100));
@@ -2263,7 +2268,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30);
   assert(!document.querySelector('#sourcePopup [data-src-pane="history"]'), '拖到最大时历史区应收起');
   assert(document.querySelector('#sourcePopup [data-src-history-label]'), '历史标题应保留');
-  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.getPropertyValue('--src-alloc-h').trim() === '440px',
+  assert(document.querySelector('#sourcePopup [data-src-pane="current"]').style.getPropertyValue('--src-alloc-rows').trim() === '10',
     '历史收起后当前区最多 10 行');
 
   // 18) 历史收起后不渲染历史行
@@ -3744,7 +3749,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const cssSrc3 = fs.readFileSync(path.join(__dirname, '..', 'webview', 'reader', 'reader.css'), 'utf8');
     // 断言前必须去注释: 注释里解释了"以前是 min-width:380px", 不去注释会把自己讲道理的文本当成声明
     const cssNoComments = cssSrc3.replace(/\/\*[\s\S]*?\*\//g, '');
-    assert(cssNoComments.indexOf('max-width: min(560px, calc(100vw - var(--menu-w, 48px) - 32px))') >= 0,
+    assert(cssNoComments.indexOf('max-width: min(560px, calc(100vw - var(--menu-w) - 32px))') >= 0,
       '浮层 max-width 应由视口宽度承担上限');
     assert(cssNoComments.indexOf('min-width: 380px') < 0, '不应再有写死的 min-width:380px');
     for (const popupId of ['#shelfPopup', '#storagePopup', '#notesPopup', '#sourcePopup', '#historyPopup']) {

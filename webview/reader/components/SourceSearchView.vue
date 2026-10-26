@@ -78,12 +78,15 @@ const alloc = computed(function () {
   );
 });
 
-/** 分栏实测高度: 交给 CSS 变量, 不再写死 *44（行长会随字号增长） */
+/**
+ * 分栏容量: JS 只给「行数」, 高度由 CSS 用 --src-result-h 乘出来。
+ * 之前这里写死 * 44 —— 改行高变量时容器高度不跟随, 拖拽与渲染还会各算一套。
+ */
 const curAllocStyle = computed(function () {
-  return { '--src-alloc-h': alloc.value.curRender * 44 + 'px' };
+  return { '--src-alloc-rows': String(alloc.value.curRender) };
 });
 const histAllocStyle = computed(function () {
-  return { '--src-alloc-h': alloc.value.histRender * 44 + 'px' };
+  return { '--src-alloc-rows': String(alloc.value.histRender) };
 });
 
 /** 失败明细是否已展开 */

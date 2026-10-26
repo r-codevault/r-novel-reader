@@ -205,8 +205,9 @@ check('R3-04 .src-results 保留 display:flex + overflow:hidden，且 flex:1 1 a
     assert(/^1\s+1\s+auto$/.test((lastValue('.src-results', 'flex') || '').trim()),
         '.src-results flex = ' + lastValue('.src-results', 'flex'));
     assert(isZero(lastValue('.src-results', 'min-height')), '.src-results 需要 min-height:0 才能收缩');
-    assert(/var\(--src-alloc-h/.test(lastValue('.src-pane', 'max-height') || ''),
-        '.src-pane max-height 应由 --src-alloc-h 决定, 实际 ' + lastValue('.src-pane', 'max-height'));
+    // 契约: 高度 = 行高令牌 × 行数(JS 只给 --src-alloc-rows), 不再由 JS 直接算 px
+    assert(/calc\(var\(--src-result-h[^)]*\)\s*\*\s*var\(--src-alloc-rows/.test(lastValue('.src-pane', 'max-height') || ''),
+        '.src-pane max-height 应由 --src-result-h × --src-alloc-rows 决定, 实际 ' + lastValue('.src-pane', 'max-height'));
 });
 
 // A5. R4-03：密集列表固定高改 min-height
@@ -967,9 +968,9 @@ const QA_NOVEL = {
                 const minRaw = pivot ? narrowValue(sel, 'min-width') : lastValue(sel, 'min-width');
                 assert(leftRaw && widthRaw, sel + ' 缺少 left/width 声明');
                 const px = function (v) {
-                    const m = String(v).match(/calc\(100vw - var\(--menu-w,\s*48px\)\s*-\s*(\d+)px\)/);
+                    const m = String(v).match(/calc\(100vw - var\(--menu-w(?:,\s*48px)?\)\s*-\s*(\d+)px\)/);
                     if (m) { return vw - MENU - Number(m[1]); }
-                    const m2 = String(v).match(/calc\(var\(--menu-w,\s*48px\)\s*\+\s*(\d+)px\)/);
+                    const m2 = String(v).match(/calc\(var\(--menu-w(?:,\s*48px)?\)\s*\+\s*(\d+)px\)/);
                     if (m2) { return MENU + Number(m2[1]); }
                     const m3 = String(v).match(/^(\d+)px$/);
                     if (m3) { return Number(m3[1]); }

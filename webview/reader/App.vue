@@ -63,9 +63,10 @@ function applySettings(s: ReadingSettings): void {
   nextTick(function () { readerRef.value?.positionHandles(); });
 }
 
-// 菜单宽度写入 CSS 变量(状态栏需要让出左侧空间, 与菜单同步过渡)
+// 菜单宽度由 CSS 决定(html.menu-collapsed), JS 只切状态类:
+// 真源只有 --menu-w 一处, 不再像以前那样由 JS 写内联 px + CSS 11 处各自兜底 48px
 watch(function () { return state.menuExpanded; }, function (expanded) {
-  document.documentElement.style.setProperty('--menu-w', expanded ? '176px' : '48px');
+  document.documentElement.classList.toggle('menu-collapsed', !expanded);
 }, { immediate: true });
 
 // ---------------------------------------------------------------- 弹窗互斥(同一时刻只允许一个)

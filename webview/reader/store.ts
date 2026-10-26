@@ -105,6 +105,7 @@ export function applyThemeVars(s: ReadingSettings): void {
   root.style.setProperty('--ui-font', ui.main);
   root.style.setProperty('--ui-font-sub', ui.sub);
   root.style.setProperty('--ui-font-title', ui.title);
+  root.style.setProperty('--ui-font-xs', ui.xs);
   applyContentWidth(s);
 }
 

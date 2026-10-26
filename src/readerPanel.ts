@@ -1802,6 +1802,7 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
     --ui-font: ${ui.main};
     --ui-font-sub: ${ui.sub};
     --ui-font-title: ${ui.title};
+    --ui-font-xs: ${ui.xs};
   }
 </style>
 </head>

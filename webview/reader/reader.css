@@ -9,7 +9,27 @@
     --ui-font-sub: 12px;
     /* 标题级 = 主值 + 1px(由 JS 写入, 此处为首帧兜底) */
     --ui-font-title: 15px;
+    /* 微字号(角标/Tab 数字) = max(10px, 主值 - 3px): 替代原先 9 处 calc(sub - 1px) */
+    --ui-font-xs: 11px;
+
+    /* ---- 列表行高契约(书源搜索 / 历史共用) ----
+       放在 :root 而不是各面板内部: 历史面板的 list 也要用 --src-result-h,
+       定义在 #sourcePopup 里的变量它看不到。 */
+    --src-row-h: 32px;      /* 书源列表行高: 15 行 = 480px */
+    --src-result-h: 44px;   /* 搜索结果 / 历史行高: 10 条 = 440px */
+    --src-split-h: 17px;    /* 历史分隔条高度(不计入 10 行容量) */
+
+    /* ---- 侧边章节箭头: JS 侧读它做碰撞计算(A3) ---- */
+    --side-nav-w: 56px;
+    --side-nav-gap: 12px;
+
+    /* ---- 侧边菜单宽度: 唯一真源在 CSS, JS 只切 class(A2) ---- */
+    --menu-w-expanded: 176px;
+    --menu-w-collapsed: 48px;
+    --menu-w: var(--menu-w-expanded);   /* 默认展开, 与首帧渲染一致 */
   }
+  /* 菜单收起: 状态栏与各浮层的左侧让位同步变化 */
+  html.menu-collapsed { --menu-w: var(--menu-w-collapsed); }
   html, body { margin: 0; padding: 0; }
   body {
     font-family: var(--font-family);
@@ -22,8 +42,8 @@
     display: none;
     position: fixed;
     top: 12px;
-    left: calc(var(--menu-w, 48px) + 16px);
-    width: min(980px, calc(100vw - var(--menu-w, 48px) - 32px));
+    left: calc(var(--menu-w) + 16px);
+    width: min(980px, calc(100vw - var(--menu-w) - 32px));
     max-height: calc(100vh - 76px);
     flex-direction: column;
     z-index: 45;
@@ -42,7 +62,8 @@
     padding: 15px 18px 12px;
     border-bottom: 1px solid var(--chrome-border);
   }
-  /* 目录字号与阅读区同步: 章节条目 = 正文字号; 分卷名/面板标题 ≈ 章节标题字号 */
+  /* 目录字号 = 面板字号(设置 → 界面字号可调 12–20px), 不跟随正文字号。
+     v1.48.19 方案 A: 「目录字太小」由界面字号整体解决, 详见 方案.md §3 E3 */
   .cat-title {
     position: relative; padding-bottom: 5px;
     font-size: calc(var(--ui-font-title) + 3px); font-weight: 600;
@@ -152,7 +173,7 @@
   }
   /* 悬浮: 铺一层淡色底(--sp-hover 随主题走), 不描边 —— 描边只表示"当前章" */
   .cat-item:hover { background: var(--sp-hover); }
-  /* 条目字号与正文一致 */
+  /* 条目字号跟随面板字号 --ui-font(界面字号 12–20 可调), 与 --font-size 无关 */
   .cat-item .cat-no { font-size: var(--ui-font); color: var(--fg-muted); flex: none; }
   .cat-item .cat-name { font-size: var(--ui-font); overflow: hidden; text-overflow: ellipsis; }
   /* 已读: 压灰一档(必须写在 .cur 之前, 否则会盖掉当前章的高亮) */
@@ -256,9 +277,9 @@
     display: none;
     position: fixed;
     top: 12px;
-    left: calc(var(--menu-w, 48px) + 16px);
+    left: calc(var(--menu-w) + 16px);
     width: 420px;
-    max-width: min(92vw, calc(100vw - var(--menu-w, 48px) - 24px));
+    max-width: min(92vw, calc(100vw - var(--menu-w) - 24px));
     max-height: calc(100vh - 24px);
     overflow-y: auto;
     z-index: 45;
@@ -362,6 +383,9 @@
     min-height: 100vh;
     padding: 24px 20px 70px;
   }
+  /* 正文留白按字号等比(E1): 26/34/46 @16px ≈ 1.6em/2.1em/2.9em。
+     以前写死像素, 正文调到 32px 时左右只剩 1.06em, 首行缩进(2em) 反而比留白还宽。
+     注: 声明列表保持紧凑——测试靠"往上 12 行内找选择器"来定位 owner, 注释别塞在规则里。 */
   #content {
     position: relative;
     width: var(--content-width);
@@ -371,7 +395,7 @@
     border: 1px solid var(--chrome-border);
     border-radius: 6px;
     box-shadow: 0 2px 16px var(--shadow-color, rgba(0, 0, 0, .13));
-    padding: 26px 34px 46px;
+    padding: 1.6em 2.1em 2.9em;
     min-height: calc(100vh - 120px);
     font-size: var(--font-size);
     font-family: var(--font-family);
@@ -475,7 +499,7 @@
 
   /* ---------- 底部状态栏(含整书进度条) ---------- */
   .statusbar {
-    position: fixed; left: var(--menu-w, 48px); right: 0; bottom: 0;
+    position: fixed; left: var(--menu-w); right: 0; bottom: 0;
     display: flex; flex-direction: column;
     font-size: var(--ui-font-sub);
     /* 状态栏属 chrome 层: 用 VS Code UI 字体, 与正文阅读字体解耦(否则会跟着宋体/黑体变) */
@@ -618,13 +642,13 @@
     display: none;
     position: fixed;
     top: 12px;
-    left: calc(var(--menu-w, 48px) + 16px);
+    left: calc(var(--menu-w) + 16px);
     /* 统一浮层宽度模型: 宽屏按内容撑开, 上限由视口承担。
        以前是 min-width:380px + max-width:660px —— 320px 视口下 min-width 赢,
        面板直接溢出到屏幕外(R3-01); 改成 min-width:0 后窄屏才能真的收缩。 */
     width: max-content;
     min-width: 0;
-    max-width: min(560px, calc(100vw - var(--menu-w, 48px) - 32px));
+    max-width: min(560px, calc(100vw - var(--menu-w) - 32px));
     max-height: calc(100vh - 24px);
     z-index: 45;
     flex-direction: column;
@@ -634,7 +658,7 @@
     box-shadow: 0 10px 32px var(--shadow-color, rgba(0, 0, 0, .24));
   }
   #shelfPopup.open, #storagePopup.open, #notesPopup.open, #sourcePopup.open, #historyPopup.open { display: flex; }
-  #historyPopup { width: min(560px, calc(100vw - var(--menu-w, 48px) - 24px)); }
+  #historyPopup { width: min(560px, calc(100vw - var(--menu-w) - 24px)); }
 
   .popup-head {
     display: flex; align-items: baseline; gap: 10px;
@@ -702,7 +726,7 @@
   .bk-sub { font-size: var(--ui-font-sub); color: var(--fg-muted); white-space: nowrap; }
   .bk-tag {
     display: inline-block; margin-right: 4px; padding: 0 5px;
-    font-size: calc(var(--ui-font-sub) - 1px); line-height: 1.5;
+    font-size: var(--ui-font-xs); line-height: 1.5;
     color: var(--accent); border: 1px solid var(--accent); border-radius: 3px;
     /* 在线书的标签直接显示书源名, 名字可能较长: 限宽省略, 完整名走 title */
     max-width: 96px; overflow: hidden; text-overflow: ellipsis;
@@ -722,7 +746,7 @@
     flex: none; padding: 1px 6px; border-radius: 3px;
     background: transparent; color: var(--fg-muted);
     border: 1px solid var(--chrome-border);
-    font-family: inherit; font-size: calc(var(--ui-font-sub) - 1px);
+    font-family: inherit; font-size: var(--ui-font-xs);
     cursor: pointer; user-select: none;
     opacity: 0;
     transition: opacity .12s ease, color .12s ease, border-color .12s ease;
@@ -958,7 +982,7 @@
   .sp-province-item {
     padding: 3px 2px;
     font-family: var(--vscode-font-family, inherit);
-    font-size: calc(var(--ui-font-sub) - 1px);
+    font-size: var(--ui-font-xs);
     color: var(--sp-fg);
     background: none;
     border: none; border-radius: 4px;
@@ -1028,7 +1052,7 @@
     min-width: 16px; height: 16px; padding: 0 4px;
     border-radius: 8px;
     background: var(--accent); color: var(--accent-fg);
-    font-size: calc(var(--ui-font-sub) - 1px); line-height: 16px; text-align: center;
+    font-size: var(--ui-font-xs); line-height: 16px; text-align: center;
     font-variant-numeric: tabular-nums;
   }
   .menu:not(.expanded) .menu-badge {
@@ -1041,21 +1065,16 @@
      320px 视口下 left(56) + min-width(340) 直接顶出屏幕(R3-01)。
      可读性下限由 width: min(460px, …) 承担。 */
   #notesPopup {
-    width: min(460px, calc(100vw - var(--menu-w, 48px) - 24px));
+    width: min(460px, calc(100vw - var(--menu-w) - 24px));
     min-width: 0;
   }
   #notesPopup .popup-body { padding: 4px 0 6px; }
   /* 书源: 结果行含书名/作者/源名/操作, 比书架更宽 */
   /* 同上: 固定 min-width 会顶破窄屏, 宽度下限交给 width: min(560px, …) */
   #sourcePopup {
-    width: min(560px, calc(100vw - var(--menu-w, 48px) - 24px));
+    width: min(560px, calc(100vw - var(--menu-w) - 24px));
     min-width: 0;
-    /* 单行固定高度: 15 行 = 480px, 便于精确限高 */
-    --src-row-h: 32px;
-    /* 搜索结果行高: 10 条 = 440px */
-    --src-result-h: 44px;
-    /* 历史搜索分隔条高度(不计入 10 行容量) */
-    --src-split-h: 17px;
+    /* 行高令牌已提到 :root(历史面板共用), 这里不再重复定义 */
   }
   #sourcePopup .popup-body { padding-bottom: 6px; }
 
@@ -1071,7 +1090,7 @@
   .src-tab.on { color: var(--accent); border-color: var(--accent); background: var(--sp-control-bg); }
   .src-tab-num {
     min-width: 16px; padding: 0 5px; border-radius: 999px;
-    font-size: calc(var(--ui-font-sub) - 1px); line-height: 16px; text-align: center;
+    font-size: var(--ui-font-xs); line-height: 16px; text-align: center;
     background: var(--danger); color: var(--danger-fg);
   }
   .src-search { display: flex; gap: 8px; padding: 12px 18px 6px; }
@@ -1114,8 +1133,9 @@
     flex: 1 1 auto; min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    /* 高度由实测容量推到变量里(R4-04): 行内容变高时这里也跟着长, 不再写死 *44 */
-    max-height: var(--src-alloc-h, none);
+    /* R4-04: JS 只给行数(--src-alloc-rows), 高度由这里乘出来。
+       行高令牌一改, 拖拽与渲染同时跟随, 不再出现"拖一格不等于一行" */
+    max-height: calc(var(--src-result-h, 44px) * var(--src-alloc-rows, 10));
   }
   .src-cancel {
     flex: none; padding: 6px 12px; cursor: pointer; font-family: inherit; font-size: var(--ui-font);
@@ -1296,7 +1316,7 @@
   .src-ico:hover { color: var(--accent); border-color: var(--sp-border-strong); background: var(--sp-bg); }
   .src-ico-del:hover { color: var(--danger); border-color: var(--danger); }
   .src-ico-del.confirming { width: auto; padding: 0 6px; color: var(--danger); border-color: var(--danger); }
-  .src-ico-tip { font-size: calc(var(--ui-font-sub) - 1px); }
+  .src-ico-tip { font-size: var(--ui-font-xs); }
   .src-del.confirming { color: var(--danger); border-color: var(--danger); }
 
   /* 行内编辑表单 */
@@ -1365,7 +1385,7 @@
   }
   .nt-tag {
     flex: none; padding: 1px 6px; border-radius: 3px;
-    font-size: calc(var(--ui-font-sub) - 1px);
+    font-size: var(--ui-font-xs);
     background: var(--sp-control-bg); color: var(--accent);
     border: 1px solid var(--chrome-border);
   }
@@ -1519,7 +1539,7 @@
     box-sizing: border-box;
   }
   .np-label {
-    color: var(--accent); font-size: calc(var(--ui-font-sub) - 1px);
+    color: var(--accent); font-size: var(--ui-font-xs);
     font-weight: 600; letter-spacing: 1px;
   }
   .np-note {
@@ -1667,7 +1687,8 @@
 }
 #historyPopup .hist-list {
   flex: 1 1 auto; min-height: 0; overflow-y: auto;
-  max-height: calc(44px * 15); padding: 8px 0 4px;
+  /* 15 行容量与书源结果共用同一行高令牌: 改 --src-result-h 时两边一起变 */
+  max-height: calc(var(--src-result-h, 44px) * 15); padding: 8px 0 4px;
   border-top: 1px solid var(--sp-border); margin-top: 10px;
 }
 #historyPopup .hist-row {
@@ -1741,8 +1762,8 @@
   /* 窄屏(≤576px): 浮层贴左、关闭按钮换行到右上、目录工具条折成两行 */
   @media (max-width: 576px) {
     #shelfPopup, #storagePopup, #notesPopup, #sourcePopup, #historyPopup {
-      left: calc(var(--menu-w, 48px) + 8px);
-      width: calc(100vw - var(--menu-w, 48px) - 16px);
+      left: calc(var(--menu-w) + 8px);
+      width: calc(100vw - var(--menu-w) - 16px);
       max-width: none;
       /* 窄屏一律归零: 否则 min-width 会盖过上面的 width(R3-01) */
       min-width: 0;
@@ -1799,7 +1820,7 @@
   .src-error-row { display: flex; align-items: center; gap: 8px; min-height: 24px; }
   .src-error-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
   .src-error-cat {
-    flex: none; padding: 0 6px; border-radius: 3px; font-size: calc(var(--ui-font-sub) - 1px);
+    flex: none; padding: 0 6px; border-radius: 3px; font-size: var(--ui-font-xs);
     color: var(--danger); border: 1px solid var(--danger);
   }
   .src-error-msg { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

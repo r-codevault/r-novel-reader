@@ -19,6 +19,9 @@ export const UI_FONT = {
   /** 派生: 副字号 = max(subFloor, 主值 - subDelta) */
   subDelta: 2,
   subFloor: 11,
+  /** 派生: 微字号(角标/Tab 数字) = max(xsFloor, 主值 - xsDelta) */
+  xsDelta: 3,
+  xsFloor: 10,
   /** 派生: 标题级 = 主值 + titleDelta */
   titleDelta: 1,
 } as const;
@@ -29,6 +32,7 @@ export interface UiFontVars {
   main: string;
   sub: string;
   title: string;
+  xs: string;
 }
 
 /**
@@ -52,6 +56,8 @@ export function uiFontVars(v: unknown): UiFontVars {
     main: size + "px",
     // 下限兜底: 12 档时 12-2=10 太小, 卡在 11px
     sub: Math.max(UI_FONT.subFloor, size - UI_FONT.subDelta) + "px",
+    // 角标/Tab 数字: 比副字号再小一档, 同样带地板(以前是 calc(sub - 1px), 主值小时会掉到 9px)
+    xs: Math.max(UI_FONT.xsFloor, size - UI_FONT.xsDelta) + "px",
     title: size + UI_FONT.titleDelta + "px",
   };
 }

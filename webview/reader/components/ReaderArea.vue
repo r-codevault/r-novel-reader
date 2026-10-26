@@ -13,6 +13,13 @@ import { persistSettings, CONTENT_WIDTH, peekSuppressParaClick, setSuppressParaC
 const WIDTH_MIN = CONTENT_WIDTH.min;
 const WIDTH_MAX = CONTENT_WIDTH.max;
 
+/** 读 :root 上的 px 令牌(A3): 拿不到或不是 px 时回落到调用方给的默认值 */
+function readCssPx(name: string, fallback: number): number {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const v = parseFloat(raw);
+  return isFinite(v) && v > 0 ? v : fallback;
+}
+
 const readerRef = ref<HTMLElement | null>(null);
 const contentRef = ref<HTMLElement | null>(null);
 const handleLeftRef = ref<HTMLElement | null>(null);
@@ -258,8 +265,10 @@ function positionHandles(): void {
   handleRightStyle.right = readerRect.right - rect.right + 'px';
   handleRightStyle.left = 'auto';
   // 两侧章节箭头: 锚在纸面左右边缘外侧(而非窗口边缘); 内容宽过窗口时贴边
-  const NAV_W = 56;
-  const NAV_GAP = 12;
+  // 尺寸从 CSS 令牌读(A3): 以前这里写死 56/12, 与 .side-nav 的 width 各存一份,
+  // 改按钮宽度后箭头会压到正文或飞出视口
+  const NAV_W = readCssPx('--side-nav-w', 56);
+  const NAV_GAP = readCssPx('--side-nav-gap', 12);
   sidePrevStyle.left = Math.max(4, rect.left - NAV_W - NAV_GAP) + 'px';
   sidePrevStyle.right = 'auto';
   // 与「+」按钮共用同一个 gap, 顺带修掉两侧箭头同款的 8px 偏差

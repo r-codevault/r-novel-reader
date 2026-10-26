@@ -45,11 +45,12 @@ assert.strictEqual(clampUiFont(undefined), 14, 'undefined 应回落默认 14');
 
 // ---------------------------------------------------------------- 3. 派生量
 const d14 = uiFontVars(14);
-assert.deepStrictEqual([d14.main, d14.sub, d14.title], ['14px', '12px', '15px'], '14 档应为 14/12/15');
+assert.deepStrictEqual([d14.main, d14.sub, d14.title, d14.xs], ['14px', '12px', '15px', '11px'], '14 档应为 14/12/15/11');
 const d12 = uiFontVars(12);
-assert.deepStrictEqual([d12.main, d12.sub, d12.title], ['12px', '11px', '13px'], '12 档副字号应被 11px 地板兜住');
+assert.deepStrictEqual([d12.main, d12.sub, d12.title, d12.xs], ['12px', '11px', '13px', '10px'],
+  '12 档: 副字号被 11px 地板兜住, 微字号被 10px 地板兜住');
 const d20 = uiFontVars(20);
-assert.deepStrictEqual([d20.main, d20.sub, d20.title], ['20px', '18px', '21px'], '20 档应为 20/18/21');
+assert.deepStrictEqual([d20.main, d20.sub, d20.title, d20.xs], ['20px', '18px', '21px', '17px'], '20 档应为 20/18/21/17');
 assert.strictEqual(uiFontVars(undefined).main, '14px', '非法输入应回落默认值');
 
 // ---------------------------------------------------------------- 4/5. 持久化 + 独立性
@@ -114,7 +115,7 @@ const store = new SettingsStore({
 
   // store 侧: 三个变量真的被写进去(而不是只定义了常量)
   const storeSrc = fs.readFileSync(path.join(ROOT, 'webview', 'reader', 'store.ts'), 'utf8');
-  for (const v of ['--ui-font', '--ui-font-sub', '--ui-font-title']) {
+  for (const v of ['--ui-font', '--ui-font-sub', '--ui-font-title', '--ui-font-xs']) {
     assert(storeSrc.indexOf("setProperty('" + v + "'") >= 0, 'applyThemeVars 应写 ' + v);
   }
   assert(storeSrc.indexOf("setProperty('--font-size', s.uiFontSize") < 0,
