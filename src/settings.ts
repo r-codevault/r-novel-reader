@@ -11,6 +11,7 @@ import * as vscode from "vscode";
 import { PROVINCES, DEFAULT_PROVINCE_CODE } from "./provinceColors";
 import { SOLAR_TERMS, DEFAULT_TERM_ID } from "./solarTerms";
 import { FESTIVALS, DEFAULT_FESTIVAL_ID } from "./festivals";
+import { UI_FONT, clampUiFont } from "./uiFont";
 
 /**
  * 正文栏宽(px): 预设档位 + 合法区间。
@@ -37,6 +38,11 @@ export interface ReadingSettings {
   theme: string;
   /** 阅读区最大宽度(px) */
   contentWidth: number;
+  /**
+   * 界面(功能面板)字号(px): 目录 / 设置面板 / 书架 / 书源 / 笔记 / 状态栏等 chrome 层。
+   * 与正文 fontSize 完全独立 —— 两者互不推导, 改动互不影响(见 uiFont.ts)。
+   */
+  uiFontSize: number;
   /** 悬浮球位置(拖动后记录; -1 表示"跟随阅读区域"的默认位置) */
   fabLeft?: number;
   fabTop?: number;
@@ -295,6 +301,8 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
   paragraphSpacing: 0.8,
   theme: "sepia",
   contentWidth: 720,
+  // 界面字号: 与正文字号解耦, 默认 14px(见 uiFont.ts 的 UI_FONT)
+  uiFontSize: UI_FONT.default,
   shortcutPrev: "alt+arrowleft",
   shortcutNext: "alt+arrowright",
   showStatusBar: true,
@@ -368,6 +376,8 @@ function configDefaults(): ReadingSettings {
       CONTENT_WIDTH.max,
       DEFAULT_SETTINGS.contentWidth,
     ),
+    // 界面字号只走 globalState(不暴露 settings.json), 默认值直接取常量
+    uiFontSize: DEFAULT_SETTINGS.uiFontSize,
     shortcutPrev: cfg.get<string>(
       "shortcutPrevChapter",
       DEFAULT_SETTINGS.shortcutPrev,
@@ -397,6 +407,10 @@ function sanitize(s: Partial<ReadingSettings>): Partial<ReadingSettings> {
   }
   if (typeof s.fontSize === "number") {
     out.fontSize = clamp(s.fontSize, 12, 32, DEFAULT_SETTINGS.fontSize);
+  }
+  // 界面字号: 必须在这里放行, 否则 webview 写进来的 patch 会被静默丢弃(点了没反应)
+  if (typeof s.uiFontSize === "number") {
+    out.uiFontSize = clampUiFont(s.uiFontSize);
   }
   if (typeof s.fontFamily === "string") {
     // 旧字体值迁移: 设置面板已改为 黑体/宋体/楷体 三选项(起点风格)

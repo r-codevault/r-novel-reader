@@ -1,12 +1,13 @@
   * { box-sizing: border-box; }
-  /* UI 基准字号: **与阅读字号解耦**, 固定 14/12px（PRD Q6 / R4-01）。
-     以前 `--ui-font` 由 `--font-size` 推导, 于是把正文字号调到 32px 时目录/设置/书架
-     的字一起放大, 面板被撑破; 现在 UI 只认这两个固定值, 正文只认 --font-size。
-     视觉代价: 目录条目不再跟随正文字号 —— 这是 R4-01 的直接结果, 验收需明确接受。 */
+  /* UI 基准字号: **与阅读字号完全独立**, 两套变量互不推导（PRD Q6 / R4-01 仍然成立）。
+     下面这三行只是**默认值 + 首帧兜底**: 真实值由 store.applyThemeVars() 按
+     settings.uiFontSize 写到 <html> 内联样式 —— 主值 12–20px, 副字号 max(11px, 主值-2px),
+     标题级 主值+1px; readerPanel 也会在首帧注入同样的值(排在本文之后, 否则会被盖掉)。
+     因此把正文 --font-size 调到 32px, 目录/设置/书架的字体不会跟着放大撑破面板。 */
   :root {
     --ui-font: 14px;
     --ui-font-sub: 12px;
-    /* 原 clamp(16px, 1.2*font-size, 24px) 的固定替代(标题级) */
+    /* 标题级 = 主值 + 1px(由 JS 写入, 此处为首帧兜底) */
     --ui-font-title: 15px;
   }
   html, body { margin: 0; padding: 0; }
@@ -57,13 +58,13 @@
     border: 1px solid var(--input-border);
     background: var(--input-bg); color: var(--chrome-fg);
     border-radius: 4px; padding: 3px 10px; cursor: pointer;
-    font-size: 12px; font-family: inherit; line-height: 1.5; white-space: nowrap;
+    font-size: var(--ui-font-sub); font-family: inherit; line-height: 1.5; white-space: nowrap;
   }
   .cat-btn:hover { border-color: var(--accent); color: var(--accent); }
   .cat-btn.on { border-color: var(--accent); color: var(--accent); }
   .cat-close {
     border: none; background: none; cursor: pointer; color: inherit;
-    opacity: .65; font-size: 15px; line-height: 1; padding: 2px 6px; border-radius: 4px;
+    opacity: .65; font-size: var(--ui-font-title); line-height: 1; padding: 2px 6px; border-radius: 4px;
   }
   .cat-close:hover { opacity: 1; background: var(--input-bg); }
   /* 列表整体左右留白: 分卷卡片不再贴住浮层边框。
@@ -274,7 +275,9 @@
   .sp-head .spacer { flex: 1; }
   .sp-row { display: flex; align-items: center; gap: 10px; margin: 0 0 13px; }
   .sp-label {
-    flex: none; width: 68px; white-space: nowrap;
+    /* width 是默认档的视觉基准; min-width 以 em 兜底: 界面字号调到 20 时
+       4 个汉字(80px) 不会压到右侧步进器, 14 档算出 63px 仍走 68px 宽度 */
+    flex: none; width: 68px; min-width: 4.5em; white-space: nowrap;
     font-size: var(--ui-font); color: var(--sp-muted);
   }
   /* 阅读主题行: 第一行预设色块, 第二行三个选择器(地域色彩/廿四节气/节日色彩) */
@@ -287,7 +290,8 @@
   /* 主题预设从"纯色圆点"改为"色卡 + 可见名称"胶囊(R8-02)：
      data-theme 与 .active 类保持不变，既有视觉与测试选择器都还能用。 */
   .sp-dot {
-    height: 26px; padding: 2px 10px 2px 3px; border-radius: 999px; cursor: pointer;
+    /* 高度改为 min-height: 副字号随界面字号放大时, 色块 + 文字不能在被固定高裁切 */
+    min-height: 26px; padding: 2px 10px 2px 3px; border-radius: 999px; cursor: pointer;
     border: 1px solid var(--sp-border-strong); background: var(--sp-control-bg);
     color: var(--sp-fg); font-family: inherit; font-size: var(--ui-font-sub);
     display: inline-flex; align-items: center; gap: 6px;
@@ -393,7 +397,7 @@
     z-index: 28;
     display: inline-flex; align-items: center; justify-content: center;
     width: 32px; height: 32px; padding: 0;
-    cursor: pointer; font-family: inherit; font-size: 18px; line-height: 1; font-weight: 500;
+    cursor: pointer; font-family: inherit; font-size: calc(var(--ui-font) + 4px); line-height: 1; font-weight: 500;
     color: var(--accent-fg); background: var(--accent);
     border: 1px solid transparent; border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
@@ -404,7 +408,7 @@
     content: attr(data-tip);
     position: absolute; right: calc(100% + 8px); top: 50%; transform: translateY(-50%);
     padding: 4px 8px; border-radius: 6px; white-space: nowrap;
-    font-size: 12px; line-height: 1.4; font-weight: 400;
+    font-size: var(--ui-font-sub); line-height: 1.4; font-weight: 400;
     color: var(--fg); background: var(--chrome-bg);
     border: 1px solid var(--chrome-border);
     opacity: 0; pointer-events: none;
@@ -473,7 +477,7 @@
   .statusbar {
     position: fixed; left: var(--menu-w, 48px); right: 0; bottom: 0;
     display: flex; flex-direction: column;
-    font-size: 12px;
+    font-size: var(--ui-font-sub);
     /* 状态栏属 chrome 层: 用 VS Code UI 字体, 与正文阅读字体解耦(否则会跟着宋体/黑体变) */
     font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
     background: var(--chrome-bg); color: var(--chrome-fg);

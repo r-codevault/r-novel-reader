@@ -4,7 +4,7 @@
  * 面板定位(贴合悬浮球)由 App 协调, 本组件暴露根元素
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { state, THEMES, PROVINCES, SOLAR_TERMS, FESTIVALS, CONTENT_WIDTH, persistSettings, previewTheme, restoreTheme, stepFontSize, stepSetting, resetSettings } from '../store';
+import { state, THEMES, PROVINCES, SOLAR_TERMS, FESTIVALS, CONTENT_WIDTH, UI_FONT, persistSettings, previewTheme, restoreTheme, stepFontSize, stepSetting, stepUiFontSize, resetSettings } from '../store';
 import { shortcutLabel } from '../composables/shortcut';
 
 const rootRef = ref<HTMLElement | null>(null);
@@ -401,6 +401,20 @@ const shortcutHintText = computed(function () {
             @blur="applyCustomWidth" />
           <span class="sp-width-unit">px</span>
         </div>
+      </div>
+    </div>
+    <!-- 界面字号: 只作用于面板 / 目录 / 弹窗等 chrome 层, 与上面「字号大小」(正文) 完全独立 -->
+    <div class="sp-row">
+      <span class="sp-label">界面字号</span>
+      <div class="sp-step"
+        :title="'面板、目录、弹窗的字号，不影响正文（' + UI_FONT.min + '–' + UI_FONT.max + ' 像素）'">
+        <button class="sp-step-btn"
+          :aria-label="'减小界面字号，当前 ' + (settings ? settings.uiFontSize : UI_FONT.default) + ' 像素'"
+          @click="stepUiFontSize(-1)">−</button>
+        <span class="sp-step-val" role="status" aria-live="polite">{{ settings ? settings.uiFontSize : '' }}</span>
+        <button class="sp-step-btn"
+          :aria-label="'增大界面字号，当前 ' + (settings ? settings.uiFontSize : UI_FONT.default) + ' 像素'"
+          @click="stepUiFontSize(1)">＋</button>
       </div>
     </div>
     <button class="sp-reset" @click="resetSettings">恢复默认设置</button>

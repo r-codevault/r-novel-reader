@@ -16,6 +16,7 @@ import { decodeBuffer } from './encoding';
 import { readWebviewAsset } from './webviewAssets';
 
 import { ReadingSettings, SettingsStore, THEMES, fontStackById, themeById } from './settings';
+import { uiFontVars } from './uiFont';
 import type { NoteDraft, NoteItem } from './notes';
 import type { BookSourceView, ImportResult } from './bookSource';
 import type { HistoryPayload } from './history';
@@ -1750,6 +1751,10 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
         // 首帧主题: 与 webview 侧 applyThemeVars 取同一套值(四参, 含节日),
         // 否则切到节日/地域/节气主题后首次打开会闪一帧默认色。只算一次, 避免重复调用。
         const t = themeById(settings.theme, settings.province, settings.term, settings.festival);
+        // 界面字号首帧值(与 webview 侧 applyThemeVars 同源): 必须排在 ${this._webviewCss}
+        // 之后 —— 同一 <style> 内同特异性"后者胜", 写在前面会被 reader.css 的
+        // :root 静态兜底(14/12/15) 盖掉, 大字号用户就会先闪一帧 14px。
+        const ui = uiFontVars(settings.uiFontSize);
 
                 // webview 外壳: Vue 产物(dist-webview)内联 + 静态主题变量初值(防首帧闪白)
         // UI 全部由 webview/reader/ 的 Vue 3 源码构建而来(npm run build:webview)
@@ -1792,6 +1797,12 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
     --content-width: ${settings.contentWidth}px;
   }
   ${this._webviewCss}
+  /* 界面字号: 必须排在 reader.css 之后(同特异性后者胜), 否则会被上面的静态兜底盖掉 */
+  :root {
+    --ui-font: ${ui.main};
+    --ui-font-sub: ${ui.sub};
+    --ui-font-title: ${ui.title};
+  }
 </style>
 </head>
 <body>

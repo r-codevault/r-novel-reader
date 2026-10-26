@@ -10,6 +10,10 @@ import { parseShortcut } from './composables/shortcut';
 import { THEMES, FONT_STACKS, DEFAULT_SETTINGS, CONTENT_WIDTH, PROVINCES, PROVINCE_THEMES, SOLAR_TERMS, TERM_THEMES, FESTIVALS, FESTIVAL_THEMES } from 'virtual:novel-constants';
 export { THEMES, FONT_STACKS, DEFAULT_SETTINGS, CONTENT_WIDTH, PROVINCES, PROVINCE_THEMES, SOLAR_TERMS, TERM_THEMES, FESTIVALS, FESTIVAL_THEMES };
 
+/** 界面字号: 纯逻辑模块(vscode-free), 扩展与 webview 共用同一份范围与派生规则 */
+import { UI_FONT, clampUiFont, uiFontVars } from '../../src/uiFont';
+export { UI_FONT };
+
 export { state };
 
 export function themeOf(id: string, province?: string, term?: string, festival?: string): ThemeDef {
@@ -95,6 +99,12 @@ export function applyThemeVars(s: ReadingSettings): void {
   root.style.setProperty('--font-family', FONT_STACKS[s.fontFamily] || FONT_STACKS.system);
   root.style.setProperty('--line-height', String(s.lineHeight));
   root.style.setProperty('--para-spacing', s.paragraphSpacing + 'em');
+  // 界面(功能面板)字号: 与上面的 --font-size 完全独立, 两者互不推导（R4-01 边界）。
+  // 派生量统一由 uiFontVars 计算, 与 reader.css :root 的静态兜底(14/12/15)同源。
+  const ui = uiFontVars(s.uiFontSize);
+  root.style.setProperty('--ui-font', ui.main);
+  root.style.setProperty('--ui-font-sub', ui.sub);
+  root.style.setProperty('--ui-font-title', ui.title);
   applyContentWidth(s);
 }
 
@@ -161,6 +171,18 @@ export function stepFontSize(d: number): void {
   const cur = state.settings?.fontSize || DEFAULT_SETTINGS.fontSize;
   const next = Math.min(32, Math.max(12, cur + d));
   if (next !== cur) { persistSettings({ fontSize: next }); }
+}
+
+/**
+ * 界面字号步进(与 stepFontSize 完全独立: 绝不触碰 --font-size)。
+ * 不进 persistSettings 的 immediate 白名单 —— 与「字号大小」同手感:
+ * 界面乐观即时生效, 落盘走 250ms 累积防抖。
+ */
+export function stepUiFontSize(d: number): void {
+  if (!state.settings) { return; }
+  const cur = clampUiFont(state.settings.uiFontSize);
+  const next = clampUiFont(cur + d * UI_FONT.step);
+  if (next !== cur) { persistSettings({ uiFontSize: next }); }
 }
 
 export function stepSetting(key: 'lineHeight' | 'paragraphSpacing', d: number, min: number, max: number): void {
