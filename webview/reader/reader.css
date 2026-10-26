@@ -1041,6 +1041,31 @@
     background-blend-mode: multiply;
   }
 
+  /* ---------- 羊皮纸主题: 纸纹质感 ----------
+     需求方提供的羊皮纸实拍(400×400), 处理为 200×200 可平铺贴图:
+     灰度化后提亮到 mean≈238、对比 ×2.2(颗粒 sd 从 5 拉到约 11),
+     边缘做「环形偏移 + 羽化混合」, 接缝逐像素差 ≈9.3 与内部相邻像素 ≈8.4 同量级 → 看不出来。
+     与宣纸同一套原则: multiply 只压暗约 7%, **不动任何令牌** → 不参与对比度计算
+     (实测正文对比仍 7.8:1, 远高于 AA 的 4.5:1)。 */
+  :root { --paper-parchment: url("./assets/paper-parchment.png"); }
+  html[data-theme="sepia"] #reader,
+  html[data-theme="sepia"] #content,
+  html[data-theme="sepia"] #catalogPanel,
+  html[data-theme="sepia"] .popup,
+  html[data-theme="sepia"] .settings-panel,
+  html[data-theme="sepia"] .statusbar {
+    background-image: var(--paper-parchment);
+    background-repeat: repeat;
+    background-size: 200px 200px;
+    background-blend-mode: multiply;
+  }
+  /* 主题色卡: 只给色块贴纹(胶囊底是控件色, 贴了会显脏) */
+  .sp-dot[data-theme="sepia"] .sp-dot-swatch {
+    background-image: var(--paper-parchment) !important;
+    background-size: 60px 60px;
+    background-blend-mode: multiply;
+  }
+
   /* ================================================================
      阅读笔记: 侧栏浮层 / 新建卡片 / 原文跳转 / 返回位置
      只使用主题令牌, 不写死颜色(黑夜、宣纸、节日主题都自动跟随)
