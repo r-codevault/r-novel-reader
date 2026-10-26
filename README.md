@@ -8,7 +8,7 @@
 | --- | --- |
 | 插件 ID | `local.r-novel-reader` |
 | 显示名称 | 小说阅读器 |
-| 当前版本 | 1.48.15 |
+| 当前版本 | 1.48.16 |
 | 要求 | VS Code 1.85.0+（实测 1.128.0），Node.js 18+（仅打包时需要） |
 | 开源协议 | MIT |
 | 代码仓库 | [Gitee](https://gitee.com/rich-woman-hugs-me-to-sleep/r-novel-reader)（主仓） · [GitHub](https://github.com/r-codevault/r-novel-reader)（同步镜像） |
@@ -141,10 +141,6 @@
 
 ![失效书源](docs/images/ui-sources-dead.png)
 
-![书源管理](docs/images/ui-sources.png)
-
-![失效书源](docs/images/ui-sources-dead.png)
-
 > 1.47.0 已接通在线阅读：搜索结果可直接「加入书架」，按书源的详情/目录/正文规则在线读取，目录与已读章节缓存在扩展存储目录；**1.48.0 起支持离线下载**：目录面板可整本或按区间下载（断网可读），并可导出为独立的本地 txt。
 
 ### 阅读界面
@@ -186,10 +182,10 @@ npm run compile
 
 # 3. 打包成 vsix
 npm run package
-# 生成 r-novel-reader-1.42.6.vsix
+# 生成 r-novel-reader-1.48.16.vsix
 
 # 4. 安装到 VS Code
-code --install-extension r-novel-reader-1.42.6.vsix
+code --install-extension r-novel-reader-1.48.16.vsix
 ```
 
 安装后**重启 VS Code**（或 `Ctrl+Shift+P` → `Developer: Reload Window`）。
@@ -402,6 +398,7 @@ A：暂不支持，目前仅处理纯文本 `.txt`。
 - 1.48.4 顶部入口文案由「批量」改为「管理」
 - 1.48.5 笔记加上「管理」：多选删除笔记（管理模式下自动展开全部分组、隐藏行内操作按钮），与书架/历史保持一致
 - 1.48.6 笔记管理模式下，书与章的标题行也可勾选（整本 / 整章一键选中，部分选中显示半选）
+- 1.48.16 修复笔记面板里章节标题被压成几个字的问题（`max-width` 百分比与弹性收缩互相锁死），书名同款隐患一并处理
 - 1.48.15 目录展开/收起改用 px 高度裁剪动画，并在尾段淡出，消除逐帧重排与「残留一小条再突然收起」的卡顿感
 - 1.48.14 卷卡片改回整行单列，展开不再触发整片重排，动画只改变高度，后面的卡片平滑下移
 - 1.48.13 目录悬浮改为淡色底、不描边；当前章仍用强调色描边

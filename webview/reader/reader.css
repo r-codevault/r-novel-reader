@@ -1304,7 +1304,8 @@
   /* 双箭头图标默认朝下=展开; 收起时旋转 180° 朝上 */
   .nt-book.collapsed .nt-caret, .nt-chap-group.collapsed .nt-caret { transform: rotate(180deg); }
   .nt-book-title {
-    max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    /* 同上: 百分比 max-width 会让 flex: 0 1 auto 的 .nt-expand 收缩到极小 */
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font-weight: 600;
   }
   .nt-tag {
@@ -1347,7 +1348,8 @@
   }
   .nt-chap-head:hover { background: var(--sp-hover); }
   .nt-chap-title {
-    max-width: 52%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    /* 不用百分比: .nt-expand 是 flex: 0 1 auto 的收缩宽度, 百分比会反过来把自己压塌 */
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     color: var(--fg-muted);
   }
 
