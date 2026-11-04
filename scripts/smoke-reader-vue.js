@@ -3209,13 +3209,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     assert(!document.querySelector('#catalogPanel .cat-item[data-i="3"] [data-cat-mark]'),
       '既没下载也没缓存的章不应有任何标记');
 
-    // 已读压灰: 0/1 在 readUpTo 之前; 4 在 read 集合里; 3 未读
+    // 已读提亮: 0/1 在 readUpTo 之前; 4 在 read 集合里; 3 未读
     assert(document.querySelector('#catalogPanel .cat-item[data-i="0"]').classList.contains('read'),
       '读到的章之前的应标为已读');
     assert(document.querySelector('#catalogPanel .cat-item[data-i="4"]').classList.contains('read'),
       '有位置记忆的章应标为已读');
     assert(!document.querySelector('#catalogPanel .cat-item[data-i="3"]').classList.contains('read'),
-      '未读章不应压灰');
+      '未读章不应标为已读');
 
     // 底部筛选/图例: 全部 5 / 已下载 2 / 仅缓存 2 / 需联网 1
     const chip = (k) => document.querySelector('#catalogPanel [data-cat-chip="' + k + '"]');

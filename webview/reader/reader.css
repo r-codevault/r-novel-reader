@@ -175,10 +175,10 @@
   .cat-item:hover { background: var(--sp-hover); }
   /* 条目字号跟随面板字号 --ui-font(界面字号 12–20 可调), 与 --font-size 无关 */
   .cat-item .cat-no { font-size: var(--ui-font); color: var(--fg-muted); flex: none; }
-  .cat-item .cat-name { font-size: var(--ui-font); overflow: hidden; text-overflow: ellipsis; }
-  /* 已读: 压灰一档(必须写在 .cur 之前, 否则会盖掉当前章的高亮) */
-  .cat-item.read .cat-no { opacity: .45; }
-  .cat-item.read .cat-name { color: var(--fg-muted); }
+  /* 未读(默认态): 章节名压灰一档, 让"还没看"的章往后退 */
+  .cat-item .cat-name { font-size: var(--ui-font); color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; }
+  /* 已读: 提亮回正文色, 扫一眼就知道自己读到哪(必须写在 .cur 之前, 否则会盖掉当前章的高亮) */
+  .cat-item.read .cat-name { color: var(--fg); }
   /* 当前章: 强调色描边 + 强调色文字(同样不用底色) */
   .cat-item.cur { border-color: var(--accent); }
   .cat-item.cur .cat-no { color: var(--accent); opacity: 1; font-weight: 600; }

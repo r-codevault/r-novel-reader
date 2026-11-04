@@ -11,7 +11,7 @@ interface DisplayItem {
   index: number; no: string; name: string; title: string;
   /** 断网可读性: offline=已下载(永久) / cache=仅临时缓存 / ''=需要联网 */
   mark: '' | 'offline' | 'cache';
-  /** 已读(在「读到的最大章号」之前, 或读过并留有位置记忆) */
+  /** 已读(在「读到的最大章号」之前, 或读过并留有位置记忆): 样式上提亮, 未读压灰 */
   read: boolean;
 }
 interface DisplayGroup {

@@ -375,7 +375,7 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.chapterLoading = null;
       state.chapterError = null;
       state.chapter = p;
-      // 阅读进度: 推进「读到的最大章号」, 目录里靠它把已读章压灰
+      // 阅读进度: 推进「读到的最大章号」, 目录里靠它把已读章提亮
       if (state.chapter && state.chapter.index > state.marks.readUpTo) {
         state.marks.readUpTo = state.chapter.index;
       }
