@@ -311,6 +311,12 @@ export class ReaderPanel {
  * 只靠章节号无法判断该写进哪本书的记录。
  */
 public static onProgress?: (filePath: string, chapterIndex: number, scrollRatio: number) => void;
+    /**
+     * 「这一章已送到读者眼前」回调 —— 目录已读的落点。
+     * 与 onProgress 分开: 后者只在滚动后才有, 靠「下一章」翻过去的那一章永远不会上报,
+     * 目录里就会留下一串"明明读过却没点亮"的章。
+     */
+    public static onChapterShown?: (filePath: string, chapterIndex: number) => void;
     /** 书架数据提供者(插件入口注入): init 时随载荷下发 */
     public static getShelf?: () => ShelfItemView[];
     /** 书库目录提供者(插件入口注入) */
@@ -1726,6 +1732,8 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
         // 没有指定轮次(本地书 / 命中缓存)时也要占一个新编号,
         // 保证 webview 侧 `reqId < chapterReqSeq` 的兜底判断始终有效
         const rid = typeof reqId === 'number' ? reqId : ++this._reqSeq;
+        // 章已送出 = 读者已经看到它: 先记「已读」再谈滚动位置
+        ReaderPanel.onChapterShown?.(novel.filePath, index);
         void this._panel.webview.postMessage({
             type: 'chapter',
             payload: this._chapterPayload(novel, index, this._scrollRatio, rid),

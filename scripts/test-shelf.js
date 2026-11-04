@@ -55,6 +55,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(shelf.get('D:/a.txt').scrollRatio === 1, '滚动比例应被夹到 0~1');
   console.log('进度更新: 通过');
 
+  // --- 已读章节: 翻开即记, 去重, 不乱序 ---
+  await shelf.markRead('D:/a.txt', 3);
+  await shelf.markRead('D:/a.txt', 0);
+  await shelf.markRead('D:/a.txt', 3); // 重复标记不应产生第二条
+  let readList = shelf.get('D:/a.txt').readChapters;
+  assert.deepStrictEqual(readList, [0, 3], 'readChapters 应去重且升序, 实际 ' + JSON.stringify(readList));
+  await shelf.markRead('D:/不存在的书.txt', 2); // 不在书架里 -> 静默忽略
+  await shelf.markRead('D:/a.txt', -1); // 非法章号 -> 静默忽略
+  assert.deepStrictEqual(shelf.get('D:/a.txt').readChapters, [0, 3], '非法调用不应改动记录');
+  console.log('已读章节记录: 通过');
+
   // --- 再次 upsert 不应丢失进度 ---
   await shelf.upsert({ filePath: 'D:/a.txt', title: '甲书(修订)', author: '作者A', totalChapters: 120 });
   a = shelf.get('D:/a.txt');

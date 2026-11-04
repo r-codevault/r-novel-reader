@@ -1312,15 +1312,16 @@ function openEmptyReader(tab?: DrawerTab): void {
         const key = onlineKey(ref.sourceId, ref.bookUrl);
         const cached = await onlineCache.listChapters(key);
         const entry = shelf.get(novel.filePath);
-        const read: number[] = [];
+        // 已读 = 翻开过的章(readChapters) ∪ 留过滚动位置的章(chapterRatios, 老数据)
+        const readSet = new Set<number>(entry?.readChapters || []);
         const ratios = entry?.chapterRatios;
         if (ratios) {
             for (const raw of Object.keys(ratios)) {
                 const n = Number(raw);
-                if (Number.isInteger(n) && n >= 0) { read.push(n); }
+                if (Number.isInteger(n) && n >= 0) { readSet.add(n); }
             }
-            read.sort(function (a, b) { return a - b; });
         }
+        const read = Array.from(readSet).sort(function (a, b) { return a - b; });
         return {
             cached,
             read,
@@ -2209,6 +2210,12 @@ function openEmptyReader(tab?: DrawerTab): void {
     );
 
     // ---------------------------------------------------------------- 阅读进度 -> 书架
+
+    // 章送到即记「已读」(不等滚动上报): 靠「下一章」翻过去的章也要在目录里点亮
+    ReaderPanel.onChapterShown = (filePath: string, chapterIndex: number) => {
+        if (!filePath) { return; }
+        void shelf.markRead(filePath, chapterIndex);
+    };
 
     ReaderPanel.onProgress = (filePath: string, chapterIndex: number, scrollRatio: number) => {
         // 空态占位面板(filePath 为空)没有真实书籍: 不写书架、不记阅读历史

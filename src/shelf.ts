@@ -22,6 +22,11 @@ export interface ShelfBook {
     scrollRatio: number;
     /** 各章节内滚动位置记忆(章节序号 -> 0~1), 目录切走再切回时恢复原位置 */
     chapterRatios?: Record<number, number>;
+    /**
+     * 翻开过的章节序号(升序去重) —— 目录「已读」的判定依据。
+     * 与 chapterRatios 的区别: 后者只在真的滚过才写, 靠「下一章」翻过去不会留痕。
+     */
+    readChapters?: number[];
     addedAt: number;
     updatedAt: number;
     /** 在线书元信息(filePath 为 online://... 时存在) */
@@ -116,6 +121,31 @@ export class ShelfStore {
             scrollRatio: ratio,
             chapterRatios: ratioChanged ? ratios : book.chapterRatios,
             updatedAt: Date.now(),
+        };
+        await this.state.update(SHELF_KEY, books);
+    }
+
+    /**
+     * 标记某一章「翻开过」(目录里的已读依据)。
+     * 已记录过就直接返回 —— 每章只写一次盘, 不跟阅读进度抢写入。
+     */
+    async markRead(filePath: string, chapterIndex: number): Promise<void> {
+        if (!filePath || !Number.isInteger(chapterIndex) || chapterIndex < 0) {
+            return;
+        }
+        const books = this.state.get<ShelfBook[]>(SHELF_KEY, []);
+        const idx = books.findIndex((b) => b.filePath === filePath);
+        if (idx < 0) {
+            return;
+        }
+        const book = books[idx];
+        const list = book.readChapters || [];
+        if (list.indexOf(chapterIndex) >= 0) {
+            return;
+        }
+        books[idx] = {
+            ...book,
+            readChapters: list.concat([chapterIndex]).sort((a, b) => a - b),
         };
         await this.state.update(SHELF_KEY, books);
     }
