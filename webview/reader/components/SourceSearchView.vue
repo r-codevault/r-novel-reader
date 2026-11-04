@@ -45,24 +45,15 @@ const searchingThis = computed(function () {
 });
 
 /**
- * 结果区实测可容纳的行数（R4-04）。
+ * 结果区行数契约（v1.46.10 定，v1.48.26 改回固定值）：
+ * **总计最多 10 行**；当前结果与历史搜索都有内容时按 **5 / 5** 分（拖动可调，1~10）。
  *
- * 以前写死 10 行：窗口一矮，第 8~10 行就被挤到面板外面，用户以为"只搜到这些"。
- * 现在按 pane 的 clientHeight ÷ 实测行高算，并用 ResizeObserver 跟随面板尺寸变化。
+ * v1.48.8 曾把这里换成「按实测高度动态算、上限 30」：高窗口会突破 10 行变成 6/7 甚至更多，
+ * 矮窗口又会因为"用自己的高度算自己的高度"的自反馈一路塌到 1~2 行。
+ * 窗口装不下 10 行时不靠 JS 改行数，交给 CSS —— .src-pane 是 flex 可收缩 + 内部滚动，
+ * 行数上限不变，只是可见部分变少、可滚。
  */
-const capacity = ref(RESULT_ROW_CAP);
-
-function measureCapacity(): void {
-  const pane = document.querySelector('#sourcePopup .src-results') as HTMLElement | null;
-  const row = document.querySelector('#sourcePopup .src-result') as HTMLElement | null;
-  const rowH = row && row.getBoundingClientRect().height > 0
-    ? row.getBoundingClientRect().height
-    : 44;
-  const avail = pane ? pane.clientHeight : 0;
-  if (rowH > 0 && avail > 0) {
-    capacity.value = Math.max(1, Math.min(30, Math.floor(avail / rowH)));
-  }
-}
+const ROW_CAP = RESULT_ROW_CAP;
 
 /** 历史搜索(仅上一次) */
 const hasHistory = computed(function () {
@@ -74,7 +65,7 @@ const alloc = computed(function () {
     state.searchHistory ? state.searchHistory.items.length : 0,
     hasHistory.value,
     state.splitCurrentRows,
-    capacity.value
+    ROW_CAP
   );
 });
 
@@ -321,44 +312,26 @@ function endSplit(): void {
   splitDrag = null;
 }
 
-/** 键盘: 上下各挪一行(上限 = 实测容量, 不再写死 10) */
+/** 键盘: 上下各挪一行(上限 = 行数契约 10, 不再跟随实测容量) */
 function onSplitKey(e: KeyboardEvent): void {
   if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') { return; }
   e.preventDefault();
   const delta = e.key === 'ArrowDown' ? 1 : -1;
-  const cap = Math.max(1, capacity.value);
+  const cap = Math.max(1, ROW_CAP);
   const next = Math.max(1, Math.min(cap, alloc.value.curAlloc + delta));
   state.splitCurrentRows = next;
-}
-
-let resizeObserver: ResizeObserver | null = null;
-
-function onWindowResize(): void {
-  measureCapacity();
 }
 
 onMounted(function () {
   document.addEventListener('pointermove', moveSplit);
   document.addEventListener('pointerup', endSplit);
   document.addEventListener('pointercancel', endSplit);
-  window.addEventListener('resize', onWindowResize);
-  const pop = document.getElementById('sourcePopup');
-  if (typeof ResizeObserver !== 'undefined' && pop) {
-    resizeObserver = new ResizeObserver(function () { measureCapacity(); });
-    resizeObserver.observe(pop);
-  }
-  measureCapacity();
 });
-
-// 结果条目数变化时重算(行高可能因标题换行而变)
-watch(function () { return state.searchResults.length; }, function () { measureCapacity(); });
 
 onBeforeUnmount(function () {
   document.removeEventListener('pointermove', moveSplit);
   document.removeEventListener('pointerup', endSplit);
   document.removeEventListener('pointercancel', endSplit);
-  window.removeEventListener('resize', onWindowResize);
-  if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null; }
   // 卸载时把拖拽残留状态收干净(分隔条 v-if 消失时 pointerup 可能收不到)
   if (splitDrag) {
     document.body.style.userSelect = '';
@@ -497,7 +470,7 @@ function goDead(): void {
 
         <template v-if="hasHistory">
           <div class="src-split" data-src-split :class="{ dragging }" role="separator"
-            aria-orientation="horizontal" tabindex="0" :aria-valuemin="1" :aria-valuemax="capacity"
+            aria-orientation="horizontal" tabindex="0" :aria-valuemin="1" :aria-valuemax="ROW_CAP"
             :aria-valuenow="alloc.curAlloc" aria-label="历史搜索, 可拖动调整"
             @pointerdown="beginSplit" @keydown="onSplitKey">
             <span class="src-split-line"></span>
