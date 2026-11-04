@@ -343,7 +343,6 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.marks = {
         cached: [],
         read: [],
-        readUpTo: (p.chapterIndex as number) || 0,
       };
       state.catFilter = 'all';
       // 换书/重开: 笔记相关的临时态一律清空
@@ -375,10 +374,8 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.chapterLoading = null;
       state.chapterError = null;
       state.chapter = p;
-      // 阅读进度: 推进「读到的最大章号」, 目录里靠它把已读章提亮
-      if (state.chapter && state.chapter.index > state.marks.readUpTo) {
-        state.marks.readUpTo = state.chapter.index;
-      }
+      // 已读只认「这一章有位置记忆」(落盘后可查), 不再在这里推进"最大章号" ——
+      // 跳读会把中间章一起点亮, 目录等于谎报进度
       break;
     }
     case 'settings':
@@ -693,12 +690,10 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
     // 目录每章标记: 已缓存(临时) / 已读
     case 'chapterMarks': {
       if (!ownedBy(msg as { filePath?: string }, 'chapterMarks')) { break; }
-      const p = (msg.payload as ChapterMarksView | undefined) || { cached: [], read: [], readUpTo: -1 };
+      const p = (msg.payload as ChapterMarksView | undefined) || { cached: [], read: [] };
       state.marks = {
         cached: p.cached || [],
         read: p.read || [],
-        // 本地已推进得更多时不要回退(读盘快照可能比当前阅读落后)
-        readUpTo: Math.max(p.readUpTo, state.marks.readUpTo),
       };
       break;
     }

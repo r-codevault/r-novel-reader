@@ -203,10 +203,8 @@ export interface OfflineStatusView {
 export interface ChapterMarksView {
     /** 临时读缓存里已有的章号(升序) */
     cached: number[];
-    /** 读过并留有章内位置记忆的章号(升序) */
+    /** 读过并留有章内位置记忆的章号(升序) —— 目录「已读」的唯一依据 */
     read: number[];
-    /** 读到的最大章号; -1 = 还没开始(与状态栏「读至第 N 章」同一口径) */
-    readUpTo: number;
 }
 
 /** 离线下载能力接口(插件入口注入) */

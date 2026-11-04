@@ -1324,8 +1324,6 @@ function openEmptyReader(tab?: DrawerTab): void {
         return {
             cached,
             read,
-            // 与状态栏「读至第 N 章」同一口径; -1 = 还没开始
-            readUpTo: entry && entry.chapterIndex >= 0 ? entry.chapterIndex : -1,
         };
     };
 

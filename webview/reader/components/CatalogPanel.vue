@@ -11,7 +11,7 @@ interface DisplayItem {
   index: number; no: string; name: string; title: string;
   /** 断网可读性: offline=已下载(永久) / cache=仅临时缓存 / ''=需要联网 */
   mark: '' | 'offline' | 'cache';
-  /** 已读(在「读到的最大章号」之前, 或读过并留有位置记忆): 样式上提亮, 未读压灰 */
+  /** 已读(这一章有位置记忆): 样式上提亮, 未读压灰; 跳读没经过的章不点亮 */
   read: boolean;
 }
 interface DisplayGroup {
@@ -33,7 +33,6 @@ const dlSet = computed(function () { return new Set(downloaded.value); });
 /** 临时读缓存(读过就存, 清缓存/删书架会没) */
 const cachedSet = computed(function () { return new Set(state.marks.cached || []); });
 const readSet = computed(function () { return new Set(state.marks.read || []); });
-const readUpTo = computed(function () { return state.marks.readUpTo; });
 const totalChapters = computed(function () { return state.chapters.length; });
 
 function markOf(index: number): '' | 'offline' | 'cache' {
@@ -42,8 +41,13 @@ function markOf(index: number): '' | 'offline' | 'cache' {
   return '';
 }
 
+/**
+ * 已读 = 真的有这一章的位置记忆(读过/翻到过)。
+ * 不能用「章号 < 读到的最大章」(以前的做法): 跳到第 500 章会把前 499 章一起点亮,
+ * 目录看上去像一夜读完半本书 —— 跳读没经过的章就是没读。
+ */
 function isReadChapter(index: number): boolean {
-  return index < readUpTo.value || readSet.value.has(index);
+  return readSet.value.has(index);
 }
 
 const offlineCount = computed(function () { return downloaded.value.length; });

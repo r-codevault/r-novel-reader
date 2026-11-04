@@ -3189,8 +3189,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       },
     } });
     await sleep(40);
-    // 目录每章标记: 临时缓存 [2,4], 读过第 4 章, 读到第 2 章(0 基 2 => 第 3 章在读)
-    dispatch('chapterMarks', { cached: [2, 4], read: [4], readUpTo: 2 });
+    // 目录每章标记: 临时缓存 [2,4], 读过第 4 章(0 基)
+    dispatch('chapterMarks', { cached: [2, 4], read: [4] });
     await sleep(30);
 
     menuItem('catalog').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
@@ -3209,11 +3209,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     assert(!document.querySelector('#catalogPanel .cat-item[data-i="3"] [data-cat-mark]'),
       '既没下载也没缓存的章不应有任何标记');
 
-    // 已读提亮: 0/1 在 readUpTo 之前; 4 在 read 集合里; 3 未读
-    assert(document.querySelector('#catalogPanel .cat-item[data-i="0"]').classList.contains('read'),
-      '读到的章之前的应标为已读');
+    // 已读只认「这一章有位置记忆」: 4 已读; 0~3 没读过 —— 跳读不点亮中间章
     assert(document.querySelector('#catalogPanel .cat-item[data-i="4"]').classList.contains('read'),
       '有位置记忆的章应标为已读');
+    assert(!document.querySelector('#catalogPanel .cat-item[data-i="0"]').classList.contains('read'),
+      '跳读没经过的章不应标为已读(不能按"最大章号"推断)');
     assert(!document.querySelector('#catalogPanel .cat-item[data-i="3"]').classList.contains('read'),
       '未读章不应标为已读');
 

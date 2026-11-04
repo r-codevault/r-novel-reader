@@ -110,10 +110,8 @@ export interface OfflineStatusView {
 export interface ChapterMarksView {
   /** 临时读缓存里已有的章号(断网可读, 但删书架/清缓存会没) */
   cached: number[];
-  /** 读过并留有位置记忆的章号 */
+  /** 读过并留有位置记忆的章号 —— 目录「已读」的唯一依据(跳读不点亮中间章) */
   read: number[];
-  /** 读到的最大章号; -1 = 还没开始 */
-  readUpTo: number;
 }
 
 /** 阅读笔记(与扩展端 NoteItem 一一对应) */
@@ -361,8 +359,8 @@ export const state = reactive({
   dlRun: null as null | { done: number; total: number; failed: number; running: boolean; paused: boolean },
   /** 上次导出结果提示(短暂展示) */
   dlNotice: '',
-  /** 目录每章标记(临时缓存 / 已读); readUpTo 随阅读推进在本地更新 */
-  marks: { cached: [] as number[], read: [] as number[], readUpTo: -1 } as ChapterMarksView,
+  /** 目录每章标记(临时缓存 / 已读) */
+  marks: { cached: [] as number[], read: [] as number[] } as ChapterMarksView,
   /** 目录筛选: all=全部 / offline=已下载 / cache=仅缓存 / none=需联网 */
   catFilter: 'all' as 'all' | 'offline' | 'cache' | 'none',
   // ---- 归属协议(见 src/protocol.ts)
