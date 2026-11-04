@@ -1777,6 +1777,8 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
     --accent: ${t.accent};
     --accent-fg: ${t.accentFg};
     --fg-muted: ${t.muted};
+    /* 目录未读章文字: 与 store.applyThemeVars 同一规则(深色主题维持次要灰, 浅色兑 30% 面板底色) */
+    --cat-dim: ${t.isDark ? t.muted : `color-mix(in srgb, ${t.muted} 70%, ${t.chromeBg})`};
     --danger: ${t.danger};
     /* 危险/成功状态色: 与 webview 侧 applyThemeVars 同源, 否则首帧危险按钮文字是白色, 切主题后才变 */
     --danger-fg: ${t.dangerFg};

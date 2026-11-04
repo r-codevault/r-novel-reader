@@ -69,6 +69,11 @@ export function applyThemeVars(s: ReadingSettings): void {
   root.style.setProperty('--border-strong', t.borderStrong);
   // 次要文字统一用实色令牌, 不再靠 opacity 叠色(透明度在不同底色上结果不可控, 也无法参与对比度校验)
   root.style.setProperty('--fg-muted', t.muted);
+  // 目录「未读」章文字: 浅色主题把次要灰再往面板底色里兑 30%, 否则羊皮纸/米白里
+  // 它与已读的正文色同属暖褐, 只差对比度, 看着仍是一片; 深色主题维持次要灰(层次已够)
+  root.style.setProperty('--cat-dim', t.isDark
+    ? t.muted
+    : `color-mix(in srgb, ${t.muted} 70%, ${t.chromeBg})`);
   root.style.setProperty('--danger', t.danger);
   // 危险底色上的文字色与成功状态色: 以前 CSS 里硬编码 #fff / #2ea043,
   // 深色主题上「删除」按钮与「已恢复」提示都读不清（R10/T05）

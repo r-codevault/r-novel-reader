@@ -330,15 +330,15 @@ check('目录卷卡片整行单列，展开只动高度，章名不带外框', f
     assert.strictEqual(baseValue('.cat-group-body', 'display'), null,
         '折叠容器不应再用 grid 行高撑开(动画改由 JS 的 px 高度驱动)');
     // 章名行: 平时 1px 透明占位(看不出边框, 也不会在 hover 时挤动文字);
-    // 悬浮 = 淡色底不描边, 描边只留给当前章（1.48.13）
+    // 悬浮 = 淡色底不描边; 当前章同样不描边（1.48.25 按要求去掉外框，只剩强调色文字 + 字重）
     assert.strictEqual(baseValue('.cat-item', 'border'), '1px solid transparent',
         '.cat-item 应留 1px 透明描边占位, 实际 ' + baseValue('.cat-item', 'border'));
     assert(/var\(--sp-hover\)/.test(baseValue('.cat-item:hover', 'background') || ''),
         '悬浮应铺淡色底 var(--sp-hover), 实际 ' + baseValue('.cat-item:hover', 'background'));
     assert.strictEqual(baseValue('.cat-item:hover', 'border-color'), null,
         '悬浮不应再描边, 实际 ' + baseValue('.cat-item:hover', 'border-color'));
-    assert(/var\(--accent\)/.test(baseValue('.cat-item.cur', 'border-color') || ''),
-        '当前章应用强调色描边, 实际 ' + baseValue('.cat-item.cur', 'border-color'));
+    assert.strictEqual(baseValue('.cat-item.cur', 'border-color'), null,
+        '当前章不应再描边, 实际 ' + baseValue('.cat-item.cur', 'border-color'));
     const curBg = rules.filter(function (r) {
         return r.selectors.some(function (s) { return /\.cat-item\.cur$/.test(s); });
     }).reduce(function (acc, r) {
