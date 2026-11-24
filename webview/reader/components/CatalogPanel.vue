@@ -4,7 +4,7 @@
  */
 import { computed, ref, watch, nextTick } from 'vue';
 import { state, gotoChapter } from '../composables/vscode';
-import { startDownload, pauseDownload, resumeDownload, cancelDownload, exportOfflineTxt } from '../composables/offline';
+import { startDownload, pauseDownload, resumeDownload, cancelDownload, exportOfflineTxt, requestOfflineStatus } from '../composables/offline';
 import { chapterParts, buildCatalogGroups, isVolumeTitle } from '../composables/catalog';
 
 interface DisplayItem {
@@ -262,7 +262,15 @@ const dlRunning = computed(function () {
   if (state.dlRun) { return state.dlRun.running; }
   return !!(state.offline && state.offline.running);
 });
-const dlPaused = computed(function () { return !!(state.dlRun && state.dlRun.paused); });
+/**
+ * 暂停态以宿主为准。
+ * `dlRun` 只在收到进度帧后才有: 重开面板 / 暂停后没有章节完成时它是空的,
+ * 以前只看 dlRun 会导致按钮永远显示「暂停」, 用户再点只是重复暂停 → 看着像"点了没反应"。
+ */
+const dlPaused = computed(function () {
+  if (state.dlRun) { return state.dlRun.paused; }
+  return !!(state.offline && state.offline.paused);
+});
 
 /** 进度条: 优先本轮范围进度, 没有则按全书已下载比例 */
 const dlPct = computed(function () {
@@ -281,6 +289,12 @@ const dlText = computed(function () {
     return (run.paused ? '已暂停 · ' : '下载中 · ') + run.done + '/' + run.total +
       (run.failed ? ' · 失败 ' + run.failed : '');
   }
+  // 任务在跑但这一轮没有进度帧(重开面板): 别显示成「尚未下载」
+  const off = state.offline;
+  if (!run && off && off.running) {
+    return (off.paused ? '已暂停 · ' : '下载中 · ') + dlDone.value + '/' + total +
+      (off.failed ? ' · 失败 ' + off.failed : '');
+  }
   if (dlDone.value > 0) {
     return '已下载 ' + dlDone.value + '/' + total + ' 章' + (dlFailed.value ? ' · 失败 ' + dlFailed.value : '');
   }
@@ -295,6 +309,9 @@ function toggleDlRow(): void {
   if (state.dlRowOpen) {
     dlStart.value = 1;
     dlEnd.value = totalChapters.value || 1;
+    // 展开下载行时对齐一次宿主状态: 下载在后台跑着/面板是重开的,
+    // 这里才能拿到真实的已下载章号和暂停态(否则会停在开面板那一刻的快照)
+    requestOfflineStatus();
   }
 }
 
@@ -420,7 +437,9 @@ watch(function () { return state.catalogOpen; }, function (open) {
         <button class="popup-btn cat-dl-mini" data-cat-dl-pause @click="togglePause">
           {{ dlPaused ? '继续' : '暂停' }}
         </button>
-        <button class="popup-btn cat-dl-mini" data-cat-dl-cancel @click="cancelDownload">取消</button>
+        <!-- 必须写成 cancelDownload(): 直接写 cancelDownload 会把 MouseEvent 当 filePath
+             传进去, postMessage 克隆事件对象会抛 DataCloneError, 点击就彻底没反应 -->
+        <button class="popup-btn cat-dl-mini" data-cat-dl-cancel @click="cancelDownload()">取消</button>
       </template>
       <button v-if="dlDone > 0 && !dlRunning" class="popup-btn cat-dl-mini"
         data-cat-dl-export title="把已下载的章节导出成一本本地 txt" @click="exportOfflineTxt">导出 txt</button>

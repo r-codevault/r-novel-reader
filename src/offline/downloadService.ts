@@ -5,6 +5,10 @@
  * - 暂停/继续/取消: 暂停立即中断在途请求, 恢复后接着跑(不重新算进度)
  * - 续传: 已下载的章直接跳过(done.log + ch-*.txt 为准), 失败章下次自动重试
  * - 单章失败不影响整体; 重试只针对可恢复错误(超时/网络/5xx)
+ * - **源级节流**: 同一书源按最小间隔串起请求, 遇 503/429 自适应放慢并整队冷却。
+ *   原因: 多数站点对「连续抓几十章」会返回 503(实测某站 0.5s/请求仍拦, 1s/请求全通),
+ *   旧实现 3 并发硬冲 + 500ms 重试 → 整本一半章节直接被判失败。
+ * - 连续多章被限流就整本停下(已下载的保留, 下次点下载自动续传), 不把 5000 章全记成失败
  * - 不调用 bookSource.recordResults: 批量下载单站失败会误判书源失效
  *
  * 刻意不 import vscode: 只依赖 OfflineStore + 注入的 fetchChapter,
@@ -22,6 +26,45 @@ export const DOWNLOAD_TIMEOUT = 20000;
 /** 首次失败后再重试 2 次 */
 export const DOWNLOAD_RETRY = 2;
 export const DOWNLOAD_RETRY_DELAY = 500;
+
+/**
+ * 源级节流参数(默认值来自实测):
+ *  - 平时不额外限速(保持历史速度), 健康站点完全无感
+ *  - 一旦被 503/429 拦下: 间隔立刻拉到 1s, 并让整个书源冷却 4s
+ *  - 之后每连续成功 20 章把间隔收窄 30%, 但**不低于 1s**(不再退回猛冲)
+ *
+ * 实测数据(某采集站, 3000 字/章): 3 并发猛冲 → 连抓 12 章后全量 503;
+ * 0.5s/请求仍拦; 1s/请求 30/30 全通。旧实现 3 并发 + 500ms 重试 2 次
+ * 只能拿到 55% 的章节, 剩下全被判失败 —— 这就是"整本下载成片失败"的根因。
+ */
+export const DOWNLOAD_BASE_INTERVAL = 0;
+export const DOWNLOAD_MIN_INTERVAL = 1000;
+export const DOWNLOAD_MAX_INTERVAL = 3000;
+export const DOWNLOAD_COOLDOWN = 4000;
+/** 被限流时额外重试次数(比普通重试多: 限流是"等一下就好", 不是错误) */
+export const DOWNLOAD_RATE_RETRY = 6;
+/** 连续这么多章都拿不到(限流重试也没用)就整本停下 */
+export const DOWNLOAD_RATE_GIVE_UP = 3;
+
+export interface PacingConfig {
+    baseInterval: number;
+    minInterval: number;
+    maxInterval: number;
+    cooldownMs: number;
+    /** 限流专属重试次数 */
+    rateRetry: number;
+    /** 连续几章限流失败后整本早停 */
+    rateGiveUp: number;
+}
+
+export const DEFAULT_PACING: PacingConfig = {
+    baseInterval: DOWNLOAD_BASE_INTERVAL,
+    minInterval: DOWNLOAD_MIN_INTERVAL,
+    maxInterval: DOWNLOAD_MAX_INTERVAL,
+    cooldownMs: DOWNLOAD_COOLDOWN,
+    rateRetry: DOWNLOAD_RATE_RETRY,
+    rateGiveUp: DOWNLOAD_RATE_GIVE_UP,
+};
 
 export interface DownloadTask {
     key: string;
@@ -61,6 +104,11 @@ export interface DownloadResult {
     added: number[];
     failures: DownloadFailure[];
     durationMs: number;
+    /**
+     * 非用户取消、也非单章失败造成的提前结束原因(目前只有"站点持续限流")。
+     * 前端要把它原样展示给用户, 而不是说"N 章失败"。
+     */
+    abortedReason?: string;
 }
 
 export interface DownloadDeps {
@@ -71,6 +119,8 @@ export interface DownloadDeps {
     retry?: number;
     retryDelayMs?: number;
     timeoutMs?: number;
+    /** 源级节流参数(单测里可调小, 免得等真时间) */
+    pacing?: Partial<PacingConfig>;
 }
 
 export interface DownloadHooks {
@@ -141,9 +191,89 @@ function isRetryable(err: unknown): boolean {
     return false;
 }
 
+/**
+ * 「站点忙/限流」不算错误: 429 是明说, 503 是绝大多数采集站反爬的通用响应
+ * (实测某站连续抓 12 章后开始 503, 停 5 秒即恢复)。这类要慢下来重试, 不能记失败。
+ */
+function isRateLimited(err: unknown): boolean {
+    return err instanceof HttpError
+        && err.kind === 'http'
+        && (err.status === 429 || err.status === 503);
+}
+
 function shortMessage(err: unknown): string {
     const raw = err instanceof Error ? err.message : String(err);
     return raw.length > 160 ? raw.slice(0, 157) + '...' : raw;
+}
+
+/** 节流等待期间被暂停/取消打断时抛它, 由调用方按"未完成"处理(不算失败) */
+class InterruptedError extends Error {
+    constructor(public readonly reason: 'paused' | 'cancelled') {
+        super(reason === 'paused' ? '已暂停' : '已取消');
+        this.name = 'InterruptedError';
+    }
+}
+
+/**
+ * 单书源请求节流器。
+ *
+ * 目标不是"平均限速", 而是**先试着跑, 被拦了才退让**:
+ * 健康站点按 base 间隔连续抓(几乎无感), 一旦收到 503/429 就
+ * 翻倍间隔 + 全源冷却, 让所有 worker 一起等一下, 而不是各自猛撞。
+ */
+export class SourcePacer {
+    private interval: number;
+    private nextAt = 0;
+    private blockedUntil = 0;
+    private streak = 0;
+
+    constructor(private readonly cfg: PacingConfig) {
+        this.interval = Math.max(0, cfg.baseInterval);
+    }
+
+    /** 当前请求间隔(ms), 供日志/测试断言 */
+    public get currentInterval(): number { return this.interval; }
+
+    /** 还要冷却多久(ms) */
+    public get cooldownLeft(): number {
+        return Math.max(0, this.blockedUntil - Date.now());
+    }
+
+    /**
+     * 等到可以发下一个请求。
+     * 等待期间若被暂停/取消立刻抛 InterruptedError —— 不能让人点了暂停还卡 20 秒。
+     */
+    public async gate(control: DownloadControl): Promise<void> {
+        for (;;) {
+            if (control.cancelled) { throw new InterruptedError('cancelled'); }
+            if (control.paused) { throw new InterruptedError('paused'); }
+            const now = Date.now();
+            const at = Math.max(now, this.nextAt, this.blockedUntil);
+            if (at <= now) {
+                this.nextAt = now + this.interval;
+                return;
+            }
+            // 切片等: 保证暂停/取消在 200ms 内响应
+            await sleep(Math.min(at - now, 200));
+        }
+    }
+
+    /** 成功一章: 长期没被拦就把间隔慢慢收回来 */
+    public reward(): void {
+        if (this.interval <= this.cfg.minInterval) { return; }
+        this.streak += 1;
+        if (this.streak < 20) { return; }
+        this.streak = 0;
+        this.interval = Math.max(this.cfg.minInterval, Math.round(this.interval * 0.7));
+    }
+
+    /** 被限流: 间隔翻倍 + 全源冷却 */
+    public penalize(): void {
+        this.streak = 0;
+        const next = this.interval > 0 ? this.interval * 2 : this.cfg.minInterval;
+        this.interval = Math.min(this.cfg.maxInterval, Math.max(this.cfg.minInterval, next));
+        this.blockedUntil = Date.now() + this.cfg.cooldownMs;
+    }
 }
 
 interface RunningEntry {
@@ -156,8 +286,25 @@ interface RunningEntry {
 
 export class DownloadService {
     private readonly running = new Map<string, RunningEntry>();
+    /** 按书源复用节流器: 同一站点的多本书共享学习到的限速(重装/重启即重置) */
+    private readonly pacers = new Map<string, SourcePacer>();
 
     constructor(private readonly deps: DownloadDeps) {}
+
+    private pacerFor(sourceId: string): SourcePacer {
+        let pacer = this.pacers.get(sourceId);
+        if (!pacer) {
+            const cfg: PacingConfig = { ...DEFAULT_PACING, ...(this.deps.pacing || {}) };
+            pacer = new SourcePacer(cfg);
+            this.pacers.set(sourceId, pacer);
+        }
+        return pacer;
+    }
+
+    /** 当前某书源的请求间隔(测试/诊断用) */
+    public intervalOf(sourceId: string): number | undefined {
+        return this.pacers.get(sourceId)?.currentInterval;
+    }
 
     public isRunning(key: string): boolean {
         return this.running.has(key);
@@ -267,6 +414,8 @@ export class DownloadService {
         const retry = Math.max(0, this.deps.retry ?? DOWNLOAD_RETRY);
         const retryDelay = Math.max(0, this.deps.retryDelayMs ?? DOWNLOAD_RETRY_DELAY);
         const timeoutMs = Math.max(1000, this.deps.timeoutMs ?? DOWNLOAD_TIMEOUT);
+        const pacing: PacingConfig = { ...DEFAULT_PACING, ...(this.deps.pacing || {}) };
+        const pacer = this.pacerFor(task.ref.sourceId);
         const startedAt = Date.now();
 
         // 目录快照先落盘: 之后即使书源没了也能导出/阅读
@@ -310,16 +459,22 @@ export class DownloadService {
         const emit = (index: number, title: string, justAdded = false): void => {
             status.done = doneCount;
             status.failed = failedCount;
-            hooks.onProgress?.({
-                key: task.key, index, title,
-                done: doneCount, total, failed: failedCount,
-                added: justAdded ? [index] : [],
-            });
+            // 进度回调是"宿主 -> webview"的旁路: 面板已关闭时 postMessage 会抛,
+            // 绝不能让它污染下载统计(否则这几章会被算成失败)
+            try {
+                hooks.onProgress?.({
+                    key: task.key, index, title,
+                    done: doneCount, total, failed: failedCount,
+                    added: justAdded ? [index] : [],
+                });
+            } catch { /* 回调异常不影响下载 */ }
         };
 
-        const attemptOnce = async (chapter: OnlineChapter, signal: AbortSignal): Promise<string[]> => {
+        // 暂停即时生效: 在途请求也要被打断(否则点了暂停还要干等 20s 超时),
+        // 被打断的章由 processOne 放回队首, 恢复后重抓, 不计失败。
+        const attemptOnce = async (chapter: OnlineChapter): Promise<string[]> => {
             const perAttempt = new AbortController();
-            const link = combineSignals([signal, perAttempt.signal]);
+            const link = combineSignals([control.signal, control.pauseSignal, perAttempt.signal]);
             let timedOut = false;
             const timer = setTimeout(() => { timedOut = true; try { perAttempt.abort(); } catch { /* 已中断 */ } }, timeoutMs);
             try {
@@ -333,13 +488,28 @@ export class DownloadService {
             }
         };
 
+        /**
+         * 取一章正文(带节流 + 两类重试):
+         *  - 限流(503/429): 让书源整体放慢/冷却后重试, 预算比普通错误大得多
+         *  - 普通可恢复错误(超时/网络/其它 5xx): 最多 retry 次, 间隔递增
+         */
         const fetchWithRetry = async (chapter: OnlineChapter): Promise<string[]> => {
             let attempt = 0;
+            let rateAttempt = 0;
             for (;;) {
+                await pacer.gate(control);
                 try {
-                    return await attemptOnce(chapter, control.signal);
+                    const out = await attemptOnce(chapter);
+                    pacer.reward();
+                    return out;
                 } catch (err) {
                     if (control.cancelled || control.paused) { throw err; }
+                    if (isRateLimited(err)) {
+                        pacer.penalize();
+                        rateAttempt += 1;
+                        if (rateAttempt > pacing.rateRetry) { throw err; }
+                        continue;   // 冷却由 pacer.blockedUntil 承担, 回到 gate 等
+                    }
                     if (attempt >= retry || !isRetryable(err)) { throw err; }
                     attempt += 1;
                     await sleep(retryDelay * attempt);
@@ -347,6 +517,10 @@ export class DownloadService {
                 }
             }
         };
+
+        let rateFailStreak = 0;
+        let stopped = false;
+        let abortedReason = '';
 
         const processOne = async (index: number): Promise<boolean> => {
             const chapter = task.chapters[index];
@@ -357,9 +531,15 @@ export class DownloadService {
                 await store.markDone(task.key, index, bytes);
                 doneCount += 1;
                 added.push(index);
+                rateFailStreak = 0;
                 emit(index, chapter.title, true);
                 return true;
             } catch (err) {
+                if (err instanceof InterruptedError) {
+                    if (err.reason === 'cancelled') { return false; }
+                    pending.unshift(index);
+                    return false;
+                }
                 if (control.cancelled) { return false; }
                 if (control.paused) {
                     // 暂停打断的章不算失败: 放回队首, 恢复后重跑
@@ -368,6 +548,16 @@ export class DownloadService {
                 }
                 failedCount += 1;
                 failures.set(index, shortMessage(err));
+                // 连着几章都是"限流重试也拿不到" → 站点在硬拦, 整本停下比硬冲更明智
+                if (isRateLimited(err)) {
+                    rateFailStreak += 1;
+                    if (rateFailStreak >= pacing.rateGiveUp) {
+                        stopped = true;
+                        abortedReason = '站点持续限流（HTTP 503/429），已停止下载。已下载的章节会保留，稍后再点「下载」会从断点继续。';
+                    }
+                } else {
+                    rateFailStreak = 0;
+                }
                 emit(index, chapter.title);
                 return true;
             }
@@ -375,7 +565,7 @@ export class DownloadService {
 
         const worker = async (): Promise<void> => {
             for (;;) {
-                if (control.cancelled || control.paused) { return; }
+                if (control.cancelled || control.paused || stopped) { return; }
                 const index = pending.shift();
                 if (index === undefined) { return; }
                 const keepGoing = await processOne(index);
@@ -395,7 +585,7 @@ export class DownloadService {
         let spin = 0;
         for (;;) {
             await drain();
-            if (control.cancelled || pending.length === 0) { break; }
+            if (control.cancelled || stopped || pending.length === 0) { break; }
             if (!control.paused) {
                 spin += 1;
                 if (spin > 50) { break; }
@@ -411,7 +601,7 @@ export class DownloadService {
 
         const result: DownloadResult = {
             key: task.key,
-            ok: !control.cancelled && failedCount === 0,
+            ok: !control.cancelled && !abortedReason && failedCount === 0,
             cancelled: control.cancelled,
             done: doneCount,
             total,
@@ -423,6 +613,7 @@ export class DownloadService {
                 message,
             })).sort((a, b) => a.index - b.index),
             durationMs: Date.now() - startedAt,
+            abortedReason: abortedReason || undefined,
         };
         status.running = false;
         status.paused = false;

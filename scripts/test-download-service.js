@@ -292,6 +292,93 @@ function taskOf(env, chapters, range) {
     assert.ok(doneResult && doneResult.done === 3, 'onDone 应拿到完整结果');
   }
 
+  // ---------------------------------------------------------------- 9) 503 限流 → 学慢后仍要下全
+  //
+  // 实测站点: 连抓 12 章后全量 503, 1s/请求才通。旧实现把 503 当普通 5xx
+  // (只重试 2 次、间隔 500ms), 整本书一半章节直接被判失败。
+  {
+    const env = makeEnv();
+    const chapters = makeChapters(8);
+    const attempts = {};
+    const service = new DownloadService({
+      store: env.store,
+      timeoutMs: 5000,
+      retry: 0,                 // 普通重试预算给 0: 限流必须走自己的预算
+      retryDelayMs: 5,
+      pacing: { baseInterval: 0, minInterval: 10, maxInterval: 40, cooldownMs: 5, rateRetry: 4 },
+      fetchChapter: async (chapter, ref, signal) => {
+        attempts[chapter.index] = (attempts[chapter.index] || 0) + 1;
+        await delay(1, signal);
+        if (attempts[chapter.index] <= 2) { throw new HttpError('http', 'HTTP 503', 503); }
+        return ['r' + chapter.index];
+      },
+    });
+    const result = await service.start(taskOf(env, chapters, { start: 0, end: 7 })).done;
+    assert.strictEqual(result.failed, 0, '503 应走限流重试并最终全部成功, 实际失败 ' + result.failed);
+    assert.strictEqual(result.done, 8, '应下全 8 章, 实际 ' + result.done);
+    assert.ok(service.intervalOf(env.ref.sourceId) > 0, '被限流后应学到节流间隔');
+  }
+
+  // ---------------------------------------------------------------- 10) 持续 503 → 整本早停(不刷成 5000 章失败)
+  {
+    const env = makeEnv();
+    const chapters = makeChapters(30);
+    let calls = 0;
+    const service = new DownloadService({
+      store: env.store,
+      concurrency: 1,
+      retry: 0,
+      pacing: { baseInterval: 0, minInterval: 5, maxInterval: 10, cooldownMs: 1, rateRetry: 2, rateGiveUp: 2 },
+      fetchChapter: async () => { calls += 1; throw new HttpError('http', 'HTTP 503', 503); },
+    });
+    const result = await service.start(taskOf(env, chapters, { start: 0, end: 29 })).done;
+    assert.ok(result.abortedReason, '持续限流应带提前结束原因');
+    assert.strictEqual(result.cancelled, false, '早停不是"用户取消"');
+    assert.strictEqual(result.ok, false);
+    assert.strictEqual(result.failed, 2, '只应记触发早停的那 2 章, 实际 ' + result.failed);
+    assert.strictEqual(calls, 6, '每章 1+2 次尝试后就该停, 实际请求 ' + calls);
+    assert.strictEqual(result.done, 0);
+    const m = await env.store.readManifest(env.key);
+    assert.ok(m && m.failed && Object.keys(m.failed).length === 2, '失败章应落盘供续传');
+  }
+
+  // ---------------------------------------------------------------- 11) 暂停立即中断在途请求
+  //
+  // 不能让人点了暂停还干等 20s 超时; 被中断的章放回队首, 恢复后重抓且不算失败。
+  {
+    const env = makeEnv();
+    const chapters = makeChapters(12);
+    const started = [];
+    let aborted = 0;
+    const service = new DownloadService({
+      store: env.store,
+      retry: 0,
+      fetchChapter: (chapter, ref, signal) => new Promise((resolve, reject) => {
+        started.push(chapter.index);
+        const timer = setTimeout(() => resolve(['s' + chapter.index]), 200);
+        if (signal) {
+          signal.addEventListener('abort', () => {
+            clearTimeout(timer);
+            aborted += 1;
+            reject(abortErr());
+          }, { once: true });
+        }
+      }),
+    });
+    const run = service.start(taskOf(env, chapters, { start: 0, end: 11 }));
+    // 起来要先写 manifest / 读 done.log, 别用固定 sleep 赌时序
+    for (let i = 0; i < 50 && started.length === 0; i++) { await delay(10); }
+    assert.ok(started.length > 0, '应已开始请求');
+    service.pause(env.key);
+    await delay(60);
+    assert.ok(aborted > 0, '暂停应立即中断在途请求, 实际中断 ' + aborted);
+    assert.strictEqual(service.statusOf(env.key).paused, true);
+    service.resume(env.key);
+    const result = await run.done;
+    assert.strictEqual(result.failed, 0, '暂停打断的章不应记失败, 实际 ' + result.failed);
+    assert.strictEqual(result.done, 12, '恢复后应补齐, 实际 ' + result.done);
+  }
+
   fs.rmSync(ROOT, { recursive: true, force: true });
   console.log('离线下载队列(并发/重试/续传/暂停/取消)测试全部通过 ✔');
 })().catch((err) => {

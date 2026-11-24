@@ -228,6 +228,17 @@ export interface OfflineApi {
     clearAll(): Promise<void>;
     /** 全部下载任务快照(webview 任务表; 与"当前书"无关) */
     tasks(): DownloadTaskView[];
+    /**
+     * 重新扫一遍离线目录(下载进行中重开面板时, 「已下载 N 章」才不会停在 0)。
+     * 只在有任务运行时由面板调用, 避免每次开目录都扫盘。
+     */
+    refreshIndex?(): Promise<void>;
+    /**
+     * 把运行中任务的当前状态(含 paused)立刻推给 webview。
+     * 暂停/继续时必须推 —— 否则没有章节完成就没有进度事件,
+     * 按钮会永远停在「暂停」, 用户以为点了没反应。
+     */
+    syncStatus?(): void;
 }
 
 /** 左抽屉页签 */
@@ -910,11 +921,25 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
                 this._retryChapter(msg.index);
                 break;
             // ---- 离线下载 / 缓存: 具体编排在插件入口, 这里只转发 ----
-            case 'offlineStatus':
-                this.postOfflineStatus(ReaderPanel.offlineView?.(this._novel.filePath));
-                this.postOfflineStats(ReaderPanel.offline?.stats() ?? { bytes: 0, books: 0 });
-                this.postDownloadTasks();
+            case 'offlineStatus': {
+                // 下载进行中重开面板: 先扫一遍离线目录, 否则「已下载」会停在 0
+                const key = this._novel.filePath;
+                const api = ReaderPanel.offline;
+                const running = (api?.tasks() || []).some((t) => t.running && t.filePath === key);
+                const finish = (): void => {
+                    this.postOfflineStatus(ReaderPanel.offlineView?.(key));
+                    this.postOfflineStats(api?.stats() ?? { bytes: 0, books: 0 });
+                    this.postDownloadTasks();
+                    // 运行中也要把 paused/本轮进度回填: 网页重开后按钮才不会是"假暂停"
+                    api?.syncStatus?.();
+                };
+                if (running && api?.refreshIndex) {
+                    void Promise.resolve(api.refreshIndex()).then(finish, finish);
+                } else {
+                    finish();
+                }
                 break;
+            }
             case 'downloadStart': {
                 // 下载目标由消息显式给出(缺省 = 当前书), 不依赖"此刻谁是当前书"
                 const key = msg.filePath || this._novel.filePath;
@@ -1487,7 +1512,7 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
     /** 推送下载结束(成功/取消/有失败) */
     public postDownloadDone(r: {
         ok: boolean; cancelled: boolean; done: number; total: number; failed: number;
-        message?: string; filePath?: string;
+        message?: string; filePath?: string; abortedReason?: string;
     }): void {
         if (!this._ready) { return; }
         const payload: DownloadDonePayload = {
@@ -1497,6 +1522,7 @@ static showChapter(index: number, dir: 'next' | 'prev' | 'jump' = 'jump'): void 
             total: r.total,
             failed: r.failed,
             message: r.message,
+            abortedReason: r.abortedReason,
             filePath: r.filePath || this._novel.filePath,
         };
         void this._panel.webview.postMessage({ type: 'downloadDone', payload });

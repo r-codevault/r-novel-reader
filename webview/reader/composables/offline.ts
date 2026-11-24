@@ -9,21 +9,31 @@
  */
 import { currentBookKey, markOpPending, newOpId, send } from './vscode';
 
+/**
+ * 解析目标书 key。
+ * 只有字符串才认 —— `@click="cancelDownload"` 会把 MouseEvent 当第一个参数传进来,
+ * 直接塞进 postMessage 会抛 DataCloneError(点击彻底没反应), 这里做一道兜底。
+ */
+function targetKey(filePath?: string): string | undefined {
+  if (typeof filePath === 'string' && filePath) { return filePath; }
+  return currentBookKey() || undefined;
+}
+
 /** 开始下载; 不传范围 = 整本。start/end 为 0 基, 含端点 */
 export function startDownload(start?: number, end?: number, filePath?: string): void {
-  send({ type: 'downloadStart', start, end, filePath: filePath || currentBookKey() });
+  send({ type: 'downloadStart', start, end, filePath: targetKey(filePath) });
 }
 
 export function pauseDownload(filePath?: string): void {
-  send({ type: 'downloadPause', filePath: filePath || currentBookKey() });
+  send({ type: 'downloadPause', filePath: targetKey(filePath) });
 }
 
 export function resumeDownload(filePath?: string): void {
-  send({ type: 'downloadResume', filePath: filePath || currentBookKey() });
+  send({ type: 'downloadResume', filePath: targetKey(filePath) });
 }
 
 export function cancelDownload(filePath?: string): void {
-  send({ type: 'downloadCancel', filePath: filePath || currentBookKey() });
+  send({ type: 'downloadCancel', filePath: targetKey(filePath) });
 }
 
 export function requestOfflineStatus(): void {

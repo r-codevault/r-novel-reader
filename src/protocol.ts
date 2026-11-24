@@ -101,6 +101,11 @@ export interface DownloadDonePayload extends Owned {
     total: number;
     failed: number;
     message?: string;
+    /**
+     * 非取消、非单章失败的提前结束原因（目前只有"站点持续限流"）。
+     * webview 要原样展示它，而不是笼统说"N 章失败"。
+     */
+    abortedReason?: string;
 }
 
 /** 宿主 -> webview 的下载任务表全量快照 */

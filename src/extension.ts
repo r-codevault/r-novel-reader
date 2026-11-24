@@ -535,13 +535,21 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
         }
         ReaderPanel.current?.postDownloadDone({
-            ok: r.failed === 0,
+            ok: r.ok,
             cancelled: false,
             done: r.done,
             total: r.total,
             failed: r.failed,
             filePath: r.key,
+            abortedReason: r.abortedReason,
         });
+        if (r.abortedReason) {
+            // 站点把整本拦下了: 说清原因 + 已经下到的部分不会白下
+            void vscode.window.showWarningMessage(
+                `「${label}」已下载 ${r.done}/${r.total} 章，${r.abortedReason}`
+            );
+            return;
+        }
         if (r.failed === 0) {
             void vscode.window.showInformationMessage(
                 `「${label}」离线下载完成：${r.done}/${r.total} 章`
@@ -551,6 +559,21 @@ export function activate(context: vscode.ExtensionContext): void {
                 `「${label}」已下载 ${r.done}/${r.total} 章，${r.failed} 章失败（再次下载会自动重试）`
             );
         }
+    }
+
+    /** 立刻把某个下载任务的当前状态推给 webview(暂停/继续、重开面板时用) */
+    function pushDownloadStatus(key: string): void {
+        const status = downloadService.statusOf(key);
+        if (!status) { return; }
+        ReaderPanel.current?.postDownloadProgress({
+            done: status.done,
+            total: status.total,
+            failed: status.failed,
+            running: status.running,
+            paused: status.paused,
+            filePath: key,
+            bookTitle: shelf.get(key)?.title || '',
+        });
     }
 
     function currentOfflineKey(): string | undefined {
@@ -622,7 +645,7 @@ export function activate(context: vscode.ExtensionContext): void {
         pendingProgress = null;
         if (progressTimer) { clearTimeout(progressTimer); progressTimer = null; }
 
-        downloadService.start(
+        const run = downloadService.start(
             {
                 key,
                 ref: { ...ref, tocUrl, tocFetchedAt: saved?.tocFetchedAt || Date.now() },
@@ -636,6 +659,17 @@ export function activate(context: vscode.ExtensionContext): void {
                 onDone: (r) => { void finishDownload(r); },
             }
         );
+        // _run 意外抛错(写盘失败/目录被删等): 必须让前端收敛。
+        // 不接这个 catch 的话 running 表已清空、而 webview 还停在「下载中」——
+        // 之后点暂停/取消全是空动作, 就是不折不扣的"点了没反应"。
+        void run.done.catch((err: unknown) => {
+            const message = err instanceof Error ? err.message : String(err);
+            ReaderPanel.current?.postDownloadTasks();
+            ReaderPanel.current?.postDownloadDone({
+                ok: false, cancelled: false, done: 0, total: 0, failed: 0,
+                message: '下载中断：' + message, filePath: key,
+            });
+        });
 
         // 立刻回一帧"已开始", 让按钮马上变成「暂停」
         ReaderPanel.current?.postDownloadProgress({
@@ -1377,11 +1411,19 @@ function openEmptyReader(tab?: DrawerTab): void {
         // 三个控制动作都按显式 key: 用户可以在 B 书的页面上暂停 A 的下载
         pause: (key) => {
             const k = key || currentOfflineKey();
-            return k ? downloadService.pause(k) : false;
+            if (!k) { return false; }
+            const ok = downloadService.pause(k);
+            // 必须立刻回一帧状态: 暂停后不会再有章节完成 → 没有进度事件 →
+            // webview 的按钮会永远停在「暂停」, 用户再点只是重复暂停(看起来"没反应")
+            if (ok) { pushDownloadStatus(k); }
+            return ok;
         },
         resume: (key) => {
             const k = key || currentOfflineKey();
-            return k ? downloadService.resume(k) : false;
+            if (!k) { return false; }
+            const ok = downloadService.resume(k);
+            if (ok) { pushDownloadStatus(k); }
+            return ok;
         },
         cancel: (key) => {
             const k = key || currentOfflineKey();
@@ -1416,6 +1458,13 @@ function openEmptyReader(tab?: DrawerTab): void {
             pushOfflineStatus();
         },
         tasks: () => buildDownloadTasks(),
+        refreshIndex: async () => {
+            await refreshOfflineIndex();
+            refreshShelfView();
+        },
+        syncStatus: () => {
+            for (const t of downloadService.snapshot()) { pushDownloadStatus(t.key); }
+        },
     };
 
     // 面板关闭时停掉批量检查, 避免后台挂着

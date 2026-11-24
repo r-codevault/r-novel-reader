@@ -661,7 +661,7 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
     case 'downloadDone': {
       const p = msg.payload as {
         ok?: boolean; cancelled?: boolean; done?: number; total?: number; failed?: number;
-        message?: string; filePath?: string;
+        message?: string; filePath?: string; abortedReason?: string;
       };
       const fp = p.filePath || currentBookKey();
       upsertTask(fp, { done: p.done, total: p.total, failed: p.failed, running: false, paused: false });
@@ -670,11 +670,14 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
         state.offline = { ...state.offline, running: false, paused: false };
       }
       if (state.dlRun) { state.dlRun = { ...state.dlRun, running: false, paused: false }; }
+      // 提前结束(站点限流)优先展示原因: 这时 failed 也可能 >0, 但用户要看的是"为什么停了"
       state.dlNotice = p.cancelled
         ? '已取消下载'
-        : p.failed
-          ? '下载结束，' + p.failed + ' 章失败（再次下载会自动重试）'
-          : p.message || '下载完成';
+        : p.abortedReason
+          ? p.abortedReason
+          : p.failed
+            ? '下载结束，' + p.failed + ' 章失败（再次下载会自动重试）'
+            : p.message || '下载完成';
       break;
     }
     case 'offlineExported': {
