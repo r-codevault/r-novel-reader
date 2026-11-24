@@ -223,16 +223,25 @@ class InterruptedError extends Error {
  */
 export class SourcePacer {
     private interval: number;
+    /** 可持续间隔下限: 被反复拦会往上抬, 长时间干净再慢慢降回来 */
+    private floor: number;
     private nextAt = 0;
     private blockedUntil = 0;
+    /** 连续成功章数 */
     private streak = 0;
+    /** "冷却结束后又被拦"的次数(用来判断 minInterval 是不是还不够慢) */
+    private incidents = 0;
 
     constructor(private readonly cfg: PacingConfig) {
         this.interval = Math.max(0, cfg.baseInterval);
+        this.floor = cfg.minInterval;
     }
 
     /** 当前请求间隔(ms), 供日志/测试断言 */
     public get currentInterval(): number { return this.interval; }
+
+    /** 当前学到的可持续下限(诊断用) */
+    public get currentFloor(): number { return this.floor; }
 
     /** 还要冷却多久(ms) */
     public get cooldownLeft(): number {
@@ -258,21 +267,37 @@ export class SourcePacer {
         }
     }
 
-    /** 成功一章: 长期没被拦就把间隔慢慢收回来 */
+    /** 成功一章: 持续干净就先把间隔收回来, 再慢慢把下限也降回去 */
     public reward(): void {
-        if (this.interval <= this.cfg.minInterval) { return; }
         this.streak += 1;
-        if (this.streak < 20) { return; }
-        this.streak = 0;
-        this.interval = Math.max(this.cfg.minInterval, Math.round(this.interval * 0.7));
+        // 收敛要快: 被拦一次会翻倍到 2s/4s, 不能靠"每 20 章降 30%"慢慢熬回来
+        if (this.streak % 8 === 0 && this.interval > this.floor) {
+            this.interval = Math.max(this.floor, Math.round(this.interval * 0.75));
+        }
+        // 跑了好一阵都没被拦 → 说明之前的"下限"过于保守, 每次只退 100ms
+        if (this.streak % 40 === 0) {
+            this.incidents = 0;
+            this.floor = Math.max(this.cfg.minInterval, this.floor - 100);
+        }
     }
 
-    /** 被限流: 间隔翻倍 + 全源冷却 */
+    /** 被限流: 间隔翻倍 + 全源冷却(同一次拦截只翻一次倍) */
     public penalize(): void {
+        const now = Date.now();
+        // 3 个 worker 会在同一瞬间各收到一个 503; 那是**一次**拦截, 不能连翻三倍。
+        // 冷却期内的后续 503 一律忽略, 冷却结束后再被拦才算新的一次。
+        if (now < this.blockedUntil) { return; }
         this.streak = 0;
-        const next = this.interval > 0 ? this.interval * 2 : this.cfg.minInterval;
-        this.interval = Math.min(this.cfg.maxInterval, Math.max(this.cfg.minInterval, next));
-        this.blockedUntil = Date.now() + this.cfg.cooldownMs;
+        this.incidents += 1;
+        // 冷却之后还被拦 = 这个速率站方不接受, 把"下限"也抬上去,
+        // 否则会一直在 1s ←→ 2s 之间来回抖(每次都白吃 4s 冷却)
+        if (this.incidents >= 3) {
+            this.incidents = 0;
+            this.floor = Math.min(this.cfg.maxInterval, this.floor + 250);
+        }
+        const next = this.interval > 0 ? this.interval * 2 : this.floor;
+        this.interval = Math.min(this.cfg.maxInterval, Math.max(this.floor, next));
+        this.blockedUntil = now + this.cfg.cooldownMs;
     }
 }
 

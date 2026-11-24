@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { OfflineStore } = require('../dist/offline/offlineStore');
-const { DownloadService, DOWNLOAD_CONCURRENCY } = require('../dist/offline/downloadService');
+const { DownloadService, DOWNLOAD_CONCURRENCY, SourcePacer } = require('../dist/offline/downloadService');
 const { HttpError } = require('../dist/http');
 const { onlineKey } = require('../dist/onlinePath');
 
@@ -379,8 +379,31 @@ function taskOf(env, chapters, range) {
     assert.strictEqual(result.done, 12, '恢复后应补齐, 实际 ' + result.done);
   }
 
+  // ---------------------------------------------------------------- 12) 节流器: 同一次拦截不连翻倍 + 反复被拦抬下限
+  {
+    const pacer = new SourcePacer({
+      baseInterval: 0, minInterval: 100, maxInterval: 400,
+      cooldownMs: 1, rateRetry: 3, rateGiveUp: 3,
+    });
+    assert.strictEqual(pacer.currentFloor, 100, '下限初值应等于 minInterval');
+    pacer.penalize();
+    assert.strictEqual(pacer.currentInterval, 100, '首次被拦应落到下限');
+    pacer.penalize();
+    assert.strictEqual(pacer.currentInterval, 100, '冷却期内的 503 属同一次拦截, 不应连翻倍');
+    await delay(10);
+    pacer.penalize();
+    assert.ok(pacer.currentInterval >= 200, '独立拦截应翻倍, 实际 ' + pacer.currentInterval);
+    await delay(10); pacer.penalize();
+    await delay(10); pacer.penalize();
+    assert.ok(pacer.currentFloor > 100, '反复被拦应抬可持续下限, 实际 ' + pacer.currentFloor);
+    const before = pacer.currentInterval;
+    for (let i = 0; i < 8; i++) { pacer.reward(); }
+    assert.ok(pacer.currentInterval < before, '连续成功后应逐步提速, 实际 ' + pacer.currentInterval);
+    assert.ok(pacer.currentInterval >= pacer.currentFloor, '提速不得低于学到的下限');
+  }
+
   fs.rmSync(ROOT, { recursive: true, force: true });
-  console.log('离线下载队列(并发/重试/续传/暂停/取消)测试全部通过 ✔');
+  console.log('离线下载队列(并发/重试/续传/暂停/取消/限流)测试全部通过 ✔');
 })().catch((err) => {
   console.error(err);
   process.exit(1);

@@ -196,9 +196,36 @@ function replaceTasks(tasks: DownloadTaskView[]): void {
   state.downloadTasks = next;
 }
 
+/**
+ * 下载速率采样（只用于展示「约剩多久」）。
+ *
+ * 站点限流后整本下载可能要跑一两个小时，光有 "39/5000" 会让人以为卡住了。
+ * 这里按最近 ~60s 的进度帧估速率；样本不足 3 秒就直接放弃（返回 null），
+ * 免得刚起步的抖动算出 "剩 3 分钟" 这种假数字。
+ */
+const dlSamples: { t: number; done: number }[] = [];
+
+function resetDlSamples(): void {
+  dlSamples.length = 0;
+  state.dlRate = null;
+}
+
+function noteDlProgress(done: number, total: number): void {
+  const now = Date.now();
+  const last = dlSamples[dlSamples.length - 1];
+  if (!last || last.done !== done) { dlSamples.push({ t: now, done }); }
+  while (dlSamples.length > 2 && now - dlSamples[0].t > 60000) { dlSamples.shift(); }
+  const first = dlSamples[0];
+  if (!first || dlSamples.length < 2) { state.dlRate = null; return; }
+  const spanMs = dlSamples[dlSamples.length - 1].t - first.t;
+  const gained = done - first.done;
+  if (spanMs < 3000 || gained <= 0) { state.dlRate = null; return; }
+  const perMin = gained / (spanMs / 60000);
+  state.dlRate = { perMin, etaMin: Math.max(0, (total - done) / perMin) };
+}
+
 /** 归属 + 轮次校验后的章节回包是否可应用 */
-function acceptChapter(msg: { filePath?: string; reqId?: number }, tag: string): boolean {
-  if (!ownedBy(msg, tag)) { return false; }
+function acceptChapter(msg: { filePath?: string; reqId?: number }, tag: string): boolean {  if (!ownedBy(msg, tag)) { return false; }
   if (typeof msg.reqId === 'number') {
     // 回退的 reqId = 上一轮(或上一本书)的迟到回包
     if (msg.reqId < state.chapterReqSeq) {
@@ -339,6 +366,7 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       state.dlRowOpen = false;
       state.dlRun = null;
       state.dlNotice = '';
+      resetDlSamples();
       // 换书先清空目录标记, 等 chapterMarks 异步补上(避免短暂显示上一本的标记)
       state.marks = {
         cached: [],
@@ -634,6 +662,7 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
       // 本轮进度单独放 dlRun: offline.total 是全书章数, 二者不能混用
       // (区间下载时范围大小 != 全书章数)
       state.dlRun = { done: p.done, total: p.total, failed: p.failed, running: p.running, paused: p.paused };
+      noteDlProgress(p.done, p.total);
       const base: OfflineStatusView = state.offline || {
         filePath: state.novel?.filePath || '',
         total: state.chapters.length,
@@ -670,6 +699,7 @@ function handleExtensionMessage(msg: { type?: string; payload?: Record<string, u
         state.offline = { ...state.offline, running: false, paused: false };
       }
       if (state.dlRun) { state.dlRun = { ...state.dlRun, running: false, paused: false }; }
+      resetDlSamples();
       // 提前结束(站点限流)优先展示原因: 这时 failed 也可能 >0, 但用户要看的是"为什么停了"
       state.dlNotice = p.cancelled
         ? '已取消下载'

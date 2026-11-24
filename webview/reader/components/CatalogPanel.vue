@@ -282,18 +282,33 @@ const dlPct = computed(function () {
   return total > 0 ? Math.min(100, Math.round((dlDone.value / total) * 100)) : 0;
 });
 
+/** 预计剩余时间(只在下真正跑着、且样本够时才有值; 限流站点整本要跑一两小时) */
+const dlEta = computed(function () {
+  const rate = state.dlRate;
+  if (!rate || !dlRunning.value || dlPaused.value) { return ''; }
+  const total = state.dlRun ? state.dlRun.total : totalChapters.value;
+  const done = state.dlRun ? state.dlRun.done : dlDone.value;
+  const left = total - done;
+  if (left <= 0 || !rate.etaMin || rate.etaMin < 1) { return ''; }
+  const m = Math.round(rate.etaMin);
+  const text = m >= 60
+    ? Math.floor(m / 60) + ' 小时 ' + (m % 60) + ' 分'
+    : m + ' 分钟';
+  return ' · 约剩 ' + text;
+});
+
 const dlText = computed(function () {
   const total = totalChapters.value;
   const run = state.dlRun;
   if (run && run.running) {
     return (run.paused ? '已暂停 · ' : '下载中 · ') + run.done + '/' + run.total +
-      (run.failed ? ' · 失败 ' + run.failed : '');
+      (run.failed ? ' · 失败 ' + run.failed : '') + dlEta.value;
   }
   // 任务在跑但这一轮没有进度帧(重开面板): 别显示成「尚未下载」
   const off = state.offline;
   if (!run && off && off.running) {
     return (off.paused ? '已暂停 · ' : '下载中 · ') + dlDone.value + '/' + total +
-      (off.failed ? ' · 失败 ' + off.failed : '');
+      (off.failed ? ' · 失败 ' + off.failed : '') + dlEta.value;
   }
   if (dlDone.value > 0) {
     return '已下载 ' + dlDone.value + '/' + total + ' 章' + (dlFailed.value ? ' · 失败 ' + dlFailed.value : '');

@@ -357,6 +357,11 @@ export const state = reactive({
   dlRowOpen: false,
   /** 本轮下载进度(范围内的 done/total; 与 offline.total=全书章数 区分) */
   dlRun: null as null | { done: number; total: number; failed: number; running: boolean; paused: boolean },
+  /**
+   * 下载速率与预计剩余(按最近一段进度帧估算, 只用于展示)。
+   * null = 样本不足(刚起步/暂停中), 不要拿它做任何判断。
+   */
+  dlRate: null as null | { perMin: number; etaMin: number },
   /** 上次导出结果提示(短暂展示) */
   dlNotice: '',
   /** 目录每章标记(临时缓存 / 已读) */
